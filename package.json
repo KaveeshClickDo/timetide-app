@@ -43,7 +43,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.3.1",
-    "date-fns-tz": "^2.0.0",
+    "date-fns-tz": "^3.2.0",
     "googleapis": "^134.0.0",
     "ioredis": "^5.3.2",
     "lucide-react": "^0.344.0",

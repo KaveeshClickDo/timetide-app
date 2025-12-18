@@ -1,0 +1,223 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 210 40% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 40% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 40% 11%;
+
+    --primary: 199 89% 48%; /* ocean-500 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 187 85% 43%; /* tide-600 */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 201 96% 95%; /* ocean-50 */
+    --accent-foreground: 201 90% 27%; /* ocean-800 */
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 199 89% 48%; /* ocean-500 */
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    --background: 210 40% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 210 40% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 210 40% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 187 85% 43%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 201 90% 18%;
+    --accent-foreground: 201 96% 92%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 199 89% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-semibold tracking-tight;
+  }
+}
+
+@layer components {
+  /* Ocean-themed button styles */
+  .btn-ocean {
+    @apply bg-ocean-gradient text-white font-medium px-6 py-2.5 rounded-lg
+           shadow-lg shadow-ocean-500/25 hover:shadow-xl hover:shadow-ocean-500/30
+           transform hover:-translate-y-0.5 transition-all duration-200;
+  }
+
+  .btn-ocean-outline {
+    @apply border-2 border-ocean-500 text-ocean-600 font-medium px-6 py-2.5 rounded-lg
+           hover:bg-ocean-50 transition-all duration-200;
+  }
+
+  /* Card styles */
+  .card-ocean {
+    @apply bg-white rounded-xl shadow-lg shadow-ocean-500/5 border border-ocean-100
+           hover:shadow-xl hover:shadow-ocean-500/10 transition-all duration-300;
+  }
+
+  /* Wave decoration */
+  .wave-divider {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 100'%3E%3Cpath fill='%230ea5e9' fill-opacity='0.1' d='M0,64L80,69.3C160,75,320,85,480,80C640,75,800,53,960,48C1120,43,1280,53,1360,58.7L1440,64L1440,100L1360,100C1280,100,1120,100,960,100C800,100,640,100,480,100C320,100,160,100,80,100L0,100Z'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-size: cover;
+  }
+
+  /* Animated gradient background */
+  .ocean-bg-animated {
+    background: linear-gradient(-45deg, #e0f2fe, #cffafe, #bae6fd, #a5f3fc);
+    background-size: 400% 400%;
+    animation: gradient 15s ease infinite;
+  }
+
+  @keyframes gradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-white/70 backdrop-blur-lg border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-ocean-900/70 backdrop-blur-lg border border-ocean-700/20;
+  }
+
+  /* Time slot styles */
+  .time-slot {
+    @apply px-4 py-3 text-sm font-medium rounded-lg border-2 border-ocean-200
+           hover:border-ocean-500 hover:bg-ocean-50 cursor-pointer
+           transition-all duration-200 text-center;
+  }
+
+  .time-slot-selected {
+    @apply bg-ocean-500 text-white border-ocean-500 hover:bg-ocean-600;
+  }
+
+  .time-slot-unavailable {
+    @apply opacity-40 cursor-not-allowed hover:border-ocean-200 hover:bg-transparent;
+  }
+
+  /* Calendar day styles */
+  .calendar-day {
+    @apply w-10 h-10 rounded-full flex items-center justify-center text-sm
+           hover:bg-ocean-100 cursor-pointer transition-colors;
+  }
+
+  .calendar-day-selected {
+    @apply bg-ocean-500 text-white hover:bg-ocean-600;
+  }
+
+  .calendar-day-today {
+    @apply ring-2 ring-ocean-500 ring-offset-2;
+  }
+
+  .calendar-day-disabled {
+    @apply text-gray-300 cursor-not-allowed hover:bg-transparent;
+  }
+
+  .calendar-day-has-slots {
+    @apply font-semibold text-ocean-700;
+  }
+}
+
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Text gradient */
+  .text-gradient-ocean {
+    @apply bg-clip-text text-transparent bg-ocean-gradient;
+  }
+
+  /* Focus ring */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:ring-offset-2;
+  }
+
+  /* Safe area padding for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Custom scrollbar for non-hide cases */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100 rounded-full;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-ocean-300 rounded-full hover:bg-ocean-400;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Selection color */
+::selection {
+  @apply bg-ocean-200 text-ocean-900;
+}

@@ -21,10 +21,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         userId: session.user.id,
       },
       include: {
-        credential: {
+        credentials: {
           select: {
-            provider: true,
-            isValid: true,
+            id: true,
+            accessToken: true,
+            refreshToken: true,
+            expiresAt: true,
           },
         },
       },
@@ -84,7 +86,6 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       where: { id: params.id },
       data: {
         isEnabled: isEnabled !== undefined ? isEnabled : existing.isEnabled,
-        checkForConflicts: checkForConflicts !== undefined ? checkForConflicts : existing.checkForConflicts,
         isPrimary: isPrimary !== undefined ? isPrimary : existing.isPrimary,
       },
     })
@@ -114,7 +115,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         userId: session.user.id,
       },
       include: {
-        credential: true,
+        credentials: true,
       },
     })
 
@@ -122,24 +123,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
     }
 
-    // Delete the calendar
+    // Delete the calendar (credentials will be cascaded)
     await prisma.calendar.delete({
       where: { id: params.id },
     })
-
-    // Check if credential has other calendars
-    const otherCalendars = await prisma.calendar.count({
-      where: {
-        credentialId: calendar.credentialId,
-      },
-    })
-
-    // If no other calendars use this credential, delete it too
-    if (otherCalendars === 0 && calendar.credentialId) {
-      await prisma.calendarCredential.delete({
-        where: { id: calendar.credentialId },
-      })
-    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

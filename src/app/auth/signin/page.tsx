@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+export const dynamic = "force-dynamic"
+
+import { useState, useEffect } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,13 +15,20 @@ import { useToast } from '@/components/ui/use-toast'
 
 export default function SignInPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [callbackUrl, setCallbackUrl] = useState('/dashboard')
 
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      setCallbackUrl(params.get('callbackUrl') || '/dashboard')
+    } catch (e) {
+      setCallbackUrl('/dashboard')
+    }
+  }, [])
 
   const handleCredentialsSignIn = async (e: React.FormEvent) => {
     e.preventDefault()

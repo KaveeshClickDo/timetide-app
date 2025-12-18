@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Clock,
@@ -68,22 +68,24 @@ export default function AvailabilityPage() {
   const [editedSlots, setEditedSlots] = useState<Record<number, AvailabilitySlot[]>>({})
   const [hasChanges, setHasChanges] = useState(false)
 
-  const { data: schedules, isLoading } = useQuery<Schedule[]>({
+  const { data: schedules, isLoading } = useQuery<Schedule[], Error>({
     queryKey: ['availability-schedules'],
     queryFn: async () => {
       const res = await fetch('/api/availability')
       if (!res.ok) throw new Error('Failed to fetch')
       const data = await res.json()
-      return data.schedules
-    },
-    onSuccess: (data) => {
-      if (data.length > 0 && !selectedSchedule) {
-        const defaultSchedule = data.find((s) => s.isDefault) || data[0]
-        setSelectedSchedule(defaultSchedule.id)
-        initializeSlots(defaultSchedule)
-      }
+      return data.schedules as Schedule[]
     },
   })
+
+  // Initialize default schedule when data loads
+  useEffect(() => {
+    if (schedules && (schedules as Schedule[]).length > 0 && !selectedSchedule) {
+      const defaultSchedule = (schedules as Schedule[]).find((s) => s.isDefault) || (schedules as Schedule[])[0]
+      setSelectedSchedule(defaultSchedule.id)
+      initializeSlots(defaultSchedule)
+    }
+  }, [schedules])
 
   const saveMutation = useMutation({
     mutationFn: async (slots: AvailabilitySlot[]) => {
@@ -122,10 +124,10 @@ export default function AvailabilityPage() {
     setEditedSlots(slotsByDay)
   }
 
-  const currentSchedule = schedules?.find((s) => s.id === selectedSchedule)
+  const currentSchedule = schedules?.find((s: Schedule) => s.id === selectedSchedule)
 
   const handleScheduleChange = (scheduleId: string) => {
-    const schedule = schedules?.find((s) => s.id === scheduleId)
+    const schedule = schedules?.find((s: Schedule) => s.id === scheduleId)
     if (schedule) {
       setSelectedSchedule(scheduleId)
       initializeSlots(schedule)
@@ -235,11 +237,11 @@ export default function AvailabilityPage() {
       </div>
 
       {/* Schedule selector */}
-      {schedules && schedules.length > 1 && (
-        <div className="mb-6">
-          <Label className="mb-2 block">Schedule</Label>
-          <div className="flex gap-2">
-            {schedules.map((schedule) => (
+{schedules && (schedules as Schedule[]).length > 1 && (
+            <div className="mb-6">
+              <Label className="mb-2 block">Schedule</Label>
+              <div className="flex gap-2">
+                {(schedules as Schedule[]).map((schedule: Schedule) => (
               <Button
                 key={schedule.id}
                 variant={selectedSchedule === schedule.id ? 'default' : 'outline'}

@@ -42,7 +42,7 @@ interface BookingWidgetProps {
     id: string
     title: string
     description: string | null
-    duration: number
+    length: number
     locationType: string
     questions: Array<{
       id: string
@@ -276,7 +276,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2 text-gray-600">
                 <Clock className="h-4 w-4 text-ocean-500" />
-                {formatDuration(eventType.duration)}
+                {formatDuration(eventType.length)}
               </div>
               <div className="flex items-center gap-2 text-gray-600">
                 <LocationIcon className="h-4 w-4 text-ocean-500" />

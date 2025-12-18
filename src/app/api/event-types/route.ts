@@ -57,9 +57,9 @@ export async function POST(request: Request) {
       )
     }
 
-    const { title, description, duration, locationType, ...rest } = result.data
+    const { title, description, slug: inputSlug, length, locationType, questions, ...rest } = result.data
 
-    // Generate unique slug
+    // Generate unique slug (ignore provided slug, base on title)
     const baseSlug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -90,10 +90,20 @@ export async function POST(request: Request) {
         title,
         slug,
         description: description || null,
-        duration,
+        length,
         locationType,
         scheduleId: defaultSchedule?.id,
         isActive: true,
+        questions: questions
+          ? { create: questions.map((q: any, idx: number) => ({
+              order: q.order ?? idx,
+              label: q.label,
+              type: q.type,
+              required: q.required ?? false,
+              placeholder: q.placeholder ?? null,
+              options: q.options ?? undefined,
+            })) }
+          : undefined,
         ...rest,
       },
     })

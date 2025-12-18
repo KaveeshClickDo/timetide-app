@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         slots: {
           orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
         },
-        dateOverrides: {
+        overrides: {
           orderBy: { date: 'asc' },
         },
       },

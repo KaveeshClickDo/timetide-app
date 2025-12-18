@@ -75,7 +75,7 @@ export async function POST(request: Request) {
             title: '30 Minute Meeting',
             slug: `30min-${nanoid(6)}`,
             description: 'A quick 30-minute meeting',
-            duration: 30,
+            length: 30,
             locationType: 'GOOGLE_MEET',
             isActive: true,
           },

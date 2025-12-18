@@ -112,7 +112,7 @@ export const authOptions: NextAuthOptions = {
           select: { username: true, timezone: true },
         });
         
-        token.username = dbUser?.username;
+        token.username = dbUser?.username ?? undefined;
         token.timezone = dbUser?.timezone ?? 'UTC';
       }
       

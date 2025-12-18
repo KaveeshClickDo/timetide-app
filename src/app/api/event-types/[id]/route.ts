@@ -27,7 +27,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         schedule: {
           include: {
             slots: true,
-            dateOverrides: true,
+            overrides: true,
           },
         },
         _count: {

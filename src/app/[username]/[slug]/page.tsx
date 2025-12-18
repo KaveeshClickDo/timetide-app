@@ -65,7 +65,7 @@ export default async function BookingPage({ params }: PageProps) {
       schedule: {
         include: {
           slots: true,
-          dateOverrides: true,
+          overrides: true,
         },
       },
     },
@@ -88,9 +88,16 @@ export default async function BookingPage({ params }: PageProps) {
           id: eventType.id,
           title: eventType.title,
           description: eventType.description,
-          duration: eventType.duration,
+          length: eventType.length,
           locationType: eventType.locationType,
-          questions: eventType.questions,
+          questions: eventType.questions?.map((q) => ({
+            id: q.id,
+            type: q.type as unknown as string,
+            label: q.label,
+            required: q.required,
+            placeholder: q.placeholder ?? undefined,
+            options: (q.options as string[] | null) ?? undefined,
+          })) ?? [],
         }}
       />
     </div>

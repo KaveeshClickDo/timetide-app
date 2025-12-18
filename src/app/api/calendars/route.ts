@@ -17,11 +17,12 @@ export async function GET() {
         userId: session.user.id,
       },
       include: {
-        credential: {
+        credentials: {
           select: {
             id: true,
-            provider: true,
-            isValid: true,
+            accessToken: true,
+            refreshToken: true,
+            expiresAt: true,
           },
         },
       },
@@ -53,21 +54,12 @@ export async function POST(request: Request) {
 
     if (provider === 'GOOGLE') {
       if (code) {
-        // Exchange code for tokens
-        const tokens = await exchangeCodeForTokens(code, redirectUri)
-        
-        // Connect calendar
-        const calendar = await connectGoogleCalendar(
-          session.user.id,
-          tokens.access_token!,
-          tokens.refresh_token!,
-          tokens.expiry_date!
-        )
-
+        // Exchange code for tokens (used internally by connectGoogleCalendar too)
+        const calendar = await connectGoogleCalendar(session.user.id, code)
         return NextResponse.json({ calendar })
       } else {
-        // Generate auth URL
-        const authUrl = getGoogleAuthUrl(redirectUri)
+        // Generate auth URL for this user
+        const authUrl = getGoogleAuthUrl(session.user.id)
         return NextResponse.json({ authUrl })
       }
     }

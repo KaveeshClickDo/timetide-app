@@ -63,7 +63,7 @@ export default function SettingsPage() {
         name: session.user.name || '',
         username: session.user.username || '',
         timezone: session.user.timezone || 'America/New_York',
-        bio: '',
+        bio: session.user.bio || '',
       })
     }
   }, [session])

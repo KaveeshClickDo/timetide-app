@@ -168,12 +168,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       where: { eventTypeId: params.id },
     })
 
-    // Note: Bookings are kept for record-keeping but unlinked
-    await prisma.booking.updateMany({
-      where: { eventTypeId: params.id },
-      data: { eventTypeId: null as any }, // This might need adjustment based on schema
-    })
-
+    // Delete the event type - bookings will cascade delete automatically
     await prisma.eventType.delete({
       where: { id: params.id },
     })

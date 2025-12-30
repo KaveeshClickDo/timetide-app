@@ -37,7 +37,7 @@ interface EventType {
   title: string
   slug: string
   description: string | null
-  duration: number
+  length: number
   locationType: string
   isActive: boolean
   _count: {
@@ -250,7 +250,7 @@ export default function EventTypesPage() {
                         <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                           <div className="flex items-center gap-1">
                             <Clock className="h-4 w-4" />
-                            {formatDuration(eventType.duration)}
+                            {formatDuration(eventType.length)}
                           </div>
                           <div className="flex items-center gap-1">
                             <LocationIcon className="h-4 w-4" />

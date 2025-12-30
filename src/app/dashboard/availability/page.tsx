@@ -178,7 +178,7 @@ export default function AvailabilityPage() {
   const copyToAllDays = (sourceDayOfWeek: number) => {
     const sourceSlots = editedSlots[sourceDayOfWeek] || []
     const newSlots: Record<number, AvailabilitySlot[]> = {}
-    
+
     DAYS.forEach((day) => {
       newSlots[day.value] = sourceSlots.map((slot) => ({
         ...slot,
@@ -186,7 +186,7 @@ export default function AvailabilityPage() {
         id: undefined,
       }))
     })
-    
+
     setEditedSlots(newSlots)
     setHasChanges(true)
     toast({ title: 'Copied to all days' })
@@ -237,11 +237,11 @@ export default function AvailabilityPage() {
       </div>
 
       {/* Schedule selector */}
-{schedules && (schedules as Schedule[]).length > 1 && (
-            <div className="mb-6">
-              <Label className="mb-2 block">Schedule</Label>
-              <div className="flex gap-2">
-                {(schedules as Schedule[]).map((schedule: Schedule) => (
+      {schedules && (schedules as Schedule[]).length > 1 && (
+        <div className="mb-6">
+          <Label className="mb-2 block">Schedule</Label>
+          <div className="flex gap-2">
+            {(schedules as Schedule[]).map((schedule: Schedule) => (
               <Button
                 key={schedule.id}
                 variant={selectedSchedule === schedule.id ? 'default' : 'outline'}
@@ -277,7 +277,7 @@ export default function AvailabilityPage() {
                             : addSlot(day.value)
                         }
                         className={cn(
-                          'w-5 h-5 rounded border-2 flex items-center justify-center transition-colors',
+                          'w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-colors',
                           isActive
                             ? 'bg-ocean-500 border-ocean-500 text-white'
                             : 'border-gray-300 hover:border-ocean-500'

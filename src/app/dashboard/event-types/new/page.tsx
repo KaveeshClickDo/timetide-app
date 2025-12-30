@@ -77,14 +77,40 @@ export default function NewEventTypePage() {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const createMutation = useMutation({
+    // In your createMutation's mutationFn, change this:
+
     mutationFn: async () => {
+      // Prepare payload
+      const payload: any = {
+        title: formData.title,
+        description: formData.description || undefined,
+        length: formData.duration,
+        slug: formData.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, ''),
+        locationType: formData.locationType,
+        locationValue: formData.customLocation || undefined,
+        bufferTimeBefore: formData.bufferTimeBefore,
+        bufferTimeAfter: formData.bufferTimeAfter,
+        minimumNotice: formData.minimumNotice,
+        requiresConfirmation: formData.requiresConfirmation,
+      }
+
+      // Only include maxBookingsPerDay if > 0
+      if (formData.maxBookingsPerDay > 0) {
+        payload.maxBookingsPerDay = formData.maxBookingsPerDay
+      }
+
+      // Only include questions if any exist
+      if (questions.length > 0) {
+        payload.questions = questions
+      }
+
       const res = await fetch('/api/event-types', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          questions: questions.length > 0 ? questions : undefined,
-        }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const error = await res.json()

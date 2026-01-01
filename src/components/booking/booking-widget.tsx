@@ -18,6 +18,7 @@ import {
   Calendar,
   User,
   Mail,
+  AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -98,7 +99,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
   }, [])
 
   // Fetch available slots for selected month
-  const { data: slotsData, isLoading: slotsLoading } = useQuery({
+  const { data: slotsData, isLoading: slotsLoading, error: slotsError } = useQuery({
     queryKey: ['slots', eventType.id, format(currentMonth, 'yyyy-MM'), inviteeTimezone],
     queryFn: async () => {
       const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
@@ -109,26 +110,46 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
         endDate,
         timezone: inviteeTimezone,
       })
+      
+      console.log('Fetching slots with params:', params.toString())
+      
       const res = await fetch(`/api/slots?${params}`)
-      if (!res.ok) throw new Error('Failed to fetch slots')
+      
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('Slots API error:', res.status, errorText)
+        throw new Error(`Failed to fetch slots: ${res.status} ${errorText}`)
+      }
+      
       const data = await res.json()
+      console.log('Slots data received:', data)
 
-      // Transform slots data - convert Date objects back from ISO strings and format
+      // Transform slots data - convert ISO strings to Date objects
       const transformedSlots: Record<string, TimeSlot[]> = {}
-      if (data.slots) {
+      if (data.slots && typeof data.slots === 'object') {
         Object.keys(data.slots).forEach((dateKey) => {
-          transformedSlots[dateKey] = data.slots[dateKey].map((slot: any) => ({
-            time: slot.start,
-            start: new Date(slot.start),
-            end: new Date(slot.end),
-            formattedTime: format(new Date(slot.start), 'h:mm a')
-          }))
+          const daySlots = data.slots[dateKey]
+          if (Array.isArray(daySlots)) {
+            transformedSlots[dateKey] = daySlots.map((slot: any) => {
+              const startDate = new Date(slot.start)
+              const endDate = new Date(slot.end)
+              return {
+                time: slot.start,
+                start: startDate,
+                end: endDate,
+                formattedTime: format(startDate, 'h:mm a')
+              }
+            })
+          }
         })
       }
 
+      console.log('Transformed slots:', transformedSlots)
       return { ...data, slots: transformedSlots }
     },
     enabled: !!inviteeTimezone,
+    retry: 2,
+    staleTime: 60000, // 1 minute
   })
 
   // Book mutation
@@ -360,6 +381,16 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />
                   </div>
+                ) : slotsError ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+                    <p className="text-red-600 text-center">
+                      Failed to load available times
+                    </p>
+                    <p className="text-gray-500 text-sm text-center mt-2">
+                      {slotsError instanceof Error ? slotsError.message : 'Please try again'}
+                    </p>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-7 gap-1">
                     {/* Empty cells for days before month starts */}
@@ -552,11 +583,13 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                   </div>
 
                   {bookMutation.error && (
-                    <p className="text-red-600 text-sm">
-                      {bookMutation.error instanceof Error
-                        ? bookMutation.error.message
-                        : 'Something went wrong'}
-                    </p>
+                    <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+                      <p className="text-red-600 text-sm">
+                        {bookMutation.error instanceof Error
+                          ? bookMutation.error.message
+                          : 'Something went wrong. Please try again.'}
+                      </p>
+                    </div>
                   )}
 
                   <Button

@@ -28,6 +28,8 @@ import { cn, formatDuration, getInitials } from '@/lib/utils'
 
 interface TimeSlot {
   time: string
+  start: Date
+  end: Date
   formattedTime: string
 }
 
@@ -109,7 +111,22 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
       })
       const res = await fetch(`/api/slots?${params}`)
       if (!res.ok) throw new Error('Failed to fetch slots')
-      return res.json()
+      const data = await res.json()
+
+      // Transform slots data - convert Date objects back from ISO strings and format
+      const transformedSlots: Record<string, TimeSlot[]> = {}
+      if (data.slots) {
+        Object.keys(data.slots).forEach((dateKey) => {
+          transformedSlots[dateKey] = data.slots[dateKey].map((slot: any) => ({
+            time: slot.start,
+            start: new Date(slot.start),
+            end: new Date(slot.end),
+            formattedTime: format(new Date(slot.start), 'h:mm a')
+          }))
+        })
+      }
+
+      return { ...data, slots: transformedSlots }
     },
     enabled: !!inviteeTimezone,
   })
@@ -365,8 +382,8 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                             isSelected
                               ? 'bg-ocean-500 text-white'
                               : hasSlots
-                              ? 'hover:bg-ocean-100 text-gray-900 font-medium'
-                              : 'text-gray-300 cursor-not-allowed',
+                                ? 'hover:bg-ocean-100 text-gray-900 font-medium'
+                                : 'text-gray-300 cursor-not-allowed',
                             isCurrentDay && !isSelected && 'ring-2 ring-ocean-500 ring-offset-2'
                           )}
                         >

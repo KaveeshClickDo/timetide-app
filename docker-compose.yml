@@ -33,7 +33,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://timetide:timetide_dev_password@postgres:5432/timetide
       - REDIS_URL=redis://redis:6379
-      # CRITICAL: Increase Node.js memory limit for Next.js dev mode
       - NODE_OPTIONS=--max-old-space-size=4096
     env_file:
       - .env
@@ -49,13 +48,10 @@ services:
       redis:
         condition: service_started
     command: sh -c "npx prisma migrate deploy && npm run dev"
-    # Add memory limits
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-        reservations:
-          memory: 2G
+    # Memory limits (works without Docker Swarm)
+    mem_limit: 6g
+    memswap_limit: 8g
+    mem_reservation: 2g
 
 volumes:
   postgres_data:

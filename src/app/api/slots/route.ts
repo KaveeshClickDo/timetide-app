@@ -108,11 +108,19 @@ export async function GET(request: NextRequest) {
       : addDays(now, maxDays);
 
     // Get busy times from connected calendars
-    const calendarBusyTimes = await getAllBusyTimes(
-      eventType.userId,
-      rangeStart,
-      addDays(rangeEnd, 1)
-    );
+    // IMPORTANT: Wrap in try-catch to handle missing/unconfigured calendar
+    let calendarBusyTimes: { start: Date; end: Date }[] = [];
+    try {
+      calendarBusyTimes = await getAllBusyTimes(
+        eventType.userId,
+        rangeStart,
+        addDays(rangeEnd, 1)
+      );
+    } catch (calendarError) {
+      // Log but don't fail - just proceed without calendar busy times
+      console.warn('Could not fetch calendar busy times:', calendarError);
+      // Calendar not connected or error - proceed without external busy times
+    }
 
     // Convert existing bookings to busy times
     const bookingBusyTimes = eventType.bookings.map((b) => ({
@@ -128,13 +136,29 @@ export async function GET(request: NextRequest) {
 
     // Get availability from schedule or use defaults
     const schedule = eventType.schedule;
-    const availability = schedule?.slots.map((s) => ({
+    
+    // If no schedule is set up, return empty slots with a helpful message
+    if (!schedule || !schedule.slots || schedule.slots.length === 0) {
+      console.warn(`Event type ${eventTypeId} has no availability schedule configured`);
+      return NextResponse.json({
+        slots: {},
+        eventType: {
+          id: eventType.id,
+          title: eventType.title,
+          duration: eventType.length,
+          timezone: eventType.user.timezone,
+        },
+        message: 'No availability schedule configured',
+      });
+    }
+
+    const availability = schedule.slots.map((s) => ({
       dayOfWeek: s.dayOfWeek,
       startTime: s.startTime,
       endTime: s.endTime,
-    })) ?? [];
+    }));
 
-    const dateOverrides = schedule?.overrides.map((o) => ({
+    const dateOverrides = schedule.overrides?.map((o) => ({
       date: o.date,
       isWorking: o.isWorking,
       startTime: o.startTime ?? undefined,
@@ -198,7 +222,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Slots API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

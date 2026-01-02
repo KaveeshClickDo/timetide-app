@@ -129,11 +129,16 @@ export async function listCalendars(
     return [];
   }
 
-  const { oauth2Client } = await getAuthenticatedClient(calendars[0].id);
-  const calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
+  try {
+    const { oauth2Client } = await getAuthenticatedClient(calendars[0].id);
+    const calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
 
-  const response = await calendarApi.calendarList.list();
-  return response.data.items ?? [];
+    const response = await calendarApi.calendarList.list();
+    return response.data.items ?? [];
+  } catch (error) {
+    console.error('Failed to list calendars:', error);
+    return [];
+  }
 }
 
 /**
@@ -170,27 +175,45 @@ export async function getGoogleBusyTimes(
 
 /**
  * Fetch busy times from all enabled calendars for a user
+ * Returns empty array if no calendars connected (graceful degradation)
  */
 export async function getAllBusyTimes(
   userId: string,
   timeMin: Date,
   timeMax: Date
 ): Promise<BusyTime[]> {
-  const calendars = await prisma.calendar.findMany({
-    where: { userId, isEnabled: true },
-  });
+  try {
+    const calendars = await prisma.calendar.findMany({
+      where: { userId, isEnabled: true },
+    });
 
-  const allBusyTimes: BusyTime[] = [];
-
-  for (const calendar of calendars) {
-    if (calendar.provider === 'GOOGLE') {
-      const busyTimes = await getGoogleBusyTimes(calendar.id, timeMin, timeMax);
-      allBusyTimes.push(...busyTimes);
+    // If no calendars connected, return empty array (this is OK!)
+    if (calendars.length === 0) {
+      console.log(`No calendars connected for user ${userId}, skipping busy time fetch`);
+      return [];
     }
-    // Add other providers here (Outlook, etc.)
-  }
 
-  return allBusyTimes;
+    const allBusyTimes: BusyTime[] = [];
+
+    for (const calendar of calendars) {
+      if (calendar.provider === 'GOOGLE') {
+        try {
+          const busyTimes = await getGoogleBusyTimes(calendar.id, timeMin, timeMax);
+          allBusyTimes.push(...busyTimes);
+        } catch (calError) {
+          // Log but continue with other calendars
+          console.warn(`Failed to fetch busy times from calendar ${calendar.id}:`, calError);
+        }
+      }
+      // Add other providers here (Outlook, etc.)
+    }
+
+    return allBusyTimes;
+  } catch (error) {
+    console.error('Error in getAllBusyTimes:', error);
+    // Return empty array on error - don't break slot calculation
+    return [];
+  }
 }
 
 // ============================================================================
@@ -295,28 +318,25 @@ export async function updateGoogleCalendarEvent(
     const { oauth2Client, calendar } = await getAuthenticatedClient(calendarId);
     const calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
 
-    const updateBody: calendar_v3.Schema$Event = {};
+    const event: calendar_v3.Schema$Event = {};
 
-    if (updates.summary) updateBody.summary = updates.summary;
-    if (updates.description) updateBody.description = updates.description;
-    if (updates.location) updateBody.location = updates.location;
-
+    if (updates.summary) event.summary = updates.summary;
+    if (updates.description) event.description = updates.description;
+    if (updates.location) event.location = updates.location;
     if (updates.startTime) {
-      updateBody.start = {
+      event.start = {
         dateTime: updates.startTime.toISOString(),
         timeZone: 'UTC',
       };
     }
-
     if (updates.endTime) {
-      updateBody.end = {
+      event.end = {
         dateTime: updates.endTime.toISOString(),
         timeZone: 'UTC',
       };
     }
-
     if (updates.attendees) {
-      updateBody.attendees = updates.attendees.map((a) => ({
+      event.attendees = updates.attendees.map((a) => ({
         email: a.email,
         displayName: a.name,
       }));
@@ -325,7 +345,7 @@ export async function updateGoogleCalendarEvent(
     await calendarApi.events.patch({
       calendarId: calendar.externalId,
       eventId,
-      requestBody: updateBody,
+      requestBody: event,
       sendUpdates: 'all',
     });
 
@@ -333,81 +353,5 @@ export async function updateGoogleCalendarEvent(
   } catch (error) {
     console.error('Failed to update Google Calendar event:', error);
     return false;
-  }
-}
-
-// ============================================================================
-// CONNECT CALENDAR
-// ============================================================================
-
-export async function connectGoogleCalendar(
-  userId: string,
-  code: string
-): Promise<{ success: boolean; calendarId?: string; error?: string }> {
-  try {
-    const tokens = await exchangeCodeForTokens(code);
-
-    if (!tokens.access_token) {
-      return { success: false, error: 'Failed to get access token' };
-    }
-
-    // Get calendar info
-    const oauth2Client = getGoogleOAuthClient();
-    oauth2Client.setCredentials(tokens);
-    const calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
-
-    const calendarList = await calendarApi.calendarList.list();
-    const primaryCalendar = calendarList.data.items?.find(
-      (c) => c.primary
-    );
-
-    if (!primaryCalendar) {
-      return { success: false, error: 'No primary calendar found' };
-    }
-
-    // Create or update calendar record
-    const calendar = await prisma.calendar.upsert({
-      where: {
-        userId_provider_externalId: {
-          userId,
-          provider: 'GOOGLE',
-          externalId: primaryCalendar.id!,
-        },
-      },
-      create: {
-        userId,
-        name: primaryCalendar.summary ?? 'Google Calendar',
-        provider: 'GOOGLE',
-        externalId: primaryCalendar.id!,
-        isPrimary: true,
-        color: primaryCalendar.backgroundColor,
-        credentials: {
-          create: {
-            accessToken: tokens.access_token!,
-            refreshToken: tokens.refresh_token,
-            expiresAt: tokens.expiry_date
-              ? new Date(tokens.expiry_date)
-              : null,
-          },
-        },
-      },
-      update: {
-        name: primaryCalendar.summary ?? 'Google Calendar',
-        credentials: {
-          update: {
-            accessToken: tokens.access_token!,
-            refreshToken: tokens.refresh_token ?? undefined,
-            expiresAt: tokens.expiry_date
-              ? new Date(tokens.expiry_date)
-              : null,
-          },
-        },
-      },
-    });
-
-    return { success: true, calendarId: calendar.id };
-  } catch (error) {
-    console.error('Failed to connect Google Calendar:', error);
-    return { success: false, error: 'Failed to connect calendar' };
   }
 }

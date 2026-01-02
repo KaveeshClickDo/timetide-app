@@ -110,17 +110,17 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
         endDate,
         timezone: inviteeTimezone,
       })
-      
+
       console.log('Fetching slots with params:', params.toString())
-      
+
       const res = await fetch(`/api/slots?${params}`)
-      
+
       if (!res.ok) {
         const errorText = await res.text()
         console.error('Slots API error:', res.status, errorText)
         throw new Error(`Failed to fetch slots: ${res.status} ${errorText}`)
       }
-      
+
       const data = await res.json()
       console.log('Slots data received:', data)
 
@@ -162,10 +162,12 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
           eventTypeId: eventType.id,
           startTime: selectedSlot,
           timezone: inviteeTimezone,
-          inviteeName: formData.name,
-          inviteeEmail: formData.email,
+          name: formData.name,
+          email: formData.email,
           notes: formData.notes || undefined,
-          responses: Object.keys(formData.responses).length > 0 ? formData.responses : undefined,
+          responses: Object.keys(formData.responses).length > 0
+            ? formData.responses
+            : undefined,
         }),
       })
       if (!res.ok) {

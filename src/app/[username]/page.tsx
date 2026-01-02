@@ -7,12 +7,13 @@ import { Clock, Video, MapPin, Phone, Globe, ChevronRight, Waves } from 'lucide-
 import { getInitials, formatDuration } from '@/lib/utils'
 
 interface PageProps {
-  params: { username: string }
+  params: Promise<{ username: string }>
 }
 
 export async function generateMetadata({ params }: PageProps) {
+  const { username } = await params
   const user = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: { name: true },
   })
 
@@ -45,8 +46,9 @@ const locationLabels: Record<string, string> = {
 }
 
 export default async function UserProfilePage({ params }: PageProps) {
+  const { username } = await params
   const user = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: {
       id: true,
       name: true,

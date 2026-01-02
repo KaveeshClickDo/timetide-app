@@ -3,22 +3,25 @@ import { prisma } from '@/lib/prisma'
 import BookingWidget from '@/components/booking/booking-widget'
 
 interface PageProps {
-  params: {
+  params: Promise<{
     username: string
     slug: string
-  }
+  }>
 }
 
 export async function generateMetadata({ params }: PageProps) {
+  // Await the params Promise
+  const { username, slug } = await params
+  
   const user = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: { name: true },
   })
 
   const eventType = await prisma.eventType.findFirst({
     where: {
-      slug: params.slug,
-      user: { username: params.username },
+      slug,
+      user: { username },
       isActive: true,
     },
     select: { title: true, description: true },
@@ -35,9 +38,12 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function BookingPage({ params }: PageProps) {
+  // Await the params Promise
+  const { username, slug } = await params
+  
   // Fetch user
   const user = await prisma.user.findUnique({
-    where: { username: params.username },
+    where: { username },
     select: {
       id: true,
       name: true,
@@ -54,7 +60,7 @@ export default async function BookingPage({ params }: PageProps) {
   // Fetch event type
   const eventType = await prisma.eventType.findFirst({
     where: {
-      slug: params.slug,
+      slug,
       userId: user.id,
       isActive: true,
     },

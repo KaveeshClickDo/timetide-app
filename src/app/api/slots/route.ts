@@ -77,18 +77,6 @@ export async function GET(request: NextRequest) {
             overrides: true,
           },
         },
-        bookings: {
-          where: {
-            status: { in: ['PENDING', 'CONFIRMED'] },
-            startTime: {
-              gte: new Date(),
-            },
-          },
-          select: {
-            startTime: true,
-            endTime: true,
-          },
-        },
       },
     });
 
@@ -107,6 +95,22 @@ export async function GET(request: NextRequest) {
       ? parseISO(endDate)
       : addDays(now, maxDays);
 
+    // CRITICAL: Fetch ALL bookings for this host (across all event types) to prevent double booking
+    const allHostBookings = await prisma.booking.findMany({
+      where: {
+        hostId: eventType.userId, // Check all bookings for this host, not just this event type
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        // Include bookings that end in the future (even if they started in the past)
+        endTime: {
+          gte: now,
+        },
+      },
+      select: {
+        startTime: true,
+        endTime: true,
+      },
+    });
+
     // Get busy times from connected calendars
     // IMPORTANT: Wrap in try-catch to handle missing/unconfigured calendar
     let calendarBusyTimes: { start: Date; end: Date }[] = [];
@@ -123,7 +127,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Convert existing bookings to busy times
-    const bookingBusyTimes = eventType.bookings.map((b) => ({
+    const bookingBusyTimes = allHostBookings.map((b) => ({
       start: b.startTime,
       end: b.endTime,
     }));
@@ -165,9 +169,23 @@ export async function GET(request: NextRequest) {
       endTime: o.endTime ?? undefined,
     })) ?? [];
 
-    // Count bookings per day (for maxBookingsPerDay limit)
+    // Fetch bookings specifically for this event type for the maxBookingsPerDay check
+    // Note: maxBookingsPerDay limit is per event type, not per host
+    const eventTypeBookings = await prisma.booking.findMany({
+      where: {
+        eventTypeId,
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        endTime: {
+          gte: now,
+        },
+      },
+      select: {
+        startTime: true,
+      },
+    });
+
     const bookingsPerDay = new Map<string, number>();
-    for (const booking of eventType.bookings) {
+    for (const booking of eventTypeBookings) {
       const dateKey = booking.startTime.toISOString().split('T')[0];
       bookingsPerDay.set(dateKey, (bookingsPerDay.get(dateKey) ?? 0) + 1);
     }

@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
 
     if (past) {
       where.startTime = { lt: new Date() };
+      where.status = { notIn: ['CANCELLED'] }; // Exclude cancelled from past
     }
 
     const bookings = await prisma.booking.findMany({
@@ -165,9 +166,10 @@ export async function POST(request: NextRequest) {
       addMinutes(endDate, 60)
     );
 
+    // CRITICAL: Check ALL bookings for this host (across all event types) to prevent double booking
     const existingBookings = await prisma.booking.findMany({
       where: {
-        eventTypeId,
+        hostId: eventType.userId, // Check all bookings for this host, not just this event type
         status: { in: ['PENDING', 'CONFIRMED'] },
         OR: [
           {

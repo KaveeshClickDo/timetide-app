@@ -33,7 +33,6 @@ services:
     environment:
       - DATABASE_URL=postgresql://timetide:timetide_dev_password@postgres:5432/timetide
       - REDIS_URL=redis://redis:6379
-      - NODE_OPTIONS=--max-old-space-size=4096
     env_file:
       - .env
     ports:
@@ -48,10 +47,6 @@ services:
       redis:
         condition: service_started
     command: sh -c "npx prisma migrate deploy && npm run dev"
-    # Memory limits (works without Docker Swarm)
-    mem_limit: 6g
-    memswap_limit: 8g
-    mem_reservation: 2g
 
 volumes:
   postgres_data:

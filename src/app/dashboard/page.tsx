@@ -26,19 +26,17 @@ import { cn, getInitials, formatTime, formatDuration } from '@/lib/utils'
 interface Booking {
   id: string
   uid: string
-  title: string
   startTime: string
   endTime: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'REJECTED'
   meetingUrl?: string
   location?: string
-  attendees: Array<{
-    name: string
-    email: string
-  }>
+  inviteeName: string
+  inviteeEmail: string
   eventType: {
+    id: string
     title: string
-    duration: number
+    length: number
     locationType: string
   }
 }
@@ -56,6 +54,11 @@ const statusConfig = {
   },
   CANCELLED: {
     label: 'Cancelled',
+    icon: XCircle,
+    className: 'bg-red-100 text-red-700',
+  },
+  REJECTED: {
+    label: 'Rejected',
     icon: XCircle,
     className: 'bg-red-100 text-red-700',
   },
@@ -83,14 +86,31 @@ function getDateLabel(dateStr: string): string {
 }
 
 export default function DashboardPage() {
-  const [filter, setFilter] = useState<'upcoming' | 'past'>('upcoming')
+  const [filter, setFilter] = useState<'upcoming' | 'past' | 'cancelled'>('upcoming')
 
+  // Fetch ALL bookings for stats cards (no filter)
+  const { data: allBookings } = useQuery<Booking[]>({
+    queryKey: ['bookings', 'all'],
+    queryFn: async () => {
+      const res = await fetch('/api/bookings')
+      if (!res.ok) throw new Error('Failed to fetch bookings')
+      const data = await res.json()
+      return data.bookings
+    },
+  })
+
+  // Fetch filtered bookings for the current tab
   const { data: bookings, isLoading } = useQuery<Booking[]>({
     queryKey: ['bookings', filter],
     queryFn: async () => {
       const params = new URLSearchParams()
-      if (filter === 'upcoming') params.set('upcoming', 'true')
-      if (filter === 'past') params.set('past', 'true')
+      if (filter === 'upcoming') {
+        params.set('upcoming', 'true')
+      } else if (filter === 'past') {
+        params.set('past', 'true')
+      } else if (filter === 'cancelled') {
+        params.set('status', 'CANCELLED')
+      }
 
       const res = await fetch(`/api/bookings?${params}`)
       if (!res.ok) throw new Error('Failed to fetch bookings')
@@ -109,9 +129,14 @@ export default function DashboardPage() {
     return groups
   }, {} as Record<string, Booking[]>)
 
-  const upcomingCount = bookings?.filter(
-    (b) => b.status !== 'CANCELLED' && !isPast(new Date(b.startTime))
+  // Calculate stats from ALL bookings
+  const upcomingCount = allBookings?.filter(
+    (b) => (b.status === 'PENDING' || b.status === 'CONFIRMED') && !isPast(new Date(b.startTime))
   ).length || 0
+
+  const completedCount = allBookings?.filter((b) => b.status === 'COMPLETED').length || 0
+
+  const cancelledCount = allBookings?.filter((b) => b.status === 'CANCELLED').length || 0
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -152,7 +177,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-2xl font-heading font-bold text-gray-900">
-                  {bookings?.filter((b) => b.status === 'COMPLETED').length || 0}
+                  {completedCount}
                 </p>
                 <p className="text-sm text-gray-500">Completed</p>
               </div>
@@ -167,7 +192,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <p className="text-2xl font-heading font-bold text-gray-900">
-                  {bookings?.filter((b) => b.status === 'CANCELLED').length || 0}
+                  {cancelledCount}
                 </p>
                 <p className="text-sm text-gray-500">Cancelled</p>
               </div>
@@ -190,6 +215,12 @@ export default function DashboardPage() {
         >
           Past
         </Button>
+        <Button
+          variant={filter === 'cancelled' ? 'default' : 'ghost'}
+          onClick={() => setFilter('cancelled')}
+        >
+          Cancelled
+        </Button>
       </div>
 
       {/* Bookings List */}
@@ -207,6 +238,8 @@ export default function DashboardPage() {
             <p className="text-gray-500 mb-6">
               {filter === 'upcoming'
                 ? "When someone books a meeting with you, it'll appear here."
+                : filter === 'cancelled'
+                ? 'Your cancelled bookings will appear here.'
                 : 'Your past bookings will appear here.'}
             </p>
             <Link href="/dashboard/event-types">
@@ -238,7 +271,7 @@ export default function DashboardPage() {
                               {format(new Date(booking.startTime), 'h:mm a')}
                             </p>
                             <p className="text-xs text-gray-500">
-                              {formatDuration(booking.eventType.duration)}
+                              {formatDuration(booking.eventType.length)}
                             </p>
                           </div>
 
@@ -255,13 +288,11 @@ export default function DashboardPage() {
                                 <div className="flex items-center gap-2 mt-1">
                                   <Avatar className="h-5 w-5">
                                     <AvatarFallback className="text-[10px]">
-                                      {booking.attendees?.[0]
-                                        ? getInitials(booking.attendees[0].name)
-                                        : 'G'}
+                                      {getInitials(booking.inviteeName)}
                                     </AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm text-gray-600 truncate">
-                                    {booking.attendees?.[0]?.name || 'Guest'}
+                                    {booking.inviteeName}
                                   </span>
                                 </div>
                               </div>

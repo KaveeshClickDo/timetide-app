@@ -80,6 +80,14 @@ export interface CalculatedSlots {
 }
 
 // ============================================================================
+// SAFETY CONSTANTS - Prevent infinite loops and memory issues
+// ============================================================================
+const MAX_SLOTS_PER_DAY = 100;      // Maximum slots per day (prevents memory explosion)
+const MAX_DAYS_TO_PROCESS = 90;     // Maximum days to calculate
+const MIN_SLOT_INTERVAL = 5;        // Minimum 5 minutes between slots
+const MIN_SLOT_DURATION = 5;        // Minimum 5 minute slots
+
+// ============================================================================
 // MAIN CALCULATOR CLASS
 // ============================================================================
 
@@ -87,12 +95,34 @@ export class SlotCalculator {
   private options: Required<SlotCalculatorOptions>;
 
   constructor(options: SlotCalculatorOptions) {
+    // SAFETY: Ensure duration and interval are valid positive numbers
+    const safeDuration = Math.max(MIN_SLOT_DURATION, options.duration || 30);
+    const safeInterval = Math.max(MIN_SLOT_INTERVAL, options.slotInterval || safeDuration);
+    const safeMaxDays = Math.min(MAX_DAYS_TO_PROCESS, options.maxDaysInAdvance || 30);
+
     this.options = {
-      slotInterval: options.slotInterval ?? options.duration,
+      duration: safeDuration,
+      slotInterval: safeInterval,
+      bufferBefore: options.bufferBefore || 0,
+      bufferAfter: options.bufferAfter || 0,
+      minimumNotice: options.minimumNotice || 0,
+      maxDaysInAdvance: safeMaxDays,
+      hostTimezone: options.hostTimezone || 'UTC',
+      inviteeTimezone: options.inviteeTimezone || 'UTC',
+      availability: options.availability || [],
+      dateOverrides: options.dateOverrides || [],
+      busyTimes: options.busyTimes || [],
       maxBookingsPerDay: options.maxBookingsPerDay ?? Infinity,
       existingBookingsPerDay: options.existingBookingsPerDay ?? new Map(),
-      ...options,
-    } as Required<SlotCalculatorOptions>;
+    };
+
+    // Debug log to verify values
+    console.log('SlotCalculator initialized with:', {
+      duration: this.options.duration,
+      slotInterval: this.options.slotInterval,
+      maxDaysInAdvance: this.options.maxDaysInAdvance,
+      availabilityCount: this.options.availability.length,
+    });
   }
 
   /**
@@ -105,8 +135,10 @@ export class SlotCalculator {
 
     const slots: CalculatedSlots = {};
     let currentDate = startOfDay(startDate);
+    let daysProcessed = 0;
 
-    while (isBefore(currentDate, endDate)) {
+    // SAFETY: Limit the number of days we process
+    while (isBefore(currentDate, endDate) && daysProcessed < MAX_DAYS_TO_PROCESS) {
       const dateKey = format(currentDate, 'yyyy-MM-dd');
       const daySlots = this.getSlotsForDay(currentDate, now);
 
@@ -115,8 +147,10 @@ export class SlotCalculator {
       }
 
       currentDate = addDays(currentDate, 1);
+      daysProcessed++;
     }
 
+    console.log(`SlotCalculator: Processed ${daysProcessed} days, found slots for ${Object.keys(slots).length} days`);
     return slots;
   }
 
@@ -144,6 +178,12 @@ export class SlotCalculator {
     for (const window of windows) {
       const windowSlots = this.generateSlotsFromWindow(date, window);
       potentialSlots.push(...windowSlots);
+      
+      // SAFETY: Stop if we have too many slots
+      if (potentialSlots.length > MAX_SLOTS_PER_DAY) {
+        console.warn(`Too many slots generated for ${dateKey}, limiting to ${MAX_SLOTS_PER_DAY}`);
+        break;
+      }
     }
 
     // Filter out slots that conflict with busy times or don't meet minimum notice
@@ -212,6 +252,7 @@ export class SlotCalculator {
 
   /**
    * Generate time slots from a single availability window
+   * FIXED: Now with proper safety checks to prevent infinite loops
    */
   private generateSlotsFromWindow(
     date: Date,
@@ -223,6 +264,12 @@ export class SlotCalculator {
     const [startHour, startMin] = window.startTime.split(':').map(Number);
     const [endHour, endMin] = window.endTime.split(':').map(Number);
 
+    // SAFETY: Validate parsed values
+    if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) {
+      console.warn(`Invalid time format in window: ${window.startTime} - ${window.endTime}`);
+      return [];
+    }
+
     // Create start and end times in host timezone
     const hostDate = toZonedTime(date, this.options.hostTimezone);
     let slotStart = setMinutes(setHours(hostDate, startHour), startMin);
@@ -232,10 +279,14 @@ export class SlotCalculator {
     slotStart = fromZonedTime(slotStart, this.options.hostTimezone);
     const windowEndUtc = fromZonedTime(windowEnd, this.options.hostTimezone);
 
-    const interval = this.options.slotInterval;
-    const duration = this.options.duration;
+    // SAFETY: Ensure interval is a valid positive number (minimum 5 minutes)
+    const interval = Math.max(MIN_SLOT_INTERVAL, this.options.slotInterval || this.options.duration);
+    const duration = Math.max(MIN_SLOT_DURATION, this.options.duration);
 
-    while (true) {
+    // SAFETY: Counter to prevent infinite loops
+    let slotCount = 0;
+
+    while (slotCount < MAX_SLOTS_PER_DAY) {
       const slotEnd = addMinutes(slotStart, duration);
 
       // Check if slot ends within the window
@@ -243,8 +294,15 @@ export class SlotCalculator {
         break;
       }
 
-      slots.push({ start: slotStart, end: slotEnd });
+      slots.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+      
+      // Move to next slot
       slotStart = addMinutes(slotStart, interval);
+      slotCount++;
+    }
+
+    if (slotCount >= MAX_SLOTS_PER_DAY) {
+      console.warn(`Hit slot limit (${MAX_SLOTS_PER_DAY}) for window ${window.startTime}-${window.endTime}`);
     }
 
     return slots;

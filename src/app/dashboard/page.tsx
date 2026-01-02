@@ -91,7 +91,7 @@ export default function DashboardPage() {
       const params = new URLSearchParams()
       if (filter === 'upcoming') params.set('upcoming', 'true')
       if (filter === 'past') params.set('past', 'true')
-      
+
       const res = await fetch(`/api/bookings?${params}`)
       if (!res.ok) throw new Error('Failed to fetch bookings')
       const data = await res.json()
@@ -255,13 +255,13 @@ export default function DashboardPage() {
                                 <div className="flex items-center gap-2 mt-1">
                                   <Avatar className="h-5 w-5">
                                     <AvatarFallback className="text-[10px]">
-                                      {booking.attendees[0]
+                                      {booking.attendees?.[0]
                                         ? getInitials(booking.attendees[0].name)
                                         : 'G'}
                                     </AvatarFallback>
                                   </Avatar>
                                   <span className="text-sm text-gray-600 truncate">
-                                    {booking.attendees[0]?.name || 'Guest'}
+                                    {booking.attendees?.[0]?.name || 'Guest'}
                                   </span>
                                 </div>
                               </div>

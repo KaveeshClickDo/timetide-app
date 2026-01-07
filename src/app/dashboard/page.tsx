@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { format, formatDistanceToNow, isPast, isToday, isTomorrow } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import {
   Calendar,
   Clock,
@@ -28,6 +30,7 @@ interface Booking {
   uid: string
   startTime: string
   endTime: string
+  timezone: string
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'REJECTED'
   meetingUrl?: string
   location?: string
@@ -86,7 +89,11 @@ function getDateLabel(dateStr: string): string {
 }
 
 export default function DashboardPage() {
+  const { data: session } = useSession()
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'cancelled'>('upcoming')
+
+  // Get host's timezone from session (defaults to UTC)
+  const hostTimezone = session?.user?.timezone || 'UTC'
 
   // Fetch ALL bookings for stats cards (no filter)
   const { data: allBookings } = useQuery<Booking[]>({
@@ -268,7 +275,7 @@ export default function DashboardPage() {
                           {/* Time column */}
                           <div className="flex-shrink-0 w-20 text-center">
                             <p className="text-lg font-semibold text-gray-900">
-                              {format(new Date(booking.startTime), 'h:mm a')}
+                              {formatInTimeZone(new Date(booking.startTime), hostTimezone, 'h:mm a')}
                             </p>
                             <p className="text-xs text-gray-500">
                               {formatDuration(booking.eventType.length)}

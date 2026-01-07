@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import {
   Calendar,
   Video,
@@ -240,10 +241,10 @@ export default function PublicBookingManagementPage() {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">
-                      {format(new Date(booking.startTime), 'EEEE, MMMM d, yyyy')}
+                      {formatInTimeZone(new Date(booking.startTime), booking.timezone, 'EEEE, MMMM d, yyyy')}
                     </p>
                     <p className="text-gray-600">
-                      {format(new Date(booking.startTime), 'h:mm a')} - {format(new Date(booking.endTime), 'h:mm a')}
+                      {formatInTimeZone(new Date(booking.startTime), booking.timezone, 'h:mm a')} - {formatInTimeZone(new Date(booking.endTime), booking.timezone, 'h:mm a')}
                     </p>
                     <p className="text-sm text-gray-500 mt-1">
                       {booking.timezone} • {formatDuration(booking.eventType.length)}
@@ -363,7 +364,7 @@ export default function PublicBookingManagementPage() {
                       )}
                       {booking.cancelledAt && (
                         <p className="text-sm text-red-600 mt-2">
-                          Cancelled on {format(new Date(booking.cancelledAt), 'MMMM d, yyyy h:mm a')}
+                          Cancelled on {formatInTimeZone(new Date(booking.cancelledAt), booking.timezone, 'MMMM d, yyyy h:mm a')}
                         </p>
                       )}
                     </div>

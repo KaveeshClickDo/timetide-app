@@ -326,9 +326,14 @@ export interface CreateCalendarEventParams {
   conferenceData?: boolean; // Auto-create Google Meet link
 }
 
+export interface CreateCalendarEventResult {
+  eventId: string | null;
+  meetLink: string | null;
+}
+
 export async function createGoogleCalendarEvent(
   params: CreateCalendarEventParams
-): Promise<string | null> {
+): Promise<CreateCalendarEventResult> {
   try {
     const { oauth2Client, calendar } = await getAuthenticatedClient(
       params.calendarId
@@ -370,10 +375,24 @@ export async function createGoogleCalendarEvent(
       sendUpdates: 'all',
     });
 
-    return response.data.id ?? null;
+    // Extract Google Meet link if created
+    const meetLink = response.data.conferenceData?.entryPoints?.find(
+      (ep) => ep.entryPointType === 'video'
+    )?.uri ?? null;
+
+    console.log('Created Google Calendar event:', {
+      eventId: response.data.id,
+      hasMeetLink: !!meetLink,
+      meetLink,
+    });
+
+    return {
+      eventId: response.data.id ?? null,
+      meetLink,
+    };
   } catch (error) {
     console.error('Failed to create Google Calendar event:', error);
-    return null;
+    return { eventId: null, meetLink: null };
   }
 }
 

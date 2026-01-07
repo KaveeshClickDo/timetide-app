@@ -21,27 +21,93 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { getInitials } from '@/lib/utils'
 
-// Common timezones
+// Comprehensive timezone list with major cities and regions
 const TIMEZONES = [
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Moscow',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Singapore',
-  'Asia/Tokyo',
-  'Asia/Shanghai',
-  'Australia/Sydney',
-  'Pacific/Auckland',
-]
+  // UTC
+  { value: 'UTC', label: 'UTC (GMT+0:00)', offset: 0 },
+
+  // Americas
+  { value: 'America/New_York', label: 'Eastern Time - US & Canada (GMT-5:00)', offset: -5 },
+  { value: 'America/Chicago', label: 'Central Time - US & Canada (GMT-6:00)', offset: -6 },
+  { value: 'America/Denver', label: 'Mountain Time - US & Canada (GMT-7:00)', offset: -7 },
+  { value: 'America/Los_Angeles', label: 'Pacific Time - US & Canada (GMT-8:00)', offset: -8 },
+  { value: 'America/Anchorage', label: 'Alaska (GMT-9:00)', offset: -9 },
+  { value: 'Pacific/Honolulu', label: 'Hawaii (GMT-10:00)', offset: -10 },
+  { value: 'America/Phoenix', label: 'Arizona (GMT-7:00)', offset: -7 },
+  { value: 'America/Toronto', label: 'Toronto (GMT-5:00)', offset: -5 },
+  { value: 'America/Vancouver', label: 'Vancouver (GMT-8:00)', offset: -8 },
+  { value: 'America/Mexico_City', label: 'Mexico City (GMT-6:00)', offset: -6 },
+  { value: 'America/Sao_Paulo', label: 'São Paulo (GMT-3:00)', offset: -3 },
+  { value: 'America/Buenos_Aires', label: 'Buenos Aires (GMT-3:00)', offset: -3 },
+  { value: 'America/Lima', label: 'Lima (GMT-5:00)', offset: -5 },
+  { value: 'America/Bogota', label: 'Bogotá (GMT-5:00)', offset: -5 },
+  { value: 'America/Santiago', label: 'Santiago (GMT-4:00)', offset: -4 },
+  { value: 'America/Caracas', label: 'Caracas (GMT-4:00)', offset: -4 },
+  { value: 'Atlantic/Reykjavik', label: 'Reykjavik (GMT+0:00)', offset: 0 },
+
+  // Europe
+  { value: 'Europe/London', label: 'London (GMT+0:00)', offset: 0 },
+  { value: 'Europe/Dublin', label: 'Dublin (GMT+0:00)', offset: 0 },
+  { value: 'Europe/Lisbon', label: 'Lisbon (GMT+0:00)', offset: 0 },
+  { value: 'Europe/Paris', label: 'Paris (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Berlin', label: 'Berlin (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Rome', label: 'Rome (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Madrid', label: 'Madrid (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Amsterdam', label: 'Amsterdam (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Brussels', label: 'Brussels (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Vienna', label: 'Vienna (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Stockholm', label: 'Stockholm (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Copenhagen', label: 'Copenhagen (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Warsaw', label: 'Warsaw (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Prague', label: 'Prague (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Budapest', label: 'Budapest (GMT+1:00)', offset: 1 },
+  { value: 'Europe/Athens', label: 'Athens (GMT+2:00)', offset: 2 },
+  { value: 'Europe/Bucharest', label: 'Bucharest (GMT+2:00)', offset: 2 },
+  { value: 'Europe/Istanbul', label: 'Istanbul (GMT+3:00)', offset: 3 },
+  { value: 'Europe/Moscow', label: 'Moscow (GMT+3:00)', offset: 3 },
+  { value: 'Europe/Helsinki', label: 'Helsinki (GMT+2:00)', offset: 2 },
+  { value: 'Europe/Kiev', label: 'Kyiv (GMT+2:00)', offset: 2 },
+
+  // Africa
+  { value: 'Africa/Cairo', label: 'Cairo (GMT+2:00)', offset: 2 },
+  { value: 'Africa/Johannesburg', label: 'Johannesburg (GMT+2:00)', offset: 2 },
+  { value: 'Africa/Lagos', label: 'Lagos (GMT+1:00)', offset: 1 },
+  { value: 'Africa/Nairobi', label: 'Nairobi (GMT+3:00)', offset: 3 },
+  { value: 'Africa/Casablanca', label: 'Casablanca (GMT+1:00)', offset: 1 },
+
+  // Asia
+  { value: 'Asia/Dubai', label: 'Dubai (GMT+4:00)', offset: 4 },
+  { value: 'Asia/Kolkata', label: 'Mumbai, Delhi, Kolkata (GMT+5:30)', offset: 5.5 },
+  { value: 'Asia/Karachi', label: 'Karachi (GMT+5:00)', offset: 5 },
+  { value: 'Asia/Dhaka', label: 'Dhaka (GMT+6:00)', offset: 6 },
+  { value: 'Asia/Bangkok', label: 'Bangkok (GMT+7:00)', offset: 7 },
+  { value: 'Asia/Singapore', label: 'Singapore (GMT+8:00)', offset: 8 },
+  { value: 'Asia/Hong_Kong', label: 'Hong Kong (GMT+8:00)', offset: 8 },
+  { value: 'Asia/Shanghai', label: 'Beijing, Shanghai (GMT+8:00)', offset: 8 },
+  { value: 'Asia/Taipei', label: 'Taipei (GMT+8:00)', offset: 8 },
+  { value: 'Asia/Tokyo', label: 'Tokyo (GMT+9:00)', offset: 9 },
+  { value: 'Asia/Seoul', label: 'Seoul (GMT+9:00)', offset: 9 },
+  { value: 'Asia/Jakarta', label: 'Jakarta (GMT+7:00)', offset: 7 },
+  { value: 'Asia/Manila', label: 'Manila (GMT+8:00)', offset: 8 },
+  { value: 'Asia/Ho_Chi_Minh', label: 'Ho Chi Minh (GMT+7:00)', offset: 7 },
+  { value: 'Asia/Kuala_Lumpur', label: 'Kuala Lumpur (GMT+8:00)', offset: 8 },
+  { value: 'Asia/Jerusalem', label: 'Jerusalem (GMT+2:00)', offset: 2 },
+  { value: 'Asia/Riyadh', label: 'Riyadh (GMT+3:00)', offset: 3 },
+  { value: 'Asia/Tehran', label: 'Tehran (GMT+3:30)', offset: 3.5 },
+  { value: 'Asia/Kabul', label: 'Kabul (GMT+4:30)', offset: 4.5 },
+  { value: 'Asia/Kathmandu', label: 'Kathmandu (GMT+5:45)', offset: 5.75 },
+  { value: 'Asia/Yangon', label: 'Yangon (GMT+6:30)', offset: 6.5 },
+
+  // Australia & Pacific
+  { value: 'Australia/Sydney', label: 'Sydney, Melbourne (GMT+10:00)', offset: 10 },
+  { value: 'Australia/Brisbane', label: 'Brisbane (GMT+10:00)', offset: 10 },
+  { value: 'Australia/Adelaide', label: 'Adelaide (GMT+9:30)', offset: 9.5 },
+  { value: 'Australia/Perth', label: 'Perth (GMT+8:00)', offset: 8 },
+  { value: 'Pacific/Auckland', label: 'Auckland (GMT+12:00)', offset: 12 },
+  { value: 'Pacific/Fiji', label: 'Fiji (GMT+12:00)', offset: 12 },
+  { value: 'Pacific/Guam', label: 'Guam (GMT+10:00)', offset: 10 },
+  { value: 'Pacific/Port_Moresby', label: 'Port Moresby (GMT+10:00)', offset: 10 },
+].sort((a, b) => a.offset - b.offset) // Sort by GMT offset
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession()
@@ -77,7 +143,7 @@ export default function SettingsPage() {
       setFormData({
         name: session.user.name || '',
         username: session.user.username || '',
-        timezone: session.user.timezone || 'America/New_York',
+        timezone: session.user.timezone || 'UTC',
         bio: session.user.bio || '',
       })
     }
@@ -343,8 +409,8 @@ export default function SettingsPage() {
                 className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
               >
                 {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz.replace(/_/g, ' ')}
+                  <option key={tz.value} value={tz.value}>
+                    {tz.label}
                   </option>
                 ))}
               </select>

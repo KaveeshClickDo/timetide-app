@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSession } from 'next-auth/react'
 import { format } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import {
   Calendar,
   Clock,
@@ -113,7 +115,11 @@ export default function BookingDetailPage() {
   const router = useRouter()
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+
+  // Get host's timezone from session (defaults to UTC)
+  const hostTimezone = session?.user?.timezone || 'UTC'
 
   const { data: bookingData, isLoading, error } = useQuery({
     queryKey: ['booking', params.id],
@@ -238,11 +244,12 @@ export default function BookingDetailPage() {
               <Calendar className="h-5 w-5 text-gray-400 mt-0.5" />
               <div>
                 <p className="font-medium text-gray-900">
-                  {format(new Date(booking.startTime), 'EEEE, MMMM d, yyyy')}
+                  {formatInTimeZone(new Date(booking.startTime), hostTimezone, 'EEEE, MMMM d, yyyy')}
                 </p>
                 <p className="text-gray-600">
-                  {format(new Date(booking.startTime), 'h:mm a')} - {format(new Date(booking.endTime), 'h:mm a')}
+                  {formatInTimeZone(new Date(booking.startTime), hostTimezone, 'h:mm a')} - {formatInTimeZone(new Date(booking.endTime), hostTimezone, 'h:mm a')}
                 </p>
+                <p className="text-xs text-gray-500 mt-1">Your timezone: {hostTimezone}</p>
               </div>
             </div>
 
@@ -255,11 +262,11 @@ export default function BookingDetailPage() {
               </div>
             </div>
 
-            {/* Timezone */}
+            {/* Invitee Timezone */}
             <div className="flex items-start gap-3">
               <Calendar className="h-5 w-5 text-gray-400 mt-0.5" />
               <div>
-                <p className="font-medium text-gray-900">Timezone</p>
+                <p className="font-medium text-gray-900">Invitee Timezone</p>
                 <p className="text-gray-600">{booking.timezone}</p>
               </div>
             </div>
@@ -303,7 +310,7 @@ export default function BookingDetailPage() {
                   <p className="text-red-700">{booking.cancellationReason}</p>
                   {booking.cancelledAt && (
                     <p className="text-sm text-red-600 mt-1">
-                      Cancelled {format(new Date(booking.cancelledAt), 'MMMM d, yyyy h:mm a')}
+                      Cancelled {formatInTimeZone(new Date(booking.cancelledAt), hostTimezone, 'MMMM d, yyyy h:mm a')}
                     </p>
                   )}
                 </div>

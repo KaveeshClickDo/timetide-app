@@ -16,6 +16,7 @@ import { getAllBusyTimes } from '@/lib/calendar/google';
 import {
   createGoogleCalendarEvent,
   CreateCalendarEventParams,
+  CreateCalendarEventResult,
 } from '@/lib/calendar/google';
 import {
   sendBookingConfirmationEmails,
@@ -302,21 +303,21 @@ export async function POST(request: NextRequest) {
         conferenceData: eventType.locationType === 'GOOGLE_MEET',
       };
 
-      const calendarEventId = await createGoogleCalendarEvent(eventParams);
+      const result: CreateCalendarEventResult = await createGoogleCalendarEvent(eventParams);
 
-      if (calendarEventId) {
-        // Update booking with calendar event ID
-        await prisma.booking.update({
+      if (result.eventId) {
+        // Update booking with calendar event ID and real Google Meet link
+        const updatedBooking = await prisma.booking.update({
           where: { id: booking.id },
-          data: { 
-            calendarEventId,
-            // If Google Meet, we'd need to fetch the meet link from the created event
-            // For simplicity, we'll use a placeholder
-            meetingUrl: eventType.locationType === 'GOOGLE_MEET' 
-              ? `https://meet.google.com/lookup/${booking.uid}`
-              : meetingUrl,
+          data: {
+            calendarEventId: result.eventId,
+            // Use the real Google Meet link from the calendar event
+            meetingUrl: result.meetLink || meetingUrl,
           },
         });
+
+        // Update meetingUrl for email
+        meetingUrl = updatedBooking.meetingUrl || meetingUrl;
       }
     }
 
@@ -332,7 +333,7 @@ export async function POST(request: NextRequest) {
       endTime: formatInTimeZone(endDate, timezone, 'h:mm a'),
       timezone,
       location,
-      meetingUrl: booking.meetingUrl ?? undefined,
+      meetingUrl: meetingUrl ?? undefined,
       bookingUid: booking.uid,
       notes,
     };

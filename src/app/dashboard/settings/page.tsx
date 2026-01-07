@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import {
   User,
   Globe,
@@ -56,6 +56,21 @@ export default function SettingsPage() {
   })
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
   const [checkingUsername, setCheckingUsername] = useState(false)
+  const [connectingCalendar, setConnectingCalendar] = useState(false)
+
+  // Fetch connected calendars
+  const { data: calendarsData, refetch: refetchCalendars } = useQuery({
+    queryKey: ['calendars'],
+    queryFn: async () => {
+      const res = await fetch('/api/calendars')
+      if (!res.ok) throw new Error('Failed to fetch calendars')
+      return res.json()
+    },
+    enabled: !!session?.user?.id,
+  })
+
+  const calendars = calendarsData?.calendars || []
+  const googleCalendar = calendars.find((cal: any) => cal.provider === 'GOOGLE')
 
   useEffect(() => {
     if (session?.user) {
@@ -132,6 +147,84 @@ export default function SettingsPage() {
     }
     saveMutation.mutate(formData)
   }
+
+  // Handle Google Calendar connection
+  const handleConnectGoogle = async () => {
+    try {
+      setConnectingCalendar(true)
+      const res = await fetch('/api/calendars', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'GOOGLE' }),
+      })
+
+      if (!res.ok) throw new Error('Failed to get auth URL')
+
+      const data = await res.json()
+      if (data.authUrl) {
+        // Redirect to Google OAuth
+        window.location.href = data.authUrl
+      }
+    } catch (error) {
+      console.error('Error connecting Google Calendar:', error)
+      toast({
+        title: 'Connection failed',
+        description: 'Failed to connect Google Calendar. Please try again.',
+        variant: 'destructive',
+      })
+      setConnectingCalendar(false)
+    }
+  }
+
+  // Handle calendar disconnection
+  const disconnectCalendarMutation = useMutation({
+    mutationFn: async (calendarId: string) => {
+      const res = await fetch(`/api/calendars/${calendarId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error('Failed to disconnect')
+      return res.json()
+    },
+    onSuccess: () => {
+      refetchCalendars()
+      toast({
+        title: 'Calendar disconnected',
+        description: 'Your calendar has been disconnected.',
+      })
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to disconnect calendar.',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  // Check for OAuth callback success/error
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const calendarConnected = params.get('calendar_connected')
+    const calendarError = params.get('calendar_error')
+
+    if (calendarConnected === 'true') {
+      toast({
+        title: 'Calendar connected!',
+        description: 'Your Google Calendar has been successfully connected.',
+      })
+      refetchCalendars()
+      // Clean up URL
+      window.history.replaceState({}, '', '/dashboard/settings')
+    } else if (calendarError) {
+      toast({
+        title: 'Connection failed',
+        description: `Failed to connect calendar: ${calendarError}`,
+        variant: 'destructive',
+      })
+      // Clean up URL
+      window.history.replaceState({}, '', '/dashboard/settings')
+    }
+  }, [])
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -272,6 +365,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
+              {/* Google Calendar */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
@@ -280,26 +374,76 @@ export default function SettingsPage() {
                   <div>
                     <p className="font-medium">Google Calendar</p>
                     <p className="text-sm text-gray-500">
-                      {session?.user?.email || 'Not connected'}
+                      {googleCalendar ? (
+                        <>
+                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
+                          {googleCalendar.name}
+                        </>
+                      ) : (
+                        'Not connected'
+                      )}
                     </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">
-                  {session?.user?.email ? 'Reconnect' : 'Connect'}
-                </Button>
+                <div className="flex gap-2">
+                  {googleCalendar ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleConnectGoogle}
+                        disabled={connectingCalendar}
+                      >
+                        {connectingCalendar ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          'Reconnect'
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => disconnectCalendarMutation.mutate(googleCalendar.id)}
+                        disabled={disconnectCalendarMutation.isPending}
+                      >
+                        Disconnect
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleConnectGoogle}
+                      disabled={connectingCalendar}
+                    >
+                      {connectingCalendar ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        'Connect'
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              {/* Microsoft Outlook - Coming Soon */}
+              <div className="flex items-center justify-between p-4 border rounded-lg opacity-60">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                     <Calendar className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="font-medium">Microsoft Outlook</p>
-                    <p className="text-sm text-gray-500">Not connected</p>
+                    <p className="text-sm text-gray-500">Coming soon</p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" disabled>
                   Connect
                 </Button>
               </div>

@@ -45,6 +45,101 @@ export async function exchangeCodeForTokens(code: string) {
   return tokens;
 }
 
+/**
+ * Connect a Google Calendar account for a user
+ * Exchanges OAuth code for tokens and saves to database
+ */
+export async function connectGoogleCalendar(userId: string, code: string) {
+  const oauth2Client = getGoogleOAuthClient();
+
+  // Exchange authorization code for tokens
+  const { tokens } = await oauth2Client.getToken(code);
+
+  if (!tokens.access_token) {
+    throw new Error('No access token received from Google');
+  }
+
+  // Set credentials to fetch calendar info
+  oauth2Client.setCredentials(tokens);
+  const calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
+
+  // Get primary calendar info
+  const calendarList = await calendarApi.calendarList.list();
+  const primaryCalendar = calendarList.data.items?.find((cal) => cal.primary);
+
+  if (!primaryCalendar?.id) {
+    throw new Error('No primary calendar found');
+  }
+
+  // Check if calendar already exists for this user
+  const existingCalendar = await prisma.calendar.findFirst({
+    where: {
+      userId,
+      provider: 'GOOGLE',
+      externalId: primaryCalendar.id,
+    },
+  });
+
+  if (existingCalendar) {
+    // Update existing calendar with new tokens
+    const calendar = await prisma.calendar.update({
+      where: { id: existingCalendar.id },
+      data: {
+        name: primaryCalendar.summary || 'Google Calendar',
+        isEnabled: true,
+        credentials: {
+          upsert: {
+            create: {
+              accessToken: tokens.access_token,
+              refreshToken: tokens.refresh_token || undefined,
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+            },
+            update: {
+              accessToken: tokens.access_token,
+              refreshToken: tokens.refresh_token || undefined,
+              expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+            },
+          },
+        },
+      },
+      include: {
+        credentials: true,
+      },
+    });
+    return calendar;
+  }
+
+  // Check if user has any existing calendars
+  const hasExistingCalendars = await prisma.calendar.count({
+    where: { userId },
+  });
+
+  // Create new calendar
+  const calendar = await prisma.calendar.create({
+    data: {
+      userId,
+      name: primaryCalendar.summary || 'Google Calendar',
+      provider: 'GOOGLE',
+      externalId: primaryCalendar.id,
+      isPrimary: hasExistingCalendars === 0, // Set as primary if it's the first calendar
+      isEnabled: true,
+      color: primaryCalendar.backgroundColor || undefined,
+      credentials: {
+        create: {
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token || undefined,
+          expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        },
+      },
+    },
+    include: {
+      credentials: true,
+    },
+  });
+
+  return calendar;
+}
+
 export async function refreshAccessToken(calendarId: string): Promise<string | null> {
   const calendar = await prisma.calendar.findUnique({
     where: { id: calendarId },

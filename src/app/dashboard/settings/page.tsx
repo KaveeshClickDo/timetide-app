@@ -12,6 +12,7 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  Video,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -123,6 +124,7 @@ export default function SettingsPage() {
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [connectingCalendar, setConnectingCalendar] = useState(false)
+  const [connectingZoom, setConnectingZoom] = useState(false)
 
   // Fetch connected calendars
   const { data: calendarsData, refetch: refetchCalendars } = useQuery({
@@ -137,6 +139,19 @@ export default function SettingsPage() {
 
   const calendars = calendarsData?.calendars || []
   const googleCalendar = calendars.find((cal: any) => cal.provider === 'GOOGLE')
+
+  // Fetch Zoom connection status
+  const { data: zoomData, refetch: refetchZoom } = useQuery({
+    queryKey: ['zoom-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/zoom/status')
+      if (!res.ok) return { connected: false }
+      return res.json()
+    },
+    enabled: !!session?.user?.id,
+  })
+
+  const zoomConnected = zoomData?.connected || false
 
   useEffect(() => {
     if (session?.user) {
@@ -267,11 +282,54 @@ export default function SettingsPage() {
     },
   })
 
+  // Handle Zoom connection
+  const handleConnectZoom = async () => {
+    try {
+      setConnectingZoom(true)
+      window.location.href = '/api/zoom/connect'
+    } catch (error) {
+      console.error('Error connecting Zoom:', error)
+      toast({
+        title: 'Connection failed',
+        description: 'Failed to connect Zoom. Please try again.',
+        variant: 'destructive',
+      })
+      setConnectingZoom(false)
+    }
+  }
+
+  // Handle Zoom disconnection
+  const disconnectZoomMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/zoom/disconnect', {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error('Failed to disconnect')
+      return res.json()
+    },
+    onSuccess: () => {
+      refetchZoom()
+      toast({
+        title: 'Zoom disconnected',
+        description: 'Your Zoom account has been disconnected.',
+      })
+    },
+    onError: () => {
+      toast({
+        title: 'Error',
+        description: 'Failed to disconnect Zoom.',
+        variant: 'destructive',
+      })
+    },
+  })
+
   // Check for OAuth callback success/error
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const calendarConnected = params.get('calendar_connected')
     const calendarError = params.get('calendar_error')
+    const zoomConnected = params.get('zoom_connected')
+    const error = params.get('error')
 
     if (calendarConnected === 'true') {
       toast({
@@ -285,6 +343,22 @@ export default function SettingsPage() {
       toast({
         title: 'Connection failed',
         description: `Failed to connect calendar: ${calendarError}`,
+        variant: 'destructive',
+      })
+      // Clean up URL
+      window.history.replaceState({}, '', '/dashboard/settings')
+    } else if (zoomConnected === 'true') {
+      toast({
+        title: 'Zoom connected!',
+        description: 'Your Zoom account has been successfully connected.',
+      })
+      refetchZoom()
+      // Clean up URL
+      window.history.replaceState({}, '', '/dashboard/settings')
+    } else if (error) {
+      toast({
+        title: 'Connection failed',
+        description: `Failed to connect: ${error}`,
         variant: 'destructive',
       })
       // Clean up URL
@@ -512,6 +586,94 @@ export default function SettingsPage() {
                 <Button variant="outline" size="sm" disabled>
                   Connect
                 </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Video Conferencing */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Video className="h-5 w-5" />
+              Video Conferencing
+            </CardTitle>
+            <CardDescription>
+              Connect video conferencing apps to auto-generate meeting links.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Zoom */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Video className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Zoom</p>
+                    <p className="text-sm text-gray-500">
+                      {zoomConnected ? (
+                        <>
+                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
+                          Connected
+                        </>
+                      ) : (
+                        'Auto-generate Zoom meeting links'
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {zoomConnected ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => disconnectZoomMutation.mutate()}
+                      disabled={disconnectZoomMutation.isPending}
+                    >
+                      Disconnect
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleConnectZoom}
+                      disabled={connectingZoom}
+                    >
+                      {connectingZoom ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        'Connect'
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Google Meet - Already handled by Google Calendar */}
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                    <Video className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Google Meet</p>
+                    <p className="text-sm text-gray-500">
+                      {googleCalendar ? (
+                        <>
+                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
+                          Auto-enabled via Google Calendar
+                        </>
+                      ) : (
+                        'Connect Google Calendar to enable'
+                      )}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>

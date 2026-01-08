@@ -19,6 +19,10 @@ import {
   CreateCalendarEventResult,
 } from '@/lib/calendar/google';
 import {
+  createZoomMeeting,
+  hasZoomConnected,
+} from '@/lib/zoom';
+import {
   sendBookingConfirmationEmails,
   BookingEmailData,
 } from '@/lib/email/client';
@@ -247,7 +251,7 @@ export async function POST(request: NextRequest) {
         break;
       case 'ZOOM':
         location = 'Zoom';
-        meetingUrl = eventType.locationValue ?? undefined;
+        // Will be set after Zoom meeting creation
         break;
       case 'IN_PERSON':
         location = eventType.locationValue ?? 'In Person';
@@ -318,6 +322,46 @@ export async function POST(request: NextRequest) {
 
         // Update meetingUrl for email
         meetingUrl = updatedBooking.meetingUrl || meetingUrl;
+      }
+    }
+
+    // Create Zoom meeting if event type is ZOOM
+    if (eventType.locationType === 'ZOOM') {
+      const hasZoom = await hasZoomConnected(eventType.userId);
+
+      if (hasZoom) {
+        try {
+          const zoomMeeting = await createZoomMeeting({
+            userId: eventType.userId,
+            topic: `${eventType.title} with ${name}`,
+            startTime: startDate,
+            duration: eventType.length,
+            timezone,
+            agenda: notes || `Booked via TimeTide with ${name} (${email})`,
+          });
+
+          // Update booking with Zoom meeting URL
+          const updatedBooking = await prisma.booking.update({
+            where: { id: booking.id },
+            data: {
+              meetingUrl: zoomMeeting.joinUrl,
+            },
+          });
+
+          // Update meetingUrl for email
+          meetingUrl = updatedBooking.meetingUrl || meetingUrl;
+
+          console.log('Created Zoom meeting for booking:', {
+            bookingId: booking.id,
+            meetingId: zoomMeeting.meetingId,
+            joinUrl: zoomMeeting.joinUrl,
+          });
+        } catch (error) {
+          console.error('Failed to create Zoom meeting:', error);
+          // Continue with booking even if Zoom creation fails
+        }
+      } else {
+        console.warn(`Zoom not connected for user ${eventType.userId}, skipping Zoom meeting creation`);
       }
     }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Clock,
@@ -62,6 +63,7 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
 })
 
 export default function AvailabilityPage() {
+  const { data: session } = useSession()
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [selectedSchedule, setSelectedSchedule] = useState<string | null>(null)
@@ -377,7 +379,7 @@ export default function AvailabilityPage() {
       <div className="mt-6 flex items-center gap-2 text-sm text-gray-500">
         <Clock className="h-4 w-4" />
         <span>
-          Times are shown in your local timezone. You can change your timezone in{' '}
+          Times are shown in {session?.user?.timezone || 'UTC'}. You can change your timezone in{' '}
           <a href="/dashboard/settings" className="text-ocean-600 hover:underline">
             Settings
           </a>

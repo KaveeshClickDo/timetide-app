@@ -43,6 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             length: true,
             locationType: true,
             locationValue: true,
+            questions: true,
           },
         },
         host: {

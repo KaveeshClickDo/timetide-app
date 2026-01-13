@@ -63,6 +63,14 @@ interface BookingDetails {
     length: number
     locationType: string
     locationValue?: string
+    questions?: Array<{
+      id: string
+      type: string
+      label: string
+      required: boolean
+      placeholder?: string
+      options?: string[]
+    }>
   }
   host: {
     id: string
@@ -370,12 +378,18 @@ export default function BookingDetailPage() {
               <div className="pt-4 border-t">
                 <p className="font-medium text-gray-900 mb-3">Custom Responses</p>
                 <div className="space-y-3">
-                  {Object.entries(booking.responses).map(([key, value]) => (
-                    <div key={key}>
-                      <p className="text-sm font-medium text-gray-700">{key}</p>
-                      <p className="text-gray-600">{String(value)}</p>
-                    </div>
-                  ))}
+                  {Object.entries(booking.responses).map(([questionId, value]) => {
+                    // Find the question by ID to get the label
+                    const question = booking.eventType.questions?.find(q => q.id === questionId)
+                    const questionLabel = question?.label || questionId
+
+                    return (
+                      <div key={questionId}>
+                        <p className="text-sm font-medium text-gray-700">{questionLabel}</p>
+                        <p className="text-gray-600">{String(value)}</p>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}

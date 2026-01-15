@@ -159,7 +159,7 @@ export function generateBookingConfirmedEmail(
         </div>
         
         <div class="footer">
-          <p>Powered by TimeTide - Modern Scheduling</p>
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
           <p style="font-size: 12px;">
             Need to make changes? 
             <a href="${manageUrl}" style="color: #0ea5e9;">Reschedule or cancel</a>
@@ -225,7 +225,7 @@ export function generateBookingCancelledEmail(
         ` : ''}
         
         <div class="footer">
-          <p>Powered by TimeTide - Modern Scheduling</p>
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
         </div>
       </div>
     </body>
@@ -297,7 +297,7 @@ export function generateBookingRescheduledEmail(
         </div>
         
         <div class="footer">
-          <p>Powered by TimeTide - Modern Scheduling</p>
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
         </div>
       </div>
     </body>
@@ -356,7 +356,7 @@ export function generateReminderEmail(
         </div>
         
         <div class="footer">
-          <p>Powered by TimeTide - Modern Scheduling</p>
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
         </div>
       </div>
     </body>

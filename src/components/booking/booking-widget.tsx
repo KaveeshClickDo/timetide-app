@@ -282,7 +282,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
         <div className="text-center mt-6">
           <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
             <Waves className="h-4 w-4" />
-            Powered by TimeTide
+            TimeTide Powered by SeekaHost Technologies Ltd.
           </Link>
         </div>
       </div>
@@ -618,7 +618,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
       <div className="text-center mt-6">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
           <Waves className="h-4 w-4" />
-          Powered by TimeTide
+          TimeTide Powered by SeekaHost Technologies Ltd.
         </Link>
       </div>
     </div>

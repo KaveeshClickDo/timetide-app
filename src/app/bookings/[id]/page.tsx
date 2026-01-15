@@ -377,7 +377,7 @@ export default function PublicBookingManagementPage() {
 
         {/* Footer */}
         <div className="text-center mt-8 text-gray-500 text-sm">
-          <p>Powered by TimeTide</p>
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
         </div>
       </div>
 

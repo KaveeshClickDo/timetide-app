@@ -1,30 +1,28 @@
-import { notFound } from 'next/navigation'
+'use client'
+
+import { useParams } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
-import { prisma } from '@/lib/prisma'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Clock, Video, MapPin, Phone, Globe, ChevronRight, Waves } from 'lucide-react'
 import { getInitials, formatDuration } from '@/lib/utils'
 
-interface PageProps {
-  params: Promise<{ username: string }>
+interface User {
+  id: string
+  name: string | null
+  username: string
+  image: string | null
+  bio: string | null
 }
 
-export async function generateMetadata({ params }: PageProps) {
-  const { username } = await params
-  const user = await prisma.user.findUnique({
-    where: { username },
-    select: { name: true },
-  })
-
-  if (!user) {
-    return { title: 'Not Found' }
-  }
-
-  return {
-    title: `Book a meeting with ${user.name}`,
-    description: `Schedule time with ${user.name} on TimeTide`,
-  }
+interface EventType {
+  id: string
+  title: string
+  slug: string
+  description: string | null
+  length: number
+  locationType: string
 }
 
 const locationIcons: Record<string, typeof Video> = {
@@ -45,40 +43,65 @@ const locationLabels: Record<string, string> = {
   CUSTOM: 'Custom Location',
 }
 
-export default async function UserProfilePage({ params }: PageProps) {
-  const { username } = await params
-  const user = await prisma.user.findUnique({
-    where: { username },
-    select: {
-      id: true,
-      name: true,
-      username: true,
-      image: true,
-      bio: true,
+export default function UserProfilePage() {
+  const params = useParams()
+  const username = params?.username as string
+
+  // Fetch user data
+  const { data: userData, isLoading: userLoading, error: userError } = useQuery<{ user: User }>({
+    queryKey: ['user', username],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/${username}`)
+      if (!res.ok) {
+        throw new Error('User not found')
+      }
+      return res.json()
     },
+    enabled: !!username,
   })
 
-  if (!user) {
-    notFound()
+  // Fetch event types
+  const { data: eventTypesData, isLoading: eventsLoading } = useQuery<{ eventTypes: EventType[] }>({
+    queryKey: ['user-event-types', username],
+    queryFn: async () => {
+      const res = await fetch(`/api/users/${username}/event-types`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch event types')
+      }
+      return res.json()
+    },
+    enabled: !!username && !!userData?.user,
+  })
+
+  // Loading state
+  if (userLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ocean-500 mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading profile...</p>
+        </div>
+      </div>
+    )
   }
 
-  const eventTypes = await prisma.eventType.findMany({
-    where: {
-      userId: user.id,
-      isActive: true,
-    },
-    select: {
-      id: true,
-      title: true,
-      slug: true,
-      description: true,
-      length: true,
-      locationType: true,
-    },
-    orderBy: {
-      createdAt: 'asc',
-    },
-  })
+  // Error state
+  if (userError || !userData?.user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">User Not Found</h1>
+          <p className="text-gray-500 mb-4">The user you're looking for doesn't exist.</p>
+          <Link href="/" className="text-ocean-600 hover:text-ocean-700">
+            Go to homepage
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const user = userData.user
+  const eventTypes = eventTypesData?.eventTypes || []
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50">
@@ -101,7 +124,12 @@ export default async function UserProfilePage({ params }: PageProps) {
         </div>
 
         {/* Event types list */}
-        {eventTypes.length === 0 ? (
+        {eventsLoading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ocean-500 mx-auto mb-4"></div>
+            <p className="text-gray-500">Loading event types...</p>
+          </div>
+        ) : eventTypes.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <Clock className="h-12 w-12 text-gray-300 mx-auto mb-4" />
@@ -164,7 +192,7 @@ export default async function UserProfilePage({ params }: PageProps) {
             className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
           >
             <Waves className="h-4 w-4" />
-            Powered by TimeTide
+            TimeTide Powered by SeekaHost Technologies Ltd.
           </Link>
         </div>
       </div>

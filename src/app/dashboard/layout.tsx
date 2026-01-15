@@ -166,7 +166,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className="lg:pl-64 min-h-screen flex flex-col">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6">
@@ -198,7 +198,20 @@ export default function DashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+
+        {/* Footer */}
+        <footer className="mt-auto border-t border-gray-200 bg-white px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-500">
+            <p>
+              © {new Date().getFullYear()} TimeTide by SeekaHost Technologies Ltd. All Rights Reserved.
+            </p>
+            <div className="flex items-center gap-4">
+              <p>Company Number: 16026964. VAT Number: 485829729.</p>
+              <span className="text-gray-400">v1.0.0</span>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   )

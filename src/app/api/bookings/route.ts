@@ -18,6 +18,7 @@ import {
   CreateCalendarEventParams,
   CreateCalendarEventResult,
 } from '@/lib/calendar/google';
+import { createOutlookCalendarEvent } from '@/lib/calendar/outlook';
 import {
   createZoomMeeting,
   hasZoomConnected,
@@ -292,7 +293,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (primaryCalendar && primaryCalendar.provider === 'GOOGLE') {
+    if (primaryCalendar) {
       const eventParams: CreateCalendarEventParams = {
         calendarId: primaryCalendar.id,
         summary: `${eventType.title} with ${name}`,
@@ -304,18 +305,23 @@ export async function POST(request: NextRequest) {
           { email: eventType.user.email!, name: eventType.user.name ?? undefined },
         ],
         location,
-        conferenceData: eventType.locationType === 'GOOGLE_MEET',
+        conferenceData: eventType.locationType === 'GOOGLE_MEET' || eventType.locationType === 'TEAMS',
       };
 
-      const result: CreateCalendarEventResult = await createGoogleCalendarEvent(eventParams);
+      let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
+
+      if (primaryCalendar.provider === 'GOOGLE') {
+        result = await createGoogleCalendarEvent(eventParams);
+      } else if (primaryCalendar.provider === 'OUTLOOK') {
+        result = await createOutlookCalendarEvent(eventParams);
+      }
 
       if (result.eventId) {
-        // Update booking with calendar event ID and real Google Meet link
+        // Update booking with calendar event ID and meeting link
         const updatedBooking = await prisma.booking.update({
           where: { id: booking.id },
           data: {
             calendarEventId: result.eventId,
-            // Use the real Google Meet link from the calendar event
             meetingUrl: result.meetLink || meetingUrl,
           },
         });

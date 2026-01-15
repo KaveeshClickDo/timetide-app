@@ -99,7 +99,8 @@ export default function SettingsPage() {
   })
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
   const [checkingUsername, setCheckingUsername] = useState(false)
-  const [connectingCalendar, setConnectingCalendar] = useState(false)
+  const [connectingGoogle, setConnectingGoogle] = useState(false)
+  const [connectingOutlook, setConnectingOutlook] = useState(false)
   const [connectingZoom, setConnectingZoom] = useState(false)
 
   // Fetch connected calendars
@@ -115,6 +116,7 @@ export default function SettingsPage() {
 
   const calendars = calendarsData?.calendars || []
   const googleCalendar = calendars.find((cal: any) => cal.provider === 'GOOGLE')
+  const outlookCalendar = calendars.find((cal: any) => cal.provider === 'OUTLOOK')
 
   // Fetch Zoom connection status
   const { data: zoomData, refetch: refetchZoom } = useQuery({
@@ -208,7 +210,7 @@ export default function SettingsPage() {
   // Handle Google Calendar connection
   const handleConnectGoogle = async () => {
     try {
-      setConnectingCalendar(true)
+      setConnectingGoogle(true)
       const res = await fetch('/api/calendars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,7 +221,6 @@ export default function SettingsPage() {
 
       const data = await res.json()
       if (data.authUrl) {
-        // Redirect to Google OAuth
         window.location.href = data.authUrl
       }
     } catch (error) {
@@ -229,7 +230,34 @@ export default function SettingsPage() {
         description: 'Failed to connect Google Calendar. Please try again.',
         variant: 'destructive',
       })
-      setConnectingCalendar(false)
+      setConnectingGoogle(false)
+    }
+  }
+
+  // Handle Outlook Calendar connection
+  const handleConnectOutlook = async () => {
+    try {
+      setConnectingOutlook(true)
+      const res = await fetch('/api/calendars', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'OUTLOOK' }),
+      })
+
+      if (!res.ok) throw new Error('Failed to get auth URL')
+
+      const data = await res.json()
+      if (data.authUrl) {
+        window.location.href = data.authUrl
+      }
+    } catch (error) {
+      console.error('Error connecting Outlook Calendar:', error)
+      toast({
+        title: 'Connection failed',
+        description: 'Failed to connect Outlook Calendar. Please try again.',
+        variant: 'destructive',
+      })
+      setConnectingOutlook(false)
     }
   }
 
@@ -508,9 +536,9 @@ export default function SettingsPage() {
                         variant="outline"
                         size="sm"
                         onClick={handleConnectGoogle}
-                        disabled={connectingCalendar}
+                        disabled={connectingGoogle}
                       >
-                        {connectingCalendar ? (
+                        {connectingGoogle ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                             Connecting...
@@ -533,9 +561,9 @@ export default function SettingsPage() {
                       variant="outline"
                       size="sm"
                       onClick={handleConnectGoogle}
-                      disabled={connectingCalendar}
+                      disabled={connectingGoogle}
                     >
-                      {connectingCalendar ? (
+                      {connectingGoogle ? (
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           Connecting...
@@ -548,20 +576,71 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Microsoft Outlook - Coming Soon */}
-              <div className="flex items-center justify-between p-4 border rounded-lg opacity-60">
+              {/* Microsoft Outlook */}
+              <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
                     <Calendar className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="font-medium">Microsoft Outlook</p>
-                    <p className="text-sm text-gray-500">Coming soon</p>
+                    <p className="text-sm text-gray-500">
+                      {outlookCalendar ? (
+                        <>
+                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
+                          {outlookCalendar.name}
+                        </>
+                      ) : (
+                        'Not connected'
+                      )}
+                    </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" disabled>
-                  Connect
-                </Button>
+                <div className="flex gap-2">
+                  {outlookCalendar ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleConnectOutlook}
+                        disabled={connectingOutlook}
+                      >
+                        {connectingOutlook ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : (
+                          'Reconnect'
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => disconnectCalendarMutation.mutate(outlookCalendar.id)}
+                        disabled={disconnectCalendarMutation.isPending}
+                      >
+                        Disconnect
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleConnectOutlook}
+                      disabled={connectingOutlook}
+                    >
+                      {connectingOutlook ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Connecting...
+                        </>
+                      ) : (
+                        'Connect'
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -646,6 +725,28 @@ export default function SettingsPage() {
                         </>
                       ) : (
                         'Connect Google Calendar to enable'
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Microsoft Teams - Handled by Outlook Calendar */}
+              <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <Video className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium">Microsoft Teams</p>
+                    <p className="text-sm text-gray-500">
+                      {outlookCalendar ? (
+                        <>
+                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
+                          Auto-enabled via Outlook Calendar
+                        </>
+                      ) : (
+                        'Connect Outlook Calendar to enable'
                       )}
                     </p>
                   </div>

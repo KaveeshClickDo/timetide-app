@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { getGoogleAuthUrl, exchangeCodeForTokens, connectGoogleCalendar } from '@/lib/calendar/google'
+import { getGoogleAuthUrl, connectGoogleCalendar } from '@/lib/calendar/google'
+import { getOutlookAuthUrl, connectOutlookCalendar } from '@/lib/calendar/outlook'
 
 // GET /api/calendars - List connected calendars
 export async function GET() {
@@ -50,16 +51,24 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { provider, code, redirectUri } = body
+    const { provider, code } = body
 
     if (provider === 'GOOGLE') {
       if (code) {
-        // Exchange code for tokens (used internally by connectGoogleCalendar too)
         const calendar = await connectGoogleCalendar(session.user.id, code)
         return NextResponse.json({ calendar })
       } else {
-        // Generate auth URL for this user
         const authUrl = getGoogleAuthUrl(session.user.id)
+        return NextResponse.json({ authUrl })
+      }
+    }
+
+    if (provider === 'OUTLOOK') {
+      if (code) {
+        const calendar = await connectOutlookCalendar(session.user.id, code)
+        return NextResponse.json({ calendar })
+      } else {
+        const authUrl = getOutlookAuthUrl(session.user.id)
         return NextResponse.json({ authUrl })
       }
     }

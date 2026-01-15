@@ -6,6 +6,7 @@
 import { google, calendar_v3 } from 'googleapis';
 import prisma from '../prisma';
 import { BusyTime } from '../slots/calculator';
+import { getOutlookBusyTimes } from './outlook';
 
 // ============================================================================
 // OAUTH CLIENT
@@ -291,16 +292,20 @@ export async function getAllBusyTimes(
     const allBusyTimes: BusyTime[] = [];
 
     for (const calendar of calendars) {
-      if (calendar.provider === 'GOOGLE') {
-        try {
-          const busyTimes = await getGoogleBusyTimes(calendar.id, timeMin, timeMax);
-          allBusyTimes.push(...busyTimes);
-        } catch (calError) {
-          // Log but continue with other calendars
-          console.warn(`Failed to fetch busy times from calendar ${calendar.id}:`, calError);
+      try {
+        let busyTimes: BusyTime[] = [];
+
+        if (calendar.provider === 'GOOGLE') {
+          busyTimes = await getGoogleBusyTimes(calendar.id, timeMin, timeMax);
+        } else if (calendar.provider === 'OUTLOOK') {
+          busyTimes = await getOutlookBusyTimes(calendar.id, timeMin, timeMax);
         }
+
+        allBusyTimes.push(...busyTimes);
+      } catch (calError) {
+        // Log but continue with other calendars
+        console.warn(`Failed to fetch busy times from calendar ${calendar.id}:`, calError);
       }
-      // Add other providers here (Outlook, etc.)
     }
 
     return allBusyTimes;

@@ -3,9 +3,10 @@
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
-import { Clock, Video, MapPin, Phone, Globe, ChevronRight, Waves } from 'lucide-react'
+import { Clock, Video, MapPin, Phone, Globe, ChevronRight } from 'lucide-react'
 import { getInitials, formatDuration } from '@/lib/utils'
 
 interface User {
@@ -191,7 +192,12 @@ export default function UserProfilePage() {
             href="/"
             className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
           >
-            <Waves className="h-4 w-4" />
+            <Image
+              src="/logo.svg"
+              alt="TimeTide"
+              width={20}
+              height={20}
+            />
             TimeTide Powered by SeekaHost Technologies Ltd.
           </Link>
         </div>

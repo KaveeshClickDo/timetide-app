@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Waves, Mail, Lock, User, Chrome, Github, Loader2, CheckCircle2 } from 'lucide-react'
+import { Mail, Lock, User, Chrome, Github, Loader2, CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 
 export default function SignUpPage() {
@@ -76,11 +77,14 @@ export default function SignUpPage() {
       {/* Left side - Features */}
       <div className="hidden lg:flex lg:w-1/2 bg-ocean-gradient p-12 flex-col justify-between">
         <div>
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Waves className="h-10 w-10 text-white" />
-            <span className="text-2xl font-heading font-bold text-white">
-              TimeTide
-            </span>
+          <Link href="/" className="inline-flex items-center">
+            <Image
+              src="/footer-logo.svg"
+              alt="TimeTide"
+              width={180}
+              height={48}
+              priority
+            />
           </Link>
         </div>
         <div>
@@ -112,11 +116,14 @@ export default function SignUpPage() {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="text-center mb-8 lg:hidden">
-            <Link href="/" className="inline-flex items-center gap-2">
-              <Waves className="h-10 w-10 text-ocean-500" />
-              <span className="text-2xl font-heading font-bold text-ocean-900">
-                TimeTide
-              </span>
+            <Link href="/" className="inline-flex items-center justify-center">
+              <Image
+                src="/header-logo.svg"
+                alt="TimeTide"
+                width={180}
+                height={48}
+                priority
+              />
             </Link>
           </div>
 

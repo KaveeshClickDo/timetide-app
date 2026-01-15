@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay } from 'date-fns'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   Clock,
   Globe,
@@ -12,7 +13,6 @@ import {
   Phone,
   ChevronLeft,
   ChevronRight,
-  Waves,
   Loader2,
   CheckCircle2,
   Calendar,
@@ -281,7 +281,12 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
 
         <div className="text-center mt-6">
           <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
-            <Waves className="h-4 w-4" />
+            <Image
+              src="/logo.svg"
+              alt="TimeTide"
+              width={20}
+              height={20}
+            />
             TimeTide Powered by SeekaHost Technologies Ltd.
           </Link>
         </div>
@@ -617,7 +622,12 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
 
       <div className="text-center mt-6">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
-          <Waves className="h-4 w-4" />
+          <Image
+            src="/logo.svg"
+            alt="TimeTide"
+            width={20}
+            height={20}
+          />
           TimeTide Powered by SeekaHost Technologies Ltd.
         </Link>
       </div>

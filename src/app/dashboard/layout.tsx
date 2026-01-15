@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
 import {
-  Waves,
   Calendar,
   Clock,
   Settings,
@@ -71,11 +71,14 @@ export default function DashboardLayout({
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <Waves className="h-8 w-8 text-ocean-500" />
-              <span className="text-xl font-heading font-bold text-ocean-900">
-                TimeTide
-              </span>
+            <Link href="/dashboard" className="flex items-center">
+              <Image
+                src="/header-logo.svg"
+                alt="TimeTide"
+                width={140}
+                height={36}
+                priority
+              />
             </Link>
             <button
               className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"

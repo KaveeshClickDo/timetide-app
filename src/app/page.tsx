@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import {
   Calendar,
@@ -9,7 +10,6 @@ import {
   Shield,
   ArrowRight,
   CheckCircle2,
-  Waves,
 } from 'lucide-react'
 
 export default function HomePage() {
@@ -19,11 +19,8 @@ export default function HomePage() {
       <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-ocean-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <Waves className="h-8 w-8 text-ocean-500" />
-              <span className="text-xl font-heading font-bold text-ocean-900">
-                TimeTide
-              </span>
+            <div className="flex items-center">
+              <Image src="/header-logo.svg" alt="TimeTide" width={150} height={40} />
             </div>
             <div className="hidden md:flex items-center gap-8">
               <Link
@@ -426,11 +423,8 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Waves className="h-6 w-6 text-ocean-400" />
-                <span className="text-lg font-heading font-bold text-white">
-                  TimeTide
-                </span>
+              <div className="flex items-center mb-4">
+                <Image src="/footer-logo.svg" alt="TimeTide" width={120} height={32} />
               </div>
               <p className="text-sm">
                 Modern scheduling that flows with your time.
@@ -461,7 +455,9 @@ export default function HomePage() {
             </div>
           </div>
           <div className="border-t border-gray-800 pt-8 text-sm text-center">
-            © {new Date().getFullYear()} TimeTide. All rights reserved.
+            © {new Date().getFullYear()} TimeTide by SeekaHost Technologies Ltd. All Rights Reserved.
+            <br />
+            Company Number: 16026964. VAT Number: 485829729.
           </div>
         </div>
       </footer>

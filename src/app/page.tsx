@@ -441,7 +441,7 @@ export default function HomePage() {
             <div>
               <h4 className="font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link href="#" className="hover:text-white">About</Link></li>
+                <li><Link href="/about-us" className="hover:text-white">About</Link></li>
                 <li><Link href="#" className="hover:text-white">Blog</Link></li>
                 <li><Link href="#" className="hover:text-white">Careers</Link></li>
               </ul>
@@ -449,8 +449,8 @@ export default function HomePage() {
             <div>
               <h4 className="font-semibold text-white mb-4">Legal</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link href="#" className="hover:text-white">Privacy</Link></li>
-                <li><Link href="#" className="hover:text-white">Terms</Link></li>
+                <li><Link href="/privacy-policy" className="hover:text-white">Privacy</Link></li>
+                <li><Link href="/terms-conditions" className="hover:text-white">Terms</Link></li>
               </ul>
             </div>
           </div>

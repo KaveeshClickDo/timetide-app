@@ -80,6 +80,13 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Type assertion for fields we need
+    const eventTypeWithPeriod = eventType as typeof eventType & {
+      periodType: 'ROLLING' | 'RANGE' | 'UNLIMITED';
+      periodStartDate: Date | null;
+      periodEndDate: Date | null;
+    };
+
     if (!eventType) {
       return NextResponse.json(
         { error: 'Event type not found' },
@@ -87,13 +94,58 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Determine date range
+    // Determine date range based on period type
     const now = new Date();
-    const rangeStart = startDate ? parseISO(startDate) : now;
-    const maxDays = eventType.periodDays ?? 30;
-    const rangeEnd = endDate
-      ? parseISO(endDate)
-      : addDays(now, maxDays);
+    let rangeStart = startDate ? parseISO(startDate) : now;
+    let rangeEnd: Date;
+    let maxDays: number;
+
+    // Calculate booking window based on period type
+    switch (eventTypeWithPeriod.periodType) {
+      case 'RANGE':
+        // Use specific date range
+        const periodStart = eventTypeWithPeriod.periodStartDate ? new Date(eventTypeWithPeriod.periodStartDate) : now;
+        const periodEnd = eventTypeWithPeriod.periodEndDate ? new Date(eventTypeWithPeriod.periodEndDate) : addDays(now, 30);
+
+        // Ensure rangeStart is not before periodStart
+        if (rangeStart < periodStart) {
+          rangeStart = periodStart;
+        }
+        // Ensure rangeStart is not before today
+        if (rangeStart < now) {
+          rangeStart = now;
+        }
+
+        // Calculate rangeEnd - use the earlier of endDate or periodEnd
+        rangeEnd = endDate ? parseISO(endDate) : periodEnd;
+        if (rangeEnd > periodEnd) {
+          rangeEnd = periodEnd;
+        }
+
+        // Calculate maxDays for the calculator
+        maxDays = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        break;
+
+      case 'UNLIMITED':
+        // No restrictions, but we still limit per-request to prevent overload
+        // Default to 90 days max per request for performance
+        maxDays = 90;
+        rangeEnd = endDate ? parseISO(endDate) : addDays(now, maxDays);
+        break;
+
+      case 'ROLLING':
+      default:
+        // Rolling window from today
+        maxDays = eventType.periodDays ?? 30;
+        rangeEnd = endDate ? parseISO(endDate) : addDays(now, maxDays);
+
+        // Ensure we don't exceed the rolling window
+        const rollingLimit = addDays(now, maxDays);
+        if (rangeEnd > rollingLimit) {
+          rangeEnd = rollingLimit;
+        }
+        break;
+    }
 
     // CRITICAL: Fetch ALL bookings for this host (across all event types) to prevent double booking
     const allHostBookings = await prisma.booking.findMany({
@@ -228,6 +280,28 @@ export async function GET(request: NextRequest) {
       },
     }).catch(() => {}); // Ignore errors
 
+    // Calculate booking window boundaries for the frontend
+    let bookingWindowStart: Date = now;
+    let bookingWindowEnd: Date | null = null;
+
+    switch (eventTypeWithPeriod.periodType) {
+      case 'RANGE':
+        if (eventTypeWithPeriod.periodStartDate) {
+          bookingWindowStart = new Date(eventTypeWithPeriod.periodStartDate);
+          if (bookingWindowStart < now) bookingWindowStart = now;
+        }
+        if (eventTypeWithPeriod.periodEndDate) {
+          bookingWindowEnd = new Date(eventTypeWithPeriod.periodEndDate);
+        }
+        break;
+      case 'ROLLING':
+        bookingWindowEnd = addDays(now, eventType.periodDays ?? 30);
+        break;
+      case 'UNLIMITED':
+        // No end boundary
+        break;
+    }
+
     return NextResponse.json({
       slots,
       eventType: {
@@ -235,6 +309,11 @@ export async function GET(request: NextRequest) {
         title: eventType.title,
         duration: eventType.length,
         timezone: eventType.user.timezone,
+      },
+      bookingWindow: {
+        type: eventTypeWithPeriod.periodType,
+        start: bookingWindowStart.toISOString(),
+        end: bookingWindowEnd?.toISOString() ?? null,
       },
     });
   } catch (error) {

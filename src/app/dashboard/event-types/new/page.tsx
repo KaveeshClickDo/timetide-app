@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMutation } from '@tanstack/react-query'
+import { format, addDays } from 'date-fns'
 import {
   Clock,
   Video,
@@ -14,6 +15,7 @@ import {
   Plus,
   Trash2,
   GripVertical,
+  Calendar,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -71,14 +73,17 @@ export default function NewEventTypePage() {
     minimumNotice: 60, // minutes
     maxBookingsPerDay: 0,
     requiresConfirmation: false,
+    // Booking window settings
+    periodType: 'ROLLING' as 'ROLLING' | 'RANGE' | 'UNLIMITED',
+    periodDays: 30, // Default 30 days for ROLLING
+    periodStartDate: format(new Date(), 'yyyy-MM-dd'),
+    periodEndDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
   })
 
   const [questions, setQuestions] = useState<Question[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const createMutation = useMutation({
-    // In your createMutation's mutationFn, change this:
-
     mutationFn: async () => {
       // Prepare payload
       const payload: any = {
@@ -95,7 +100,18 @@ export default function NewEventTypePage() {
         bufferTimeAfter: formData.bufferTimeAfter,
         minimumNotice: formData.minimumNotice,
         requiresConfirmation: formData.requiresConfirmation,
+        // Booking window settings
+        periodType: formData.periodType,
       }
+
+      // Add period-specific fields based on type
+      if (formData.periodType === 'ROLLING') {
+        payload.periodDays = formData.periodDays
+      } else if (formData.periodType === 'RANGE') {
+        payload.periodStartDate = new Date(formData.periodStartDate).toISOString()
+        payload.periodEndDate = new Date(formData.periodEndDate).toISOString()
+      }
+      // UNLIMITED doesn't need additional fields
 
       // Only include maxBookingsPerDay if > 0
       if (formData.maxBookingsPerDay > 0) {
@@ -289,6 +305,142 @@ export default function NewEventTypePage() {
                       : 'Enter location details or link'
                   }
                 />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Booking Window */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5" />
+              Booking Window
+            </CardTitle>
+            <CardDescription>
+              Control when invitees can book appointments with you.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3">
+              {[
+                {
+                  value: 'ROLLING',
+                  label: 'Rolling Window',
+                  description: 'Allow booking for the next X days from today',
+                },
+                {
+                  value: 'RANGE',
+                  label: 'Date Range',
+                  description: 'Only allow booking within specific dates',
+                },
+                {
+                  value: 'UNLIMITED',
+                  label: 'Unlimited',
+                  description: 'No date restrictions (use with caution)',
+                },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    setFormData({ ...formData, periodType: option.value as any })
+                  }
+                  className={cn(
+                    'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
+                    formData.periodType === option.value
+                      ? 'border-ocean-500 bg-ocean-50 ring-2 ring-ocean-500/20'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <div
+                    className={cn(
+                      'w-4 h-4 rounded-full border-2 flex items-center justify-center',
+                      formData.periodType === option.value
+                        ? 'border-ocean-500'
+                        : 'border-gray-300'
+                    )}
+                  >
+                    {formData.periodType === option.value && (
+                      <div className="w-2 h-2 rounded-full bg-ocean-500" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{option.label}</p>
+                    <p className="text-sm text-gray-500">{option.description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* ROLLING: Show days input */}
+            {formData.periodType === 'ROLLING' && (
+              <div className="pt-4 border-t">
+                <Label>Number of days into the future</Label>
+                <div className="flex items-center gap-3 mt-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={formData.periodDays}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        periodDays: Math.min(365, Math.max(1, parseInt(e.target.value) || 30)),
+                      })
+                    }
+                    className="w-24"
+                  />
+                  <span className="text-gray-500">days</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Invitees can book from today up to {formData.periodDays} days ahead
+                </p>
+              </div>
+            )}
+
+            {/* RANGE: Show start/end date pickers */}
+            {formData.periodType === 'RANGE' && (
+              <div className="pt-4 border-t space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.periodStartDate}
+                      min={format(new Date(), 'yyyy-MM-dd')}
+                      onChange={(e) =>
+                        setFormData({ ...formData, periodStartDate: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>End Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.periodEndDate}
+                      min={formData.periodStartDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, periodEndDate: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Invitees can only book between these dates (inclusive)
+                </p>
+              </div>
+            )}
+
+            {/* UNLIMITED: Show warning */}
+            {formData.periodType === 'UNLIMITED' && (
+              <div className="pt-4 border-t">
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <p className="text-sm text-amber-800">
+                    Unlimited booking window allows invitees to book any date in the future.
+                    This may result in bookings far into the future.
+                  </p>
+                </div>
               </div>
             )}
           </CardContent>

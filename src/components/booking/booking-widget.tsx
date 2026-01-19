@@ -34,6 +34,12 @@ interface TimeSlot {
   formattedTime: string
 }
 
+interface BookingWindow {
+  type: 'ROLLING' | 'RANGE' | 'UNLIMITED'
+  start: string
+  end: string | null
+}
+
 interface BookingWidgetProps {
   user: {
     name: string
@@ -98,20 +104,27 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
     setInviteeTimezone(tz)
   }, [])
 
-  // Fetch available slots for selected month
+  // Track booking window info from API
+  const [bookingWindow, setBookingWindow] = useState<BookingWindow | null>(null)
+
+  // Fetch available slots for selected month only (lazy loading per month)
   const { data: slotsData, isLoading: slotsLoading, error: slotsError } = useQuery({
     queryKey: ['slots', eventType.id, format(currentMonth, 'yyyy-MM'), inviteeTimezone],
     queryFn: async () => {
-      const startDate = format(startOfMonth(currentMonth), 'yyyy-MM-dd')
-      const endDate = format(endOfMonth(currentMonth), 'yyyy-MM-dd')
+      const monthStart = startOfMonth(currentMonth)
+      const monthEnd = endOfMonth(currentMonth)
+
+      // Only fetch if the month is potentially within booking window
+      // We'll still make the request but the API will return empty slots if outside window
+      const startDate = format(monthStart, 'yyyy-MM-dd')
+      const endDate = format(monthEnd, 'yyyy-MM-dd')
+
       const params = new URLSearchParams({
         eventTypeId: eventType.id,
         startDate,
         endDate,
         timezone: inviteeTimezone,
       })
-
-      console.log('Fetching slots with params:', params.toString())
 
       const res = await fetch(`/api/slots?${params}`)
 
@@ -122,7 +135,11 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
       }
 
       const data = await res.json()
-      console.log('Slots data received:', data)
+
+      // Save booking window info
+      if (data.bookingWindow) {
+        setBookingWindow(data.bookingWindow)
+      }
 
       // Transform slots data - convert ISO strings to Date objects
       const transformedSlots: Record<string, TimeSlot[]> = {}
@@ -144,12 +161,11 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
         })
       }
 
-      console.log('Transformed slots:', transformedSlots)
       return { ...data, slots: transformedSlots }
     },
     enabled: !!inviteeTimezone,
     retry: 2,
-    staleTime: 60000, // 1 minute
+    staleTime: 60000, // 1 minute - cache each month's data
   })
 
   // Book mutation
@@ -201,6 +217,40 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
   const dateHasSlots = (date: Date): boolean => {
     const dateStr = format(date, 'yyyy-MM-dd')
     return slotsData?.slots?.[dateStr]?.length > 0
+  }
+
+  // Check if a month is within the booking window
+  const isMonthInBookingWindow = (monthDate: Date): boolean => {
+    if (!bookingWindow) return true // Allow all if we don't have info yet
+
+    const monthEnd = endOfMonth(monthDate)
+    const windowStart = new Date(bookingWindow.start)
+
+    // Month must end after window start
+    if (monthEnd < windowStart) return false
+
+    // If there's an end date, month must start before window end
+    if (bookingWindow.end) {
+      const windowEnd = new Date(bookingWindow.end)
+      const monthStart = startOfMonth(monthDate)
+      if (monthStart > windowEnd) return false
+    }
+
+    return true
+  }
+
+  // Check if we can navigate to previous month
+  const canGoPrevMonth = (): boolean => {
+    const prevMonth = addDays(startOfMonth(currentMonth), -1)
+    // Can't go to months in the past
+    if (endOfMonth(prevMonth) < today) return false
+    return isMonthInBookingWindow(prevMonth)
+  }
+
+  // Check if we can navigate to next month
+  const canGoNextMonth = (): boolean => {
+    const nextMonth = addDays(endOfMonth(currentMonth), 1)
+    return isMonthInBookingWindow(nextMonth)
   }
 
   const LocationIcon = locationIcons[eventType.locationType as keyof typeof locationIcons] || Globe
@@ -360,7 +410,13 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 <div className="flex items-center justify-between mb-4">
                   <button
                     onClick={() => setCurrentMonth(addDays(startOfMonth(currentMonth), -1))}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
+                    disabled={!canGoPrevMonth()}
+                    className={cn(
+                      'p-2 rounded-lg transition-colors',
+                      canGoPrevMonth()
+                        ? 'hover:bg-gray-100'
+                        : 'opacity-30 cursor-not-allowed'
+                    )}
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
@@ -369,7 +425,13 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                   </span>
                   <button
                     onClick={() => setCurrentMonth(addDays(endOfMonth(currentMonth), 1))}
-                    className="p-2 hover:bg-gray-100 rounded-lg"
+                    disabled={!canGoNextMonth()}
+                    className={cn(
+                      'p-2 rounded-lg transition-colors',
+                      canGoNextMonth()
+                        ? 'hover:bg-gray-100'
+                        : 'opacity-30 cursor-not-allowed'
+                    )}
                   >
                     <ChevronRight className="h-5 w-5" />
                   </button>

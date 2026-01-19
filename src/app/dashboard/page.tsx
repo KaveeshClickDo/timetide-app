@@ -138,10 +138,14 @@ export default function DashboardPage() {
 
   // Calculate stats from ALL bookings
   const upcomingCount = allBookings?.filter(
-    (b) => (b.status === 'PENDING' || b.status === 'CONFIRMED') && !isPast(new Date(b.startTime))
+    (b) => (b.status === 'PENDING' || b.status === 'CONFIRMED') && !isPast(new Date(b.endTime))
   ).length || 0
 
-  const completedCount = allBookings?.filter((b) => b.status === 'COMPLETED').length || 0
+  // Completed = explicitly COMPLETED OR confirmed/pending bookings whose end time has passed
+  const completedCount = allBookings?.filter(
+    (b) => b.status === 'COMPLETED' ||
+    ((b.status === 'PENDING' || b.status === 'CONFIRMED') && isPast(new Date(b.endTime)))
+  ).length || 0
 
   const cancelledCount = allBookings?.filter((b) => b.status === 'CANCELLED').length || 0
 

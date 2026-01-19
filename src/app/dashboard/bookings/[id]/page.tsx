@@ -20,6 +20,8 @@ import {
   ExternalLink,
   Loader2,
   AlertCircle,
+  CheckCircle,
+  X,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -36,6 +38,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/components/ui/use-toast'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
 import { AddToCalendar } from '@/components/add-to-calendar'
 
@@ -125,6 +129,8 @@ export default function BookingDetailPage() {
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
 
   // Get host's timezone from session (defaults to UTC)
   const hostTimezone = session?.user?.timezone || 'UTC'
@@ -174,6 +180,70 @@ export default function BookingDetailPage() {
     },
   })
 
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/bookings/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirm' }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to confirm booking')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
+      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      toast({
+        title: 'Booking confirmed',
+        description: 'The booking has been confirmed. The invitee will be notified.',
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const rejectMutation = useMutation({
+    mutationFn: async (reason: string) => {
+      const res = await fetch(`/api/bookings/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reject', reason }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to reject booking')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
+      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      toast({
+        title: 'Booking declined',
+        description: 'The booking has been declined. The invitee will be notified.',
+      })
+      setShowRejectDialog(false)
+      setRejectReason('')
+      // Redirect after a short delay
+      setTimeout(() => router.push('/dashboard'), 1500)
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto py-12">
@@ -208,7 +278,6 @@ export default function BookingDetailPage() {
   const booking = bookingData
   const StatusIcon = statusConfig[booking.status].icon
   const LocationIcon = locationIcons[booking.eventType.locationType as keyof typeof locationIcons] || MapPin
-  const canCancel = booking.status === 'PENDING' || booking.status === 'CONFIRMED'
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -396,8 +465,52 @@ export default function BookingDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Actions */}
-        {canCancel && (
+        {/* Pending Confirmation Actions */}
+        {booking.status === 'PENDING' && (
+          <Card className="border-yellow-200 bg-yellow-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-yellow-800">
+                <AlertCircle className="h-5 w-5" />
+                Action Required
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-yellow-700 mb-4">
+                This booking request is awaiting your confirmation. Please confirm or decline this meeting.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  onClick={() => confirmMutation.mutate()}
+                  disabled={confirmMutation.isPending || rejectMutation.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {confirmMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                  )}
+                  Confirm Booking
+                </Button>
+
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowRejectDialog(true)}
+                  disabled={confirmMutation.isPending || rejectMutation.isPending}
+                >
+                  {rejectMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <X className="h-4 w-4 mr-2" />
+                  )}
+                  Decline Booking
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Actions for confirmed bookings */}
+        {booking.status === 'CONFIRMED' && (
           <Card>
             <CardHeader>
               <CardTitle>Actions</CardTitle>
@@ -442,6 +555,40 @@ export default function BookingDetailPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               Cancel Booking
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject Confirmation Dialog */}
+      <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Decline this booking request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will decline the booking request from {booking.inviteeName}. They will be notified via email.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4">
+            <Label htmlFor="reject-reason" className="text-sm font-medium">
+              Reason (optional)
+            </Label>
+            <Textarea
+              id="reject-reason"
+              placeholder="Let the invitee know why you're declining..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              className="mt-2"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRejectReason('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => rejectMutation.mutate(rejectReason)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Decline Booking
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

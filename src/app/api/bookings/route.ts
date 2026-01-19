@@ -25,6 +25,7 @@ import {
 } from '@/lib/zoom';
 import {
   sendBookingConfirmationEmails,
+  sendBookingPendingEmails,
   BookingEmailData,
 } from '@/lib/email/client';
 
@@ -388,8 +389,14 @@ export async function POST(request: NextRequest) {
       notes,
     };
 
-    // Send emails asynchronously
-    sendBookingConfirmationEmails(emailData).catch(console.error);
+    // Send emails asynchronously based on confirmation requirement
+    if (eventType.requiresConfirmation) {
+      // Send pending confirmation emails (different template)
+      sendBookingPendingEmails(emailData).catch(console.error);
+    } else {
+      // Send immediate confirmation emails
+      sendBookingConfirmationEmails(emailData).catch(console.error);
+    }
 
     // Update analytics
     prisma.bookingAnalytics.upsert({

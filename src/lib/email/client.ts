@@ -305,6 +305,235 @@ export function generateBookingRescheduledEmail(
   `;
 }
 
+export function generateBookingPendingEmail(
+  data: BookingEmailData,
+  isHost: boolean
+): string {
+  const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${isHost ? 'dashboard/bookings/' + data.bookingUid : 'bookings/' + data.bookingUid}`;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🌊 TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px; color: #f59e0b;">
+          ${isHost ? 'New Booking Request' : 'Booking Pending Confirmation'}
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          ${isHost
+            ? `${data.inviteeName} has requested a meeting with you`
+            : `Your meeting request with ${data.hostName} is awaiting confirmation`}
+        </p>
+
+        <div class="card" style="border-left: 4px solid #f59e0b;">
+          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
+          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${data.eventDescription}</p>` : ''}
+
+          <div class="detail-row">
+            <span class="detail-label">📅 When</span>
+            <span class="detail-value">${data.startTime} - ${data.endTime}</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">🌍 Timezone</span>
+            <span class="detail-value">${data.timezone}</span>
+          </div>
+
+          ${data.location ? `
+          <div class="detail-row">
+            <span class="detail-label">📍 Where</span>
+            <span class="detail-value">${data.location}</span>
+          </div>
+          ` : ''}
+
+          <div class="divider"></div>
+
+          <div class="detail-row">
+            <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
+            <span class="detail-value">${isHost ? data.inviteeName : data.hostName}</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">✉️ Email</span>
+            <span class="detail-value">${isHost ? data.inviteeEmail : data.hostEmail}</span>
+          </div>
+
+          ${data.notes ? `
+          <div class="divider"></div>
+          <div>
+            <span class="detail-label">📝 Notes</span>
+            <p style="margin: 8px 0 0 0; color: #475569;">${data.notes}</p>
+          </div>
+          ` : ''}
+        </div>
+
+        ${isHost ? `
+        <div style="text-align: center; margin: 32px 0;">
+          <p style="color: #64748b; margin-bottom: 16px;">Please review and confirm or decline this booking request.</p>
+          <a href="${manageUrl}" class="btn">Review Booking</a>
+        </div>
+        ` : `
+        <div style="text-align: center; margin: 32px 0; padding: 16px; background: #fef3c7; border-radius: 8px;">
+          <p style="color: #92400e; margin: 0;">
+            ⏳ This booking is pending confirmation by ${data.hostName}. You will receive another email once it's confirmed.
+          </p>
+        </div>
+        <div style="text-align: center; margin: 24px 0;">
+          <a href="${manageUrl}" class="btn btn-outline">View Booking Details</a>
+        </div>
+        `}
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export function generateBookingConfirmedByHostEmail(
+  data: BookingEmailData
+): string {
+  const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/bookings/${data.bookingUid}`;
+  const addToCalendarUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/${data.bookingUid}/calendar`;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🌊 TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px; color: #10b981;">
+          Your Booking is Confirmed!
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          ${data.hostName} has confirmed your meeting request
+        </p>
+
+        <div class="card" style="border-left: 4px solid #10b981;">
+          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
+          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${data.eventDescription}</p>` : ''}
+
+          <div class="detail-row">
+            <span class="detail-label">📅 When</span>
+            <span class="detail-value">${data.startTime} - ${data.endTime}</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">🌍 Timezone</span>
+            <span class="detail-value">${data.timezone}</span>
+          </div>
+
+          ${data.location ? `
+          <div class="detail-row">
+            <span class="detail-label">📍 Where</span>
+            <span class="detail-value">${data.location}</span>
+          </div>
+          ` : ''}
+
+          ${data.meetingUrl ? `
+          <div class="detail-row">
+            <span class="detail-label">🔗 Link</span>
+            <span class="detail-value">
+              <a href="${data.meetingUrl}" style="color: #0ea5e9;">${data.meetingUrl}</a>
+            </span>
+          </div>
+          ` : ''}
+
+          <div class="divider"></div>
+
+          <div class="detail-row">
+            <span class="detail-label">👤 Host</span>
+            <span class="detail-value">${data.hostName}</span>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${manageUrl}" class="btn">View Booking</a>
+          <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px;">Add to Calendar</a>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+          <p style="font-size: 12px;">
+            Need to make changes?
+            <a href="${manageUrl}" style="color: #0ea5e9;">Reschedule or cancel</a>
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export function generateBookingRejectedEmail(
+  data: BookingEmailData,
+  reason?: string
+): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🌊 TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px; color: #ef4444;">
+          Booking Request Declined
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          Unfortunately, ${data.hostName} was unable to confirm your meeting request
+        </p>
+
+        <div class="card" style="border-left: 4px solid #ef4444;">
+          <h3 style="margin: 0 0 16px 0; text-decoration: line-through; color: #94a3b8;">
+            ${data.eventTitle}
+          </h3>
+
+          <div class="detail-row">
+            <span class="detail-label">📅 Was</span>
+            <span class="detail-value" style="text-decoration: line-through; color: #94a3b8;">
+              ${data.startTime} - ${data.endTime}
+            </span>
+          </div>
+
+          ${reason ? `
+          <div class="divider"></div>
+          <div>
+            <span class="detail-label">📝 Message from host</span>
+            <p style="margin: 8px 0 0 0; color: #475569;">${reason}</p>
+          </div>
+          ` : ''}
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <p style="color: #64748b; margin-bottom: 16px;">You can try booking a different time.</p>
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}" class="btn">
+            Book a New Time
+          </a>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export function generateReminderEmail(
   data: BookingEmailData,
   hoursUntil: number
@@ -428,4 +657,49 @@ export async function sendBookingRescheduledEmails(
       replyTo: data.inviteeEmail,
     });
   }
+}
+
+export async function sendBookingPendingEmails(
+  data: BookingEmailData
+): Promise<void> {
+  // Send to invitee - let them know it's pending
+  await sendEmail({
+    to: data.inviteeEmail,
+    subject: `Pending: ${data.eventTitle} with ${data.hostName} - Awaiting Confirmation`,
+    html: generateBookingPendingEmail(data, false),
+    replyTo: data.hostEmail,
+  });
+
+  // Send to host - let them know they need to confirm
+  await sendEmail({
+    to: data.hostEmail,
+    subject: `Action Required: New booking request from ${data.inviteeName}`,
+    html: generateBookingPendingEmail(data, true),
+    replyTo: data.inviteeEmail,
+  });
+}
+
+export async function sendBookingConfirmedByHostEmail(
+  data: BookingEmailData
+): Promise<void> {
+  // Send confirmation to invitee
+  await sendEmail({
+    to: data.inviteeEmail,
+    subject: `Confirmed: ${data.eventTitle} with ${data.hostName}`,
+    html: generateBookingConfirmedByHostEmail(data),
+    replyTo: data.hostEmail,
+  });
+}
+
+export async function sendBookingRejectedEmail(
+  data: BookingEmailData,
+  reason?: string
+): Promise<void> {
+  // Send rejection to invitee
+  await sendEmail({
+    to: data.inviteeEmail,
+    subject: `Declined: ${data.eventTitle} with ${data.hostName}`,
+    html: generateBookingRejectedEmail(data, reason),
+    replyTo: data.hostEmail,
+  });
 }

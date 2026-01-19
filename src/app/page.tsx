@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation'
+import { getServerSession } from 'next-auth'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -11,8 +13,15 @@ import {
   ArrowRight,
   CheckCircle2,
 } from 'lucide-react'
+import { authOptions } from '@/lib/auth'
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Redirect logged-in users to dashboard
+  const session = await getServerSession(authOptions)
+  if (session) {
+    redirect('/dashboard')
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}

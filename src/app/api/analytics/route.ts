@@ -108,6 +108,88 @@ export async function GET() {
       bookings: count,
     }))
 
+    // Booking Lead Time (how far in advance people book)
+    const leadTimeDistribution = {
+      sameDay: 0,
+      oneToThreeDays: 0,
+      fourToSevenDays: 0,
+      oneToTwoWeeks: 0,
+      moreThanTwoWeeks: 0,
+    }
+
+    allBookings.forEach((b) => {
+      const leadTimeMs = b.startTime.getTime() - b.createdAt.getTime()
+      const leadTimeDays = leadTimeMs / (1000 * 60 * 60 * 24)
+
+      if (leadTimeDays < 1) {
+        leadTimeDistribution.sameDay++
+      } else if (leadTimeDays <= 3) {
+        leadTimeDistribution.oneToThreeDays++
+      } else if (leadTimeDays <= 7) {
+        leadTimeDistribution.fourToSevenDays++
+      } else if (leadTimeDays <= 14) {
+        leadTimeDistribution.oneToTwoWeeks++
+      } else {
+        leadTimeDistribution.moreThanTwoWeeks++
+      }
+    })
+
+    const leadTimeData = [
+      { label: 'Same Day', bookings: leadTimeDistribution.sameDay },
+      { label: '1-3 Days', bookings: leadTimeDistribution.oneToThreeDays },
+      { label: '4-7 Days', bookings: leadTimeDistribution.fourToSevenDays },
+      { label: '1-2 Weeks', bookings: leadTimeDistribution.oneToTwoWeeks },
+      { label: '2+ Weeks', bookings: leadTimeDistribution.moreThanTwoWeeks },
+    ]
+
+    // Day of Week Distribution
+    const dayOfWeekDistribution: number[] = Array(7).fill(0)
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+    allBookings.forEach((b) => {
+      const dayOfWeek = b.startTime.getDay()
+      dayOfWeekDistribution[dayOfWeek]++
+    })
+
+    const dayOfWeekData = dayOfWeekDistribution.map((count, index) => ({
+      day: dayNames[index],
+      label: dayNames[index].slice(0, 3),
+      bookings: count,
+    }))
+
+    // Repeat Guests
+    const guestBookingCounts: Record<string, number> = {}
+    allBookings.forEach((b) => {
+      const email = b.inviteeEmail.toLowerCase()
+      guestBookingCounts[email] = (guestBookingCounts[email] || 0) + 1
+    })
+
+    const repeatGuestsData = {
+      oneTime: 0,
+      twoToThree: 0,
+      fourToFive: 0,
+      sixPlus: 0,
+    }
+
+    Object.values(guestBookingCounts).forEach((count) => {
+      if (count === 1) {
+        repeatGuestsData.oneTime++
+      } else if (count <= 3) {
+        repeatGuestsData.twoToThree++
+      } else if (count <= 5) {
+        repeatGuestsData.fourToFive++
+      } else {
+        repeatGuestsData.sixPlus++
+      }
+    })
+
+    const repeatGuestsChartData = [
+      { label: '1 Booking', guests: repeatGuestsData.oneTime, color: '#0ea5e9' },
+      { label: '2-3 Bookings', guests: repeatGuestsData.twoToThree, color: '#22c55e' },
+      { label: '4-5 Bookings', guests: repeatGuestsData.fourToFive, color: '#f59e0b' },
+      { label: '6+ Bookings', guests: repeatGuestsData.sixPlus, color: '#8b5cf6' },
+    ].filter((d) => d.guests > 0)
+
     // Cancellation rate
     const cancelledBookings = allBookings.filter((b) => b.status === 'CANCELLED').length
     const completedCount = allBookings.filter(
@@ -140,6 +222,9 @@ export async function GET() {
         popularEventTypes,
         bookingTimes: bookingTimesData,
         statusDistribution,
+        leadTime: leadTimeData,
+        dayOfWeek: dayOfWeekData,
+        repeatGuests: repeatGuestsChartData,
       },
     })
   } catch (error) {

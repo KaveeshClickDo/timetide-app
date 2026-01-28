@@ -15,7 +15,10 @@ const nextConfig = {
       },
     ],
   },
-  // Removed deprecated experimental.serverActions - it's enabled by default in Next.js 14+
+  // Enable instrumentation hook for queue worker initialization
+  experimental: {
+    instrumentationHook: true,
+  },
   logging: {
     fetches: {
       fullUrl: true,

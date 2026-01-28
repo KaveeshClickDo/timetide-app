@@ -116,13 +116,15 @@ export class SlotCalculator {
       existingBookingsPerDay: options.existingBookingsPerDay ?? new Map(),
     };
 
-    // Debug log to verify values
-    console.log('SlotCalculator initialized with:', {
-      duration: this.options.duration,
-      slotInterval: this.options.slotInterval,
-      maxDaysInAdvance: this.options.maxDaysInAdvance,
-      availabilityCount: this.options.availability.length,
-    });
+    // Debug log to verify values (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('SlotCalculator initialized with:', {
+        duration: this.options.duration,
+        slotInterval: this.options.slotInterval,
+        maxDaysInAdvance: this.options.maxDaysInAdvance,
+        availabilityCount: this.options.availability.length,
+      });
+    }
   }
 
   /**
@@ -150,7 +152,9 @@ export class SlotCalculator {
       daysProcessed++;
     }
 
-    console.log(`SlotCalculator: Processed ${daysProcessed} days, found slots for ${Object.keys(slots).length} days`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`SlotCalculator: Processed ${daysProcessed} days, found slots for ${Object.keys(slots).length} days`);
+    }
     return slots;
   }
 
@@ -181,7 +185,9 @@ export class SlotCalculator {
       
       // SAFETY: Stop if we have too many slots
       if (potentialSlots.length > MAX_SLOTS_PER_DAY) {
-        console.warn(`Too many slots generated for ${dateKey}, limiting to ${MAX_SLOTS_PER_DAY}`);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`Too many slots generated for ${dateKey}, limiting to ${MAX_SLOTS_PER_DAY}`);
+        }
         break;
       }
     }
@@ -266,7 +272,9 @@ export class SlotCalculator {
 
     // SAFETY: Validate parsed values
     if (isNaN(startHour) || isNaN(startMin) || isNaN(endHour) || isNaN(endMin)) {
-      console.warn(`Invalid time format in window: ${window.startTime} - ${window.endTime}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn(`Invalid time format in window: ${window.startTime} - ${window.endTime}`);
+      }
       return [];
     }
 
@@ -301,7 +309,7 @@ export class SlotCalculator {
       slotCount++;
     }
 
-    if (slotCount >= MAX_SLOTS_PER_DAY) {
+    if (slotCount >= MAX_SLOTS_PER_DAY && process.env.NODE_ENV === 'development') {
       console.warn(`Hit slot limit (${MAX_SLOTS_PER_DAY}) for window ${window.startTime}-${window.endTime}`);
     }
 

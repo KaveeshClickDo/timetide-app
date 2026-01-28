@@ -11,12 +11,14 @@ import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { cancelBookingSchema } from '@/lib/validation/schemas';
 import { deleteGoogleCalendarEvent } from '@/lib/calendar/google';
+import { BookingEmailData } from '@/lib/email/client';
 import {
-  sendBookingCancellationEmails,
-  sendBookingConfirmedByHostEmail,
-  sendBookingRejectedEmail,
-  BookingEmailData,
-} from '@/lib/email/client';
+  queueBookingCancellationEmails,
+  queueBookingConfirmedByHostEmail,
+  queueBookingRejectedEmail,
+  scheduleBookingReminders,
+  cancelBookingReminders,
+} from '@/lib/queue';
 
 interface RouteParams {
   params: { id: string };
@@ -186,9 +188,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       bookingUid: booking.uid,
     };
 
-    // Send appropriate email
+    // Send appropriate email and schedule reminders
     if (action === 'confirm') {
-      sendBookingConfirmedByHostEmail(emailData).catch(console.error);
+      queueBookingConfirmedByHostEmail(emailData).catch(console.error);
+      // Schedule reminders for newly confirmed booking
+      scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
     } else {
       // Delete calendar event if rejecting
       if (booking.calendarEventId) {
@@ -207,7 +211,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           );
         }
       }
-      sendBookingRejectedEmail(emailData, reason).catch(console.error);
+      queueBookingRejectedEmail(emailData, reason).catch(console.error);
     }
 
     return NextResponse.json({
@@ -330,7 +334,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       bookingUid: booking.uid,
     };
 
-    sendBookingCancellationEmails(emailData, reason, isHost).catch(console.error);
+    // Queue cancellation email (with retries)
+    queueBookingCancellationEmails(emailData, reason, isHost).catch(console.error);
+
+    // Cancel scheduled reminders
+    cancelBookingReminders(booking.uid).catch(console.error);
 
     return NextResponse.json({
       success: true,

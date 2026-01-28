@@ -1,0 +1,189 @@
+/**
+ * /api/bookings/[id]/reschedule
+ * POST: Reschedule a booking to a new time
+ */
+
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { formatInTimeZone } from 'date-fns-tz';
+import { addMinutes } from 'date-fns';
+import prisma from '@/lib/prisma';
+import { authOptions } from '@/lib/auth';
+import { rescheduleBookingSchema } from '@/lib/validation/schemas';
+import { updateGoogleCalendarEvent } from '@/lib/calendar/google';
+import { BookingEmailData } from '@/lib/email/client';
+import {
+  queueBookingRescheduledEmails,
+  rescheduleBookingReminders,
+} from '@/lib/queue';
+
+interface RouteParams {
+  params: { id: string };
+}
+
+/**
+ * POST /api/bookings/[id]/reschedule
+ * Reschedule a booking to a new time
+ */
+export async function POST(request: NextRequest, { params }: RouteParams) {
+  try {
+    const { id } = params;
+    const session = await getServerSession(authOptions);
+
+    // Parse and validate body
+    const body = await request.json();
+    const validated = rescheduleBookingSchema.safeParse(body);
+
+    if (!validated.success) {
+      return NextResponse.json(
+        { error: 'Invalid request', details: validated.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { newStartTime, reason } = validated.data;
+    const newStart = new Date(newStartTime);
+
+    // Find the booking
+    const booking = await prisma.booking.findFirst({
+      where: {
+        OR: [{ id }, { uid: id }],
+        status: { in: ['PENDING', 'CONFIRMED'] },
+      },
+      include: {
+        eventType: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            length: true,
+          },
+        },
+        host: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            timezone: true,
+          },
+        },
+      },
+    });
+
+    if (!booking) {
+      return NextResponse.json(
+        { error: 'Booking not found or cannot be rescheduled' },
+        { status: 404 }
+      );
+    }
+
+    // Check authorization - host can always reschedule, invitee via UID
+    const isHost = session?.user?.id === booking.hostId;
+    const accessedByUid = id === booking.uid;
+
+    if (!isHost && !accessedByUid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    // Validate new time is in the future
+    if (newStart <= new Date()) {
+      return NextResponse.json(
+        { error: 'New time must be in the future' },
+        { status: 400 }
+      );
+    }
+
+    // Calculate new end time based on event duration
+    const newEnd = addMinutes(newStart, booking.eventType.length);
+
+    // Store old times for email
+    const oldStartFormatted = formatInTimeZone(
+      booking.startTime,
+      booking.timezone,
+      'EEEE, MMMM d, yyyy h:mm a'
+    );
+    const oldEndFormatted = formatInTimeZone(
+      booking.endTime,
+      booking.timezone,
+      'h:mm a'
+    );
+
+    // Update the booking
+    const updatedBooking = await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        startTime: newStart,
+        endTime: newEnd,
+      },
+    });
+
+    // Update calendar event if exists
+    if (booking.calendarEventId) {
+      const primaryCalendar = await prisma.calendar.findFirst({
+        where: {
+          userId: booking.hostId,
+          isPrimary: true,
+          provider: 'GOOGLE',
+        },
+      });
+
+      if (primaryCalendar) {
+        await updateGoogleCalendarEvent(
+          primaryCalendar.id,
+          booking.calendarEventId,
+          {
+            startTime: newStart,
+            endTime: newEnd,
+          }
+        );
+      }
+    }
+
+    // Prepare email data with new times
+    const emailData: BookingEmailData = {
+      hostName: booking.host.name ?? 'Host',
+      hostEmail: booking.host.email!,
+      inviteeName: booking.inviteeName,
+      inviteeEmail: booking.inviteeEmail,
+      eventTitle: booking.eventType.title,
+      eventDescription: booking.eventType.description ?? undefined,
+      startTime: formatInTimeZone(
+        newStart,
+        booking.timezone,
+        'EEEE, MMMM d, yyyy h:mm a'
+      ),
+      endTime: formatInTimeZone(newEnd, booking.timezone, 'h:mm a'),
+      timezone: booking.timezone,
+      location: booking.location ?? undefined,
+      meetingUrl: booking.meetingUrl ?? undefined,
+      bookingUid: booking.uid,
+    };
+
+    // Queue reschedule emails
+    queueBookingRescheduledEmails(
+      emailData,
+      { start: oldStartFormatted, end: oldEndFormatted },
+      isHost
+    ).catch(console.error);
+
+    // Reschedule reminders
+    rescheduleBookingReminders(booking.id, booking.uid, newStart).catch(console.error);
+
+    return NextResponse.json({
+      success: true,
+      message: 'Booking rescheduled successfully',
+      booking: {
+        id: updatedBooking.id,
+        uid: updatedBooking.uid,
+        startTime: updatedBooking.startTime,
+        endTime: updatedBooking.endTime,
+      },
+    });
+  } catch (error) {
+    console.error('POST reschedule booking error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

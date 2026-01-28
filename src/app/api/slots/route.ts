@@ -13,37 +13,24 @@ import {
   CalculatedSlots,
 } from '@/lib/slots/calculator';
 import { getAllBusyTimes } from '@/lib/calendar/google';
-
-// Rate limiting map (in production, use Redis)
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 30; // requests per minute
-const RATE_WINDOW = 60 * 1000; // 1 minute
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-
-  if (!record || now > record.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
-    return true;
-  }
-
-  if (record.count >= RATE_LIMIT) {
-    return false;
-  }
-
-  record.count++;
-  return true;
-}
+import { checkSlotsRateLimit } from '@/lib/queue';
 
 export async function GET(request: NextRequest) {
   try {
-    // Rate limiting
+    // Rate limiting (Redis-backed with in-memory fallback)
     const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    if (!checkRateLimit(ip)) {
+    const rateLimitResult = await checkSlotsRateLimit(ip);
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Please try again later.' },
-        { status: 429 }
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+          },
+        }
       );
     }
 

@@ -23,33 +23,13 @@ import {
   createZoomMeeting,
   hasZoomConnected,
 } from '@/lib/zoom';
+import { BookingEmailData } from '@/lib/email/client';
 import {
-  sendBookingConfirmationEmails,
-  sendBookingPendingEmails,
-  BookingEmailData,
-} from '@/lib/email/client';
-
-// Rate limiting for booking creation
-const bookingRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const BOOKING_RATE_LIMIT = 5; // bookings per minute per IP
-const BOOKING_RATE_WINDOW = 60 * 1000;
-
-function checkBookingRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = bookingRateLimitMap.get(ip);
-
-  if (!record || now > record.resetAt) {
-    bookingRateLimitMap.set(ip, { count: 1, resetAt: now + BOOKING_RATE_WINDOW });
-    return true;
-  }
-
-  if (record.count >= BOOKING_RATE_LIMIT) {
-    return false;
-  }
-
-  record.count++;
-  return true;
-}
+  checkBookingRateLimit,
+  queueBookingConfirmationEmails,
+  queueBookingPendingEmails,
+  scheduleBookingReminders,
+} from '@/lib/queue';
 
 /**
  * GET /api/bookings
@@ -117,12 +97,20 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting
+    // Rate limiting (Redis-backed with in-memory fallback)
     const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
-    if (!checkBookingRateLimit(ip)) {
+    const rateLimitResult = await checkBookingRateLimit(ip);
+    if (!rateLimitResult.allowed) {
       return NextResponse.json(
         { error: 'Too many booking attempts. Please try again later.' },
-        { status: 429 }
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': rateLimitResult.limit.toString(),
+            'X-RateLimit-Remaining': rateLimitResult.remaining.toString(),
+            'X-RateLimit-Reset': rateLimitResult.resetAt.toString(),
+          },
+        }
       );
     }
 
@@ -140,7 +128,7 @@ export async function POST(request: NextRequest) {
     const { eventTypeId, startTime, timezone, name, email, phone, notes, responses } =
       validated.data;
 
-    // Fetch event type
+    // Fetch event type with team member assignments
     const eventType = await prisma.eventType.findUnique({
       where: { id: eventTypeId, isActive: true },
       include: {
@@ -153,6 +141,34 @@ export async function POST(request: NextRequest) {
           },
         },
         schedule: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        teamMemberAssignments: {
+          where: { isActive: true },
+          include: {
+            teamMember: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    timezone: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: {
+            teamMember: {
+              priority: 'asc',
+            },
+          },
+        },
       },
     });
 
@@ -166,9 +182,144 @@ export async function POST(request: NextRequest) {
     const startDate = parseISO(startTime);
     const endDate = addMinutes(startDate, eventType.length);
 
-    // Verify the slot is still available
+    // Determine the host based on whether this is a team event
+    let selectedHost = {
+      id: eventType.userId,
+      name: eventType.user.name,
+      email: eventType.user.email,
+      timezone: eventType.user.timezone,
+    };
+
+    // Handle team scheduling
+    if (eventType.teamId && eventType.schedulingType && eventType.teamMemberAssignments.length > 0) {
+      const assignedMembers = eventType.teamMemberAssignments.map(a => a.teamMember);
+
+      if (eventType.schedulingType === 'ROUND_ROBIN') {
+        // Find the next available member using round-robin
+        // Get recent bookings for each member to determine who should be next
+        const recentBookings = await prisma.booking.groupBy({
+          by: ['hostId'],
+          where: {
+            eventTypeId,
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            startTime: { gte: addMinutes(new Date(), -30 * 24 * 60) }, // Last 30 days
+          },
+          _count: { id: true },
+        });
+
+        const bookingCounts = new Map(recentBookings.map(b => [b.hostId, b._count.id]));
+
+        // Find the member with the fewest recent bookings who is available
+        for (const member of assignedMembers) {
+          const memberBusyTimes = await getAllBusyTimes(
+            member.user.id,
+            addMinutes(startDate, -60),
+            addMinutes(endDate, 60)
+          );
+
+          const memberBookings = await prisma.booking.findMany({
+            where: {
+              hostId: member.user.id,
+              status: { in: ['PENDING', 'CONFIRMED'] },
+              startTime: { lt: endDate },
+              endTime: { gt: startDate },
+            },
+          });
+
+          const memberBusyFromBookings = memberBookings.map(b => ({
+            start: b.startTime,
+            end: b.endTime,
+          }));
+
+          const allMemberBusy = mergeBusyTimes([...memberBusyTimes, ...memberBusyFromBookings]);
+          const isAvailable = isSlotAvailable(
+            { start: startDate, end: endDate },
+            allMemberBusy,
+            eventType.bufferTimeBefore,
+            eventType.bufferTimeAfter
+          );
+
+          if (isAvailable) {
+            selectedHost = {
+              id: member.user.id,
+              name: member.user.name,
+              email: member.user.email,
+              timezone: member.user.timezone,
+            };
+            break;
+          }
+        }
+      } else if (eventType.schedulingType === 'COLLECTIVE') {
+        // For collective, all members must be available
+        // Use the first member as the "host" but all should be free
+        let allAvailable = true;
+
+        for (const member of assignedMembers) {
+          const memberBusyTimes = await getAllBusyTimes(
+            member.user.id,
+            addMinutes(startDate, -60),
+            addMinutes(endDate, 60)
+          );
+
+          const memberBookings = await prisma.booking.findMany({
+            where: {
+              hostId: member.user.id,
+              status: { in: ['PENDING', 'CONFIRMED'] },
+              startTime: { lt: endDate },
+              endTime: { gt: startDate },
+            },
+          });
+
+          const memberBusyFromBookings = memberBookings.map(b => ({
+            start: b.startTime,
+            end: b.endTime,
+          }));
+
+          const allMemberBusy = mergeBusyTimes([...memberBusyTimes, ...memberBusyFromBookings]);
+          const isAvailable = isSlotAvailable(
+            { start: startDate, end: endDate },
+            allMemberBusy,
+            eventType.bufferTimeBefore,
+            eventType.bufferTimeAfter
+          );
+
+          if (!isAvailable) {
+            allAvailable = false;
+            break;
+          }
+        }
+
+        if (!allAvailable) {
+          return NextResponse.json(
+            { error: 'This time slot is no longer available for all team members.' },
+            { status: 409 }
+          );
+        }
+
+        // Use the first assigned member as host
+        selectedHost = {
+          id: assignedMembers[0].user.id,
+          name: assignedMembers[0].user.name,
+          email: assignedMembers[0].user.email,
+          timezone: assignedMembers[0].user.timezone,
+        };
+      } else if (eventType.schedulingType === 'MANAGED') {
+        // For managed, use the first available assigned member
+        const firstMember = assignedMembers[0];
+        if (firstMember) {
+          selectedHost = {
+            id: firstMember.user.id,
+            name: firstMember.user.name,
+            email: firstMember.user.email,
+            timezone: firstMember.user.timezone,
+          };
+        }
+      }
+    }
+
+    // Verify the slot is still available for the selected host
     const calendarBusyTimes = await getAllBusyTimes(
-      eventType.userId,
+      selectedHost.id,
       addMinutes(startDate, -60),
       addMinutes(endDate, 60)
     );
@@ -176,7 +327,7 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Check ALL bookings for this host (across all event types) to prevent double booking
     const existingBookings = await prisma.booking.findMany({
       where: {
-        hostId: eventType.userId, // Check all bookings for this host, not just this event type
+        hostId: selectedHost.id, // Check all bookings for this host, not just this event type
         status: { in: ['PENDING', 'CONFIRMED'] },
         OR: [
           {
@@ -270,7 +421,7 @@ export async function POST(request: NextRequest) {
     const booking = await prisma.booking.create({
       data: {
         eventTypeId,
-        hostId: eventType.userId,
+        hostId: selectedHost.id,
         startTime: startDate,
         endTime: endDate,
         timezone,
@@ -288,7 +439,7 @@ export async function POST(request: NextRequest) {
     // Create calendar event
     const primaryCalendar = await prisma.calendar.findFirst({
       where: {
-        userId: eventType.userId,
+        userId: selectedHost.id,
         isPrimary: true,
         isEnabled: true,
       },
@@ -303,7 +454,7 @@ export async function POST(request: NextRequest) {
         endTime: endDate,
         attendees: [
           { email, name },
-          { email: eventType.user.email!, name: eventType.user.name ?? undefined },
+          { email: selectedHost.email!, name: selectedHost.name ?? undefined },
         ],
         location,
         conferenceData: eventType.locationType === 'GOOGLE_MEET' || eventType.locationType === 'TEAMS',
@@ -334,12 +485,12 @@ export async function POST(request: NextRequest) {
 
     // Create Zoom meeting if event type is ZOOM
     if (eventType.locationType === 'ZOOM') {
-      const hasZoom = await hasZoomConnected(eventType.userId);
+      const hasZoom = await hasZoomConnected(selectedHost.id);
 
       if (hasZoom) {
         try {
           const zoomMeeting = await createZoomMeeting({
-            userId: eventType.userId,
+            userId: selectedHost.id,
             topic: `${eventType.title} with ${name}`,
             startTime: startDate,
             duration: eventType.length,
@@ -368,14 +519,14 @@ export async function POST(request: NextRequest) {
           // Continue with booking even if Zoom creation fails
         }
       } else {
-        console.warn(`Zoom not connected for user ${eventType.userId}, skipping Zoom meeting creation`);
+        console.warn(`Zoom not connected for user ${selectedHost.id}, skipping Zoom meeting creation`);
       }
     }
 
     // Send confirmation emails
     const emailData: BookingEmailData = {
-      hostName: eventType.user.name ?? 'Host',
-      hostEmail: eventType.user.email!,
+      hostName: selectedHost.name ?? 'Host',
+      hostEmail: selectedHost.email!,
       inviteeName: name,
       inviteeEmail: email,
       eventTitle: eventType.title,
@@ -389,13 +540,16 @@ export async function POST(request: NextRequest) {
       notes,
     };
 
-    // Send emails asynchronously based on confirmation requirement
+    // Queue emails (with retry support) based on confirmation requirement
     if (eventType.requiresConfirmation) {
-      // Send pending confirmation emails (different template)
-      sendBookingPendingEmails(emailData).catch(console.error);
+      // Queue pending confirmation emails (different template)
+      queueBookingPendingEmails(emailData).catch(console.error);
     } else {
-      // Send immediate confirmation emails
-      sendBookingConfirmationEmails(emailData).catch(console.error);
+      // Queue immediate confirmation emails
+      queueBookingConfirmationEmails(emailData).catch(console.error);
+
+      // Schedule reminder emails for confirmed bookings
+      scheduleBookingReminders(booking.id, booking.uid, startDate).catch(console.error);
     }
 
     // Update analytics

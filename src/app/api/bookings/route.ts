@@ -29,6 +29,7 @@ import {
   queueBookingConfirmationEmails,
   queueBookingPendingEmails,
   scheduleBookingReminders,
+  triggerBookingCreatedWebhook,
 } from '@/lib/queue';
 
 /**
@@ -190,36 +191,46 @@ export async function POST(request: NextRequest) {
       timezone: eventType.user.timezone,
     };
 
+    // Track assigned user for team events
+    let assignedUserId: string | undefined;
+    let shouldUpdateRoundRobinState = false;
+
     // Handle team scheduling
     if (eventType.teamId && eventType.schedulingType && eventType.teamMemberAssignments.length > 0) {
       const assignedMembers = eventType.teamMemberAssignments.map(a => a.teamMember);
 
       if (eventType.schedulingType === 'ROUND_ROBIN') {
-        // Find the next available member using round-robin
-        // Get recent bookings for each member to determine who should be next
-        const recentBookings = await prisma.booking.groupBy({
-          by: ['hostId'],
-          where: {
-            eventTypeId,
-            status: { in: ['PENDING', 'CONFIRMED'] },
-            startTime: { gte: addMinutes(new Date(), -30 * 24 * 60) }, // Last 30 days
-          },
-          _count: { id: true },
-        });
+        // Find the next available member using round-robin rotation
+        // Start from the member after lastAssignedMemberId
+        const lastAssignedIndex = eventType.lastAssignedMemberId
+          ? assignedMembers.findIndex(m => m.id === eventType.lastAssignedMemberId)
+          : -1;
 
-        const bookingCounts = new Map(recentBookings.map(b => [b.hostId, b._count.id]));
+        let memberIndex = lastAssignedIndex;
 
-        // Find the member with the fewest recent bookings who is available
-        for (const member of assignedMembers) {
-          const memberBusyTimes = await getAllBusyTimes(
-            member.user.id,
-            addMinutes(startDate, -60),
-            addMinutes(endDate, 60)
-          );
+        // Try each member in rotation order
+        for (let i = 0; i < assignedMembers.length; i++) {
+          memberIndex = (memberIndex + 1) % assignedMembers.length;
+          const member = assignedMembers[memberIndex];
+
+          // Check if member is available
+          let memberBusyTimes: { start: Date; end: Date }[] = [];
+          try {
+            memberBusyTimes = await getAllBusyTimes(
+              member.user.id,
+              addMinutes(startDate, -60),
+              addMinutes(endDate, 60)
+            );
+          } catch {
+            // Calendar not connected, continue
+          }
 
           const memberBookings = await prisma.booking.findMany({
             where: {
-              hostId: member.user.id,
+              OR: [
+                { hostId: member.user.id },
+                { assignedUserId: member.user.id },
+              ],
               status: { in: ['PENDING', 'CONFIRMED'] },
               startTime: { lt: endDate },
               endTime: { gt: startDate },
@@ -246,24 +257,40 @@ export async function POST(request: NextRequest) {
               email: member.user.email,
               timezone: member.user.timezone,
             };
+            assignedUserId = member.user.id;
+            shouldUpdateRoundRobinState = true;
             break;
           }
         }
+
+        if (!assignedUserId) {
+          return NextResponse.json(
+            { error: 'No team members are available at this time.' },
+            { status: 409 }
+          );
+        }
       } else if (eventType.schedulingType === 'COLLECTIVE') {
         // For collective, all members must be available
-        // Use the first member as the "host" but all should be free
         let allAvailable = true;
 
         for (const member of assignedMembers) {
-          const memberBusyTimes = await getAllBusyTimes(
-            member.user.id,
-            addMinutes(startDate, -60),
-            addMinutes(endDate, 60)
-          );
+          let memberBusyTimes: { start: Date; end: Date }[] = [];
+          try {
+            memberBusyTimes = await getAllBusyTimes(
+              member.user.id,
+              addMinutes(startDate, -60),
+              addMinutes(endDate, 60)
+            );
+          } catch {
+            // Calendar not connected, continue
+          }
 
           const memberBookings = await prisma.booking.findMany({
             where: {
-              hostId: member.user.id,
+              OR: [
+                { hostId: member.user.id },
+                { assignedUserId: member.user.id },
+              ],
               status: { in: ['PENDING', 'CONFIRMED'] },
               startTime: { lt: endDate },
               endTime: { gt: startDate },
@@ -296,24 +323,25 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Use the first assigned member as host
+        // Use the first assigned member as host (all members participate)
         selectedHost = {
           id: assignedMembers[0].user.id,
           name: assignedMembers[0].user.name,
           email: assignedMembers[0].user.email,
           timezone: assignedMembers[0].user.timezone,
         };
+        // For collective, the assigned user is effectively all members (host handles it)
       } else if (eventType.schedulingType === 'MANAGED') {
-        // For managed, use the first available assigned member
-        const firstMember = assignedMembers[0];
-        if (firstMember) {
-          selectedHost = {
-            id: firstMember.user.id,
-            name: firstMember.user.name,
-            email: firstMember.user.email,
-            timezone: firstMember.user.timezone,
-          };
-        }
+        // For MANAGED: booking is created but assignment happens later by host/admin
+        // Use the event type owner as the initial host
+        // The booking will need to be assigned to a specific member later
+        selectedHost = {
+          id: eventType.user.id,
+          name: eventType.user.name,
+          email: eventType.user.email,
+          timezone: eventType.user.timezone,
+        };
+        // assignedUserId remains undefined - will be set by host/admin later
       }
     }
 
@@ -422,6 +450,7 @@ export async function POST(request: NextRequest) {
       data: {
         eventTypeId,
         hostId: selectedHost.id,
+        assignedUserId: assignedUserId, // For team round-robin assignments
         startTime: startDate,
         endTime: endDate,
         timezone,
@@ -435,6 +464,20 @@ export async function POST(request: NextRequest) {
         source: 'web',
       },
     });
+
+    // Update round-robin state for team events
+    if (shouldUpdateRoundRobinState && assignedUserId && eventType.teamId) {
+      // Find the team member ID for the assigned user
+      const assignedMemberRecord = eventType.teamMemberAssignments.find(
+        a => a.teamMember.user.id === assignedUserId
+      );
+      if (assignedMemberRecord) {
+        await prisma.eventType.update({
+          where: { id: eventTypeId },
+          data: { lastAssignedMemberId: assignedMemberRecord.teamMember.id },
+        });
+      }
+    }
 
     // Create calendar event
     const primaryCalendar = await prisma.calendar.findFirst({
@@ -569,6 +612,34 @@ export async function POST(request: NextRequest) {
         bookings: { increment: 1 },
       },
     }).catch(() => {});
+
+    // Trigger webhook for booking.created
+    triggerBookingCreatedWebhook(selectedHost.id, {
+      id: booking.id,
+      uid: booking.uid,
+      status: booking.status,
+      startTime: startDate,
+      endTime: endDate,
+      timezone,
+      location,
+      meetingUrl,
+      inviteeName: name,
+      inviteeEmail: email,
+      inviteePhone: phone,
+      inviteeNotes: notes,
+      responses: responses ?? null,
+      eventType: {
+        id: eventType.id,
+        title: eventType.title,
+        slug: eventType.slug,
+        length: eventType.length,
+      },
+      host: {
+        id: selectedHost.id,
+        name: selectedHost.name,
+        email: selectedHost.email!,
+      },
+    }).catch(console.error);
 
     return NextResponse.json({
       success: true,

@@ -98,15 +98,51 @@ model Calendar {
   isPrimary    Boolean      @default(false)
   isEnabled    Boolean      @default(true)
   color        String?
-  
+
+  // Sync tracking
+  syncStatus    CalendarSyncStatus @default(PENDING)
+  lastSyncedAt  DateTime?
+  lastSyncError String?     @db.Text
+  syncToken     String?     @db.Text  // For incremental sync (Google's syncToken/Outlook's deltaLink)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   credentials  CalendarCredential?
+  syncedEvents CalendarSyncedEvent[]
 
   @@unique([userId, provider, externalId])
   @@index([userId])
+}
+
+// Track synced external events for conflict detection
+model CalendarSyncedEvent {
+  id            String   @id @default(cuid())
+  calendarId    String
+  externalEventId String
+  title         String?
+  startTime     DateTime
+  endTime       DateTime
+  isAllDay      Boolean  @default(false)
+  isBusy        Boolean  @default(true)  // false = free/tentative
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  calendar Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@unique([calendarId, externalEventId])
+  @@index([calendarId])
+  @@index([startTime, endTime])
+}
+
+enum CalendarSyncStatus {
+  PENDING     // Never synced
+  SYNCED      // Successfully synced
+  SYNCING     // Currently syncing
+  ERROR       // Last sync failed
+  DISCONNECTED // Token invalid, needs reconnection
 }
 
 model CalendarCredential {
@@ -157,44 +193,45 @@ model EventType {
   id              String   @id @default(cuid())
   userId          String
   teamId          String?
-  
+
   // Basic Info
   title           String
   slug            String
   description     String?  @db.Text
   length          Int      // Duration in minutes
-  
+
   // Scheduling Settings
   bufferTimeBefore Int     @default(0)  // Minutes
   bufferTimeAfter  Int     @default(0)  // Minutes
   minimumNotice    Int     @default(60) // Minutes before booking
   slotInterval     Int?    // Custom interval, defaults to length
-  
+
   // Booking Window
   periodType       PeriodType @default(ROLLING)
   periodDays       Int?       // For ROLLING: number of days ahead
   periodStartDate  DateTime?  // For RANGE: start date
   periodEndDate    DateTime?  // For RANGE: end date
-  
+
   // Location
   locationType     LocationType @default(GOOGLE_MEET)
   locationValue    String?      // Custom location address/link
-  
+
   // Availability
   scheduleId       String?
-  
+
   // Booking Limits
   maxBookingsPerDay Int?
   seatsPerSlot      Int     @default(1) // For group events
-  
+
   // Customization
   requiresConfirmation Boolean @default(false)
   hideNotes           Boolean @default(false)
   successRedirectUrl  String?
-  
+
   // Team Settings
-  schedulingType   SchedulingType? // For team events
-  
+  schedulingType       SchedulingType? // For team events
+  lastAssignedMemberId String?         // For round-robin: tracks last assigned member
+
   // Status
   isActive         Boolean  @default(true)
   
@@ -466,17 +503,69 @@ enum TeamMemberRole {
 model Webhook {
   id            String   @id @default(cuid())
   userId        String
+  name          String?  // Optional friendly name
   url           String
-  secret        String?
+  secret        String?  // For HMAC signature verification
   eventTriggers String[] // e.g., ["booking.created", "booking.cancelled"]
   isActive      Boolean  @default(true)
-  
+
+  // Health tracking
+  failureCount  Int      @default(0)
+  lastTriggeredAt DateTime?
+  lastSuccessAt   DateTime?
+  lastFailureAt   DateTime?
+  lastErrorMessage String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
 
   @@index([userId])
+  @@index([isActive])
+}
+
+model WebhookDelivery {
+  id          String   @id @default(cuid())
+  webhookId   String
+  eventType   String   // e.g., "booking.created"
+  payload     Json     // The webhook payload sent
+
+  // Delivery status
+  status      WebhookDeliveryStatus @default(PENDING)
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+
+  // Response tracking
+  responseStatus Int?     // HTTP status code
+  responseBody   String?  @db.Text
+  responseTimeMs Int?     // Response time in milliseconds
+
+  // Errors
+  errorMessage String?  @db.Text
+
+  // Timestamps
+  scheduledAt DateTime @default(now())
+  deliveredAt DateTime?
+  nextRetryAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  webhook Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([nextRetryAt])
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  RETRYING
 }
 
 // ============================================================================

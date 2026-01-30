@@ -271,9 +271,18 @@ export const webhookEventSchema = z.enum([
 ]);
 
 export const createWebhookSchema = z.object({
+  name: z.string().max(100).optional(),
   url: z.string().url(),
   eventTriggers: z.array(webhookEventSchema).min(1),
   secret: z.string().min(16).max(128).optional(),
+});
+
+export const updateWebhookSchema = z.object({
+  name: z.string().max(100).optional().nullable(),
+  url: z.string().url().optional(),
+  eventTriggers: z.array(webhookEventSchema).min(1).optional(),
+  isActive: z.boolean().optional(),
+  regenerateSecret: z.boolean().optional(),
 });
 
 // ============================================================================
@@ -295,3 +304,4 @@ export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
 export type AddTeamMemberInput = z.infer<typeof addTeamMemberSchema>;
 export type GetSlotsQuery = z.infer<typeof getSlotsQuerySchema>;
 export type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
+export type UpdateWebhookInput = z.infer<typeof updateWebhookSchema>;

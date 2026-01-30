@@ -57,7 +57,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, getInitials } from '@/lib/utils';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 
 interface TeamMember {
   id: string;
@@ -103,6 +103,7 @@ export default function TeamDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const teamId = params.id as string;
 
   const [isAddMemberDialogOpen, setIsAddMemberDialogOpen] = useState(false);
@@ -156,10 +157,10 @@ export default function TeamDetailPage() {
       setIsAddMemberDialogOpen(false);
       setNewMemberEmail('');
       setNewMemberRole('MEMBER');
-      toast.success('Member added successfully');
+      toast({ title: 'Member added successfully' });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast({ title: error.message, variant: 'destructive' });
     },
   });
 
@@ -180,10 +181,10 @@ export default function TeamDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team', teamId] });
       setIsEditDialogOpen(false);
-      toast.success('Team updated successfully');
+      toast({ title: 'Team updated successfully' });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast({ title: error.message, variant: 'destructive' });
     },
   });
 
@@ -204,10 +205,10 @@ export default function TeamDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team', teamId] });
       queryClient.invalidateQueries({ queryKey: ['team-members', teamId] });
-      toast.success('Member updated successfully');
+      toast({ title: 'Member updated successfully' });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast({ title: error.message, variant: 'destructive' });
     },
   });
 
@@ -226,10 +227,10 @@ export default function TeamDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team', teamId] });
       queryClient.invalidateQueries({ queryKey: ['team-members', teamId] });
-      toast.success('Member removed successfully');
+      toast({ title: 'Member removed successfully' });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast({ title: error.message, variant: 'destructive' });
     },
   });
 
@@ -261,7 +262,7 @@ export default function TeamDetailPage() {
   const copyBookingUrl = () => {
     const url = `${window.location.origin}/team/${data?.team.slug}`;
     navigator.clipboard.writeText(url);
-    toast.success('URL copied to clipboard');
+    toast({ title: 'URL copied to clipboard' });
   };
 
   if (isLoading) {
@@ -537,10 +538,10 @@ export default function TeamDetailPage() {
                         // Delete team
                         fetch(`/api/teams/${teamId}`, { method: 'DELETE' })
                           .then(() => {
-                            toast.success('Team deleted');
+                            toast({ title: 'Team deleted' });
                             router.push('/dashboard/teams');
                           })
-                          .catch(() => toast.error('Failed to delete team'));
+                          .catch(() => toast({ title: 'Failed to delete team', variant: 'destructive' }));
                       }
                     }}
                   >

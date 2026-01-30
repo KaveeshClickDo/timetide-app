@@ -15,6 +15,7 @@ import { BookingEmailData } from '@/lib/email/client';
 import {
   queueBookingRescheduledEmails,
   rescheduleBookingReminders,
+  triggerBookingRescheduledWebhook,
 } from '@/lib/queue';
 
 interface RouteParams {
@@ -168,6 +169,39 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Reschedule reminders
     rescheduleBookingReminders(booking.id, booking.uid, newStart).catch(console.error);
+
+    // Trigger webhook for booking.rescheduled
+    triggerBookingRescheduledWebhook(
+      booking.hostId,
+      {
+        id: booking.id,
+        uid: booking.uid,
+        status: booking.status,
+        startTime: newStart,
+        endTime: newEnd,
+        timezone: booking.timezone,
+        location: booking.location,
+        meetingUrl: booking.meetingUrl,
+        inviteeName: booking.inviteeName,
+        inviteeEmail: booking.inviteeEmail,
+        inviteePhone: booking.inviteePhone,
+        inviteeNotes: booking.inviteeNotes,
+        responses: booking.responses as Record<string, unknown> | null,
+        eventType: {
+          id: booking.eventType.id,
+          title: booking.eventType.title,
+          slug: '',
+          length: booking.eventType.length,
+        },
+        host: {
+          id: booking.host.id,
+          name: booking.host.name,
+          email: booking.host.email!,
+        },
+      },
+      booking.startTime,
+      booking.endTime
+    ).catch(console.error);
 
     return NextResponse.json({
       success: true,

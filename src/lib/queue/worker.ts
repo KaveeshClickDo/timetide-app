@@ -5,6 +5,8 @@
  * Import this file in your server startup to enable:
  * - Email sending with retries
  * - Reminder scheduling
+ * - Calendar synchronization
+ * - Webhook delivery
  *
  * Usage:
  *   In your app initialization (e.g., instrumentation.ts or a custom server):
@@ -26,6 +28,8 @@
 import { isRedisAvailable } from './redis';
 import { initEmailWorker } from './email-queue';
 import { initReminderWorker, scheduleAllPendingReminders } from './reminder-queue';
+import { initCalendarSyncWorker, scheduleCalendarSyncJobs } from './calendar-sync-queue';
+import { initWebhookWorker } from './webhook-queue';
 
 let initialized = false;
 
@@ -43,6 +47,7 @@ export async function initWorkers(): Promise<void> {
     console.warn('Redis not available. Queue workers will not be started.');
     console.warn('Emails will be sent directly without retries.');
     console.warn('Reminders will not be scheduled.');
+    console.warn('Calendar sync will not run in background.');
     return;
   }
 
@@ -55,9 +60,18 @@ export async function initWorkers(): Promise<void> {
     // Initialize reminder worker
     await initReminderWorker();
 
+    // Initialize calendar sync worker
+    await initCalendarSyncWorker();
+
+    // Initialize webhook worker
+    await initWebhookWorker();
+
     // Schedule any pending reminders (for recovery after restart)
     const scheduledCount = await scheduleAllPendingReminders();
     console.log(`Recovered ${scheduledCount} pending reminders`);
+
+    // Set up scheduled calendar sync jobs
+    await scheduleCalendarSyncJobs();
 
     initialized = true;
     console.log('All queue workers initialized successfully');

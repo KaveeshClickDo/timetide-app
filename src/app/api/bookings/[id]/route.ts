@@ -18,6 +18,9 @@ import {
   queueBookingRejectedEmail,
   scheduleBookingReminders,
   cancelBookingReminders,
+  triggerBookingConfirmedWebhook,
+  triggerBookingRejectedWebhook,
+  triggerBookingCancelledWebhook,
 } from '@/lib/queue';
 
 interface RouteParams {
@@ -188,11 +191,41 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       bookingUid: booking.uid,
     };
 
-    // Send appropriate email and schedule reminders
+    // Build webhook payload data
+    const webhookBookingData = {
+      id: booking.id,
+      uid: booking.uid,
+      status: newStatus,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      timezone: booking.timezone,
+      location: booking.location,
+      meetingUrl: booking.meetingUrl,
+      inviteeName: booking.inviteeName,
+      inviteeEmail: booking.inviteeEmail,
+      inviteePhone: booking.inviteePhone,
+      inviteeNotes: booking.inviteeNotes,
+      responses: booking.responses as Record<string, unknown> | null,
+      eventType: {
+        id: booking.eventTypeId,
+        title: booking.eventType.title,
+        slug: '', // Not available in this query
+        length: 0, // Not available in this query
+      },
+      host: {
+        id: booking.host.id,
+        name: booking.host.name,
+        email: booking.host.email!,
+      },
+    };
+
+    // Send appropriate email, schedule reminders, and trigger webhooks
     if (action === 'confirm') {
       queueBookingConfirmedByHostEmail(emailData).catch(console.error);
       // Schedule reminders for newly confirmed booking
       scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
+      // Trigger webhook
+      triggerBookingConfirmedWebhook(booking.hostId, webhookBookingData).catch(console.error);
     } else {
       // Delete calendar event if rejecting
       if (booking.calendarEventId) {
@@ -212,6 +245,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
       }
       queueBookingRejectedEmail(emailData, reason).catch(console.error);
+      // Trigger webhook
+      triggerBookingRejectedWebhook(booking.hostId, webhookBookingData, reason).catch(console.error);
     }
 
     return NextResponse.json({
@@ -339,6 +374,38 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     // Cancel scheduled reminders
     cancelBookingReminders(booking.uid).catch(console.error);
+
+    // Trigger webhook for booking.cancelled
+    triggerBookingCancelledWebhook(
+      booking.hostId,
+      {
+        id: booking.id,
+        uid: booking.uid,
+        status: 'CANCELLED',
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        timezone: booking.timezone,
+        location: booking.location,
+        meetingUrl: booking.meetingUrl,
+        inviteeName: booking.inviteeName,
+        inviteeEmail: booking.inviteeEmail,
+        inviteePhone: booking.inviteePhone,
+        inviteeNotes: booking.inviteeNotes,
+        responses: booking.responses as Record<string, unknown> | null,
+        eventType: {
+          id: booking.eventTypeId,
+          title: booking.eventType.title,
+          slug: '',
+          length: 0,
+        },
+        host: {
+          id: booking.host.id,
+          name: booking.host.name,
+          email: booking.host.email!,
+        },
+      },
+      reason
+    ).catch(console.error);
 
     return NextResponse.json({
       success: true,

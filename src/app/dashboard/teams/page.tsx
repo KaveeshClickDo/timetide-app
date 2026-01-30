@@ -42,7 +42,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { cn, getInitials } from '@/lib/utils';
-import { toast } from 'sonner';
+import { useToast } from '@/components/ui/use-toast';
 
 interface TeamMember {
   id: string;
@@ -70,6 +70,7 @@ interface Team {
 export default function TeamsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newTeam, setNewTeam] = useState({
     name: '',
@@ -105,10 +106,10 @@ export default function TeamsPage() {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
       setIsCreateDialogOpen(false);
       setNewTeam({ name: '', slug: '', description: '' });
-      toast.success('Team created successfully');
+      toast({ title: 'Team created successfully', variant: 'default' });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast({ title: error.message, variant: 'destructive' });
     },
   });
 
@@ -126,10 +127,10 @@ export default function TeamsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teams'] });
-      toast.success('Team deleted successfully');
+      toast({ title: 'Team deleted successfully', variant: 'default' });
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast({ title: error.message, variant: 'destructive' });
     },
   });
 

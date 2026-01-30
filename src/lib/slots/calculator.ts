@@ -220,8 +220,10 @@ export class SlotCalculator {
       return true;
     });
 
-    // Convert slots to invitee timezone for display
-    return availableSlots.map((slot) => this.convertToInviteeTimezone(slot));
+    // Return slots in UTC - client will format in invitee's timezone
+    // Note: We previously used convertToInviteeTimezone here, but that causes
+    // double timezone conversion when dates are JSON serialized (toISOString uses UTC)
+    return availableSlots;
   }
 
   /**

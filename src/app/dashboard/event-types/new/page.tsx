@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, addDays } from 'date-fns'
 import {
   Clock,
@@ -61,6 +61,7 @@ interface Question {
 export default function NewEventTypePage() {
   const router = useRouter()
   const { toast } = useToast()
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     title: '',
@@ -135,6 +136,7 @@ export default function NewEventTypePage() {
       return res.json()
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['eventTypes'] })
       toast({
         title: 'Event type created!',
         description: 'Your new event type is ready to accept bookings.',

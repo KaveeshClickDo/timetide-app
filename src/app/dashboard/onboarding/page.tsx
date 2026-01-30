@@ -142,6 +142,24 @@ export default function OnboardingPage() {
   const [editedSlots, setEditedSlots] = useState<Record<number, AvailabilitySlot[]>>({})
   const [availabilityChanged, setAvailabilityChanged] = useState(false)
 
+  // Fetch current user to check onboarding status
+  const { data: userData, isLoading: isLoadingUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: async () => {
+      const res = await fetch('/api/users/me')
+      if (!res.ok) throw new Error('Failed to fetch user')
+      return res.json()
+    },
+    enabled: !!session?.user?.id,
+  })
+
+  // Redirect to dashboard if onboarding already completed
+  useEffect(() => {
+    if (userData?.user?.onboardingCompleted) {
+      router.replace('/dashboard')
+    }
+  }, [userData, router])
+
   // Fetch event types
   const { data: eventTypesData } = useQuery({
     queryKey: ['eventTypes'],
@@ -226,7 +244,7 @@ export default function OnboardingPage() {
 
   // Save user mutation
   const saveUserMutation = useMutation({
-    mutationFn: async (data: { timezone?: string; username?: string }) => {
+    mutationFn: async (data: { timezone?: string; username?: string; onboardingCompleted?: boolean }) => {
       const res = await fetch('/api/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -363,7 +381,8 @@ export default function OnboardingPage() {
       }
       setCurrentStep(4)
     } else {
-      // Complete onboarding
+      // Complete onboarding - mark as completed and redirect
+      await saveUserMutation.mutateAsync({ onboardingCompleted: true })
       router.push('/dashboard')
     }
   }
@@ -374,7 +393,9 @@ export default function OnboardingPage() {
     }
   }
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    // Mark onboarding as completed even when skipping
+    await saveUserMutation.mutateAsync({ onboardingCompleted: true })
     router.push('/dashboard')
   }
 
@@ -391,6 +412,15 @@ export default function OnboardingPage() {
     : `/${username}`
 
   const isSaving = saveUserMutation.isPending || saveAvailabilityMutation.isPending
+
+  // Show loading while checking onboarding status
+  if (isLoadingUser || userData?.user?.onboardingCompleted) {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center py-12 px-4">

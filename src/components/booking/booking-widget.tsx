@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay } from 'date-fns'
+import { formatInTimeZone } from 'date-fns-tz'
 import Link from 'next/link'
 import Image from 'next/image'
 import {
@@ -154,7 +155,8 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 time: slot.start,
                 start: startDate,
                 end: endDate,
-                formattedTime: format(startDate, 'h:mm a')
+                // Format time in invitee's timezone to ensure correct display
+                formattedTime: formatInTimeZone(startDate, inviteeTimezone, 'h:mm a')
               }
             })
           }
@@ -301,11 +303,11 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2 text-gray-600">
                   <Calendar className="h-4 w-4" />
-                  {format(new Date(bookingResult.startTime), 'EEEE, MMMM d, yyyy')}
+                  {formatInTimeZone(new Date(bookingResult.startTime), inviteeTimezone, 'EEEE, MMMM d, yyyy')}
                 </div>
                 <div className="flex items-center gap-2 text-gray-600">
                   <Clock className="h-4 w-4" />
-                  {format(new Date(bookingResult.startTime), 'h:mm a')} ({inviteeTimezone})
+                  {formatInTimeZone(new Date(bookingResult.startTime), inviteeTimezone, 'h:mm a')} ({inviteeTimezone})
                 </div>
                 <div className="flex items-center gap-2 text-gray-600">
                   <LocationIcon className="h-4 w-4" />
@@ -391,7 +393,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 </p>
                 {selectedSlot && (
                   <p className="text-ocean-600">
-                    {format(new Date(selectedSlot), 'h:mm a')}
+                    {formatInTimeZone(new Date(selectedSlot), inviteeTimezone, 'h:mm a')}
                   </p>
                 )}
               </div>

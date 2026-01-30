@@ -21,6 +21,7 @@ export async function GET() {
         image: true,
         timezone: true,
         bio: true,
+        onboardingCompleted: true,
         createdAt: true,
       },
     })
@@ -48,7 +49,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { name, username, timezone, bio } = body
+    const { name, username, timezone, bio, onboardingCompleted } = body
 
     // Validate username if provided
     if (username !== undefined) {
@@ -87,6 +88,7 @@ export async function PATCH(request: Request) {
         ...(username !== undefined && { username }),
         ...(timezone !== undefined && { timezone }),
         ...(bio !== undefined && { bio }),
+        ...(onboardingCompleted !== undefined && { onboardingCompleted }),
       },
       select: {
         id: true,
@@ -96,8 +98,17 @@ export async function PATCH(request: Request) {
         image: true,
         timezone: true,
         bio: true,
+        onboardingCompleted: true,
       },
     })
+
+    // When timezone changes, sync it to all availability schedules
+    if (timezone !== undefined) {
+      await prisma.availabilitySchedule.updateMany({
+        where: { userId: session.user.id },
+        data: { timezone },
+      })
+    }
 
     return NextResponse.json({ user })
   } catch (error) {

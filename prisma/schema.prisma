@@ -24,7 +24,8 @@ model User {
   password      String?   // Hashed, null for OAuth-only users
   timezone      String    @default("UTC")
   bio           String?   // Short bio for public profile
-  
+  onboardingCompleted Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

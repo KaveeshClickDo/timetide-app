@@ -49,6 +49,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
+    // Get user's timezone to set on the schedule
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { timezone: true },
+    })
+
     // If this is set as default, unset other defaults
     if (isDefault) {
       await prisma.availabilitySchedule.updateMany({
@@ -62,6 +68,7 @@ export async function POST(request: Request) {
         userId: session.user.id,
         name,
         isDefault: isDefault || false,
+        timezone: user?.timezone || 'UTC',
         slots: slots
           ? {
               create: slots.map((slot: any) => ({

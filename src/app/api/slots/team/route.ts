@@ -80,7 +80,6 @@ export async function GET(request: NextRequest) {
           where: { isActive: true },
           include: {
             teamMember: {
-              where: { isActive: true },
               include: {
                 user: {
                   select: {

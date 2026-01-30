@@ -230,7 +230,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
               where: { isActive: true },
               include: {
                 teamMember: {
-                  where: { isActive: true },
                   include: {
                     user: {
                       select: {
@@ -263,16 +262,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // Get available members
-    const availableMembers = booking.eventType.teamMemberAssignments.map((a) => ({
-      id: a.teamMember.user.id,
-      teamMemberId: a.teamMember.id,
-      name: a.teamMember.user.name,
-      email: a.teamMember.user.email,
-      image: a.teamMember.user.image,
-      timezone: a.teamMember.user.timezone,
-      priority: a.teamMember.priority,
-    }));
+    // Get available members (filter for active members)
+    const availableMembers = booking.eventType.teamMemberAssignments
+      .filter((a) => a.teamMember.isActive)
+      .map((a) => ({
+        id: a.teamMember.user.id,
+        teamMemberId: a.teamMember.id,
+        name: a.teamMember.user.name,
+        email: a.teamMember.user.email,
+        image: a.teamMember.user.image,
+        timezone: a.teamMember.user.timezone,
+        priority: a.teamMember.priority,
+      }));
 
     return NextResponse.json({
       booking: {

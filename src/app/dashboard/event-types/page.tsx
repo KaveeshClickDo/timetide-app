@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/components/ui/use-toast'
 import { cn, formatDuration } from '@/lib/utils'
+import { EmbedCodeGenerator } from '@/components/embed-code-generator'
 
 interface EventType {
   id: string
@@ -283,6 +284,14 @@ export default function EventTypesPage() {
                           </>
                         )}
                       </Button>
+
+                      {username && (
+                        <EmbedCodeGenerator
+                          username={username}
+                          eventSlug={eventType.slug}
+                          eventTitle={eventType.title}
+                        />
+                      )}
 
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

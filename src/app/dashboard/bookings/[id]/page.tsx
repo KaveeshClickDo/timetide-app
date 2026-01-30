@@ -22,6 +22,8 @@ import {
   AlertCircle,
   CheckCircle,
   X,
+  Users,
+  UserPlus,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -43,6 +45,16 @@ import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
 import { AddToCalendar } from '@/components/add-to-calendar'
 
+interface TeamMember {
+  id: string
+  userId: string
+  name: string | null
+  email: string
+  image: string | null
+  timezone: string
+  priority: number
+}
+
 interface BookingDetails {
   id: string
   uid: string
@@ -60,6 +72,13 @@ interface BookingDetails {
   cancellationReason?: string
   cancelledAt?: string
   createdAt: string
+  assignedUserId?: string
+  assignedUser?: {
+    id: string
+    name: string | null
+    email: string
+    image: string | null
+  }
   eventType: {
     id: string
     title: string
@@ -67,6 +86,8 @@ interface BookingDetails {
     length: number
     locationType: string
     locationValue?: string
+    schedulingType?: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED'
+    teamId?: string
     questions?: Array<{
       id: string
       type: string
@@ -130,7 +151,9 @@ export default function BookingDetailPage() {
   const { data: session } = useSession()
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [showAssignDialog, setShowAssignDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
 
   // Get host's timezone from session (defaults to UTC)
   const hostTimezone = session?.user?.timezone || 'UTC'
@@ -234,6 +257,49 @@ export default function BookingDetailPage() {
       setRejectReason('')
       // Redirect after a short delay
       setTimeout(() => router.push('/dashboard'), 1500)
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
+  // Fetch available team members for MANAGED scheduling assignment
+  const { data: availableMembersData } = useQuery({
+    queryKey: ['booking-members', params.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/bookings/${params.id}/assign`)
+      if (!res.ok) return null
+      return res.json() as Promise<{ availableMembers: TeamMember[] }>
+    },
+    enabled: bookingData?.eventType?.schedulingType === 'MANAGED',
+  })
+
+  const assignMemberMutation = useMutation({
+    mutationFn: async (assignedUserId: string) => {
+      const res = await fetch(`/api/bookings/${params.id}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedUserId }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to assign member')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
+      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      toast({
+        title: 'Member assigned',
+        description: 'The team member has been assigned to this booking.',
+      })
+      setShowAssignDialog(false)
+      setSelectedMemberId(null)
     },
     onError: (error: Error) => {
       toast({
@@ -465,6 +531,58 @@ export default function BookingDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Team Member Assignment for MANAGED scheduling */}
+        {booking.eventType.schedulingType === 'MANAGED' && (
+          <Card className={!booking.assignedUserId ? 'border-blue-200 bg-blue-50' : ''}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Team Assignment
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {booking.assignedUser ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={booking.assignedUser.image || undefined} />
+                      <AvatarFallback>
+                        {getInitials(booking.assignedUser.name || booking.assignedUser.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {booking.assignedUser.name || 'Team Member'}
+                      </p>
+                      <p className="text-sm text-gray-500">{booking.assignedUser.email}</p>
+                    </div>
+                  </div>
+                  {booking.status !== 'CANCELLED' && booking.status !== 'REJECTED' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAssignDialog(true)}
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Reassign
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p className="text-blue-700 mb-4">
+                    This booking requires a team member to be assigned. Please select who will handle this meeting.
+                  </p>
+                  <Button onClick={() => setShowAssignDialog(true)}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Assign Team Member
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Pending Confirmation Actions */}
         {booking.status === 'PENDING' && (
           <Card className="border-yellow-200 bg-yellow-50">
@@ -589,6 +707,66 @@ export default function BookingDetailPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               Decline Booking
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Team Member Assignment Dialog */}
+      <AlertDialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Assign Team Member</AlertDialogTitle>
+            <AlertDialogDescription>
+              Select a team member to handle this booking. They will receive a notification.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-4 space-y-2 max-h-64 overflow-y-auto">
+            {availableMembersData?.availableMembers?.map((member) => (
+              <button
+                key={member.userId}
+                onClick={() => setSelectedMemberId(member.userId)}
+                className={cn(
+                  'w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left',
+                  selectedMemberId === member.userId
+                    ? 'border-ocean-500 bg-ocean-50'
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                )}
+              >
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={member.image || undefined} />
+                  <AvatarFallback>
+                    {getInitials(member.name || member.email)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">
+                    {member.name || 'Team Member'}
+                  </p>
+                  <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                </div>
+                {selectedMemberId === member.userId && (
+                  <CheckCircle className="h-5 w-5 text-ocean-500 flex-shrink-0" />
+                )}
+              </button>
+            ))}
+            {(!availableMembersData?.availableMembers || availableMembersData.availableMembers.length === 0) && (
+              <p className="text-center text-gray-500 py-4">No team members available</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setSelectedMemberId(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => selectedMemberId && assignMemberMutation.mutate(selectedMemberId)}
+              disabled={!selectedMemberId || assignMemberMutation.isPending}
+              className="bg-ocean-600 hover:bg-ocean-700"
+            >
+              {assignMemberMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4 mr-2" />
+              )}
+              Assign Member
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

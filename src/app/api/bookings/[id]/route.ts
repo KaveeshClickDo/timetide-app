@@ -50,6 +50,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             length: true,
             locationType: true,
             locationValue: true,
+            schedulingType: true,
+            teamId: true,
             questions: true,
           },
         },
@@ -64,6 +66,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    // Also fetch assigned user if exists
+    let assignedUser = null;
+    if (booking?.assignedUserId) {
+      assignedUser = await prisma.user.findUnique({
+        where: { id: booking.assignedUserId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+        },
+      });
+    }
 
     if (!booking) {
       return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
@@ -80,6 +96,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Mask sensitive info for non-hosts
     const response = {
       ...booking,
+      assignedUser: isHost ? assignedUser : null,
       host: isHost ? booking.host : {
         name: booking.host.name,
         image: booking.host.image,

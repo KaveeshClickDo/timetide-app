@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-RUN npm ci --only=production
+RUN npm ci
 RUN npx prisma generate
 
 # Stage 2: Builder
@@ -27,6 +27,7 @@ RUN npm run build
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl libc6-compat
 WORKDIR /app
 
 ENV NODE_ENV production

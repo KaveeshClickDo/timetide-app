@@ -12,6 +12,7 @@ import {
   isBefore,
   startOfDay,
 } from 'date-fns';
+import { formatInTimeZone } from 'date-fns-tz';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
@@ -122,7 +123,9 @@ export default function TeamBookingWidget({
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [inviteeTimezone, setInviteeTimezone] = useState<string>('UTC');
+  const [inviteeTimezone, setInviteeTimezone] = useState<string>(
+    () => typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
+  );
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -185,7 +188,7 @@ export default function TeamBookingWidget({
                 time: slot.start,
                 start: startDate,
                 end: new Date(slot.end),
-                formattedTime: format(startDate, 'h:mm a'),
+                formattedTime: formatInTimeZone(startDate, inviteeTimezone, 'h:mm a'),
                 assignedMemberId: slot.assignedMemberId,
               };
             });
@@ -336,11 +339,11 @@ export default function TeamBookingWidget({
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2 text-gray-600">
                   <Calendar className="h-4 w-4" />
-                  {format(new Date(bookingResult.startTime), 'EEEE, MMMM d, yyyy')}
+                  {formatInTimeZone(new Date(bookingResult.startTime), inviteeTimezone, 'EEEE, MMMM d, yyyy')}
                 </div>
                 <div className="flex items-center gap-2 text-gray-600">
                   <Clock className="h-4 w-4" />
-                  {format(new Date(bookingResult.startTime), 'h:mm a')} ({inviteeTimezone})
+                  {formatInTimeZone(new Date(bookingResult.startTime), inviteeTimezone, 'h:mm a')} ({inviteeTimezone})
                 </div>
                 <div className="flex items-center gap-2 text-gray-600">
                   <LocationIcon className="h-4 w-4" />
@@ -462,7 +465,7 @@ export default function TeamBookingWidget({
                   {format(selectedDate, 'EEEE, MMMM d')}
                 </p>
                 {selectedSlot && (
-                  <p className="text-ocean-600">{format(new Date(selectedSlot), 'h:mm a')}</p>
+                  <p className="text-ocean-600">{formatInTimeZone(new Date(selectedSlot), inviteeTimezone, 'h:mm a')}</p>
                 )}
               </div>
             )}

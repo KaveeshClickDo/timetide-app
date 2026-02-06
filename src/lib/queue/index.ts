@@ -76,29 +76,4 @@ export {
   type WebhookJobData,
 } from './webhook-queue';
 
-// ============================================================================
-// Worker Initialization
-// ============================================================================
-
-/**
- * Initialize all queue workers
- * Call this during server startup
- */
-export async function initAllWorkers(): Promise<void> {
-  const { initEmailWorker } = await import('./email-queue');
-  const { initReminderWorker } = await import('./reminder-queue');
-  const { initCalendarSyncWorker, scheduleCalendarSyncJobs } = await import('./calendar-sync-queue');
-  const { initWebhookWorker } = await import('./webhook-queue');
-
-  await Promise.all([
-    initEmailWorker(),
-    initReminderWorker(),
-    initCalendarSyncWorker(),
-    initWebhookWorker(),
-  ]);
-
-  // Schedule recurring calendar sync jobs
-  await scheduleCalendarSyncJobs();
-
-  console.log('All queue workers initialized');
-}
+// Worker initialization is handled by src/lib/queue/worker.ts via initWorkers()

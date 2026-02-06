@@ -318,15 +318,6 @@ export class SlotCalculator {
     return slots;
   }
 
-  /**
-   * Convert a slot from UTC to invitee's timezone for display
-   */
-  private convertToInviteeTimezone(slot: TimeSlot): TimeSlot {
-    return {
-      start: toZonedTime(slot.start, this.options.inviteeTimezone),
-      end: toZonedTime(slot.end, this.options.inviteeTimezone),
-    };
-  }
 }
 
 // ============================================================================

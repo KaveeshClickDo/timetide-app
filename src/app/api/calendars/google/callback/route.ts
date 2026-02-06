@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { connectGoogleCalendar } from '@/lib/calendar/google'
 
 /**
@@ -34,7 +36,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const userId = state // The userId was passed as state parameter
+    // Validate that the state (userId) matches the authenticated session
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id || session.user.id !== state) {
+      console.error('OAuth state mismatch: session user does not match state parameter')
+      return NextResponse.redirect(
+        new URL(
+          '/dashboard/settings?calendar_error=unauthorized',
+          process.env.NEXT_PUBLIC_APP_URL
+        )
+      )
+    }
+
+    const userId = session.user.id
 
     // Exchange code for tokens and save calendar
     await connectGoogleCalendar(userId, code)

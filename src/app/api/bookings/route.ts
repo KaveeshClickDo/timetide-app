@@ -430,6 +430,10 @@ export async function POST(request: NextRequest) {
         location = 'Google Meet';
         // Will be set after calendar event creation
         break;
+      case 'TEAMS':
+        location = 'Microsoft Teams';
+        // Will be set after calendar event creation (via Outlook)
+        break;
       case 'ZOOM':
         location = 'Zoom';
         // Will be set after Zoom meeting creation
@@ -611,7 +615,7 @@ export async function POST(request: NextRequest) {
       update: {
         bookings: { increment: 1 },
       },
-    }).catch(() => {});
+    }).catch((err) => { console.warn('Analytics update failed:', err); });
 
     // Trigger webhook for booking.created
     triggerBookingCreatedWebhook(selectedHost.id, {

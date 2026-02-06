@@ -175,7 +175,7 @@ export async function GET(request: NextRequest) {
           views: { increment: 1 },
         },
       })
-      .catch(() => {});
+      .catch((err) => { console.warn('Analytics update failed:', err); });
 
     // Calculate booking window boundaries
     let bookingWindowStart: Date = now;

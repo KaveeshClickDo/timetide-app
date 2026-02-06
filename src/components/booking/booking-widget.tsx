@@ -90,7 +90,9 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
-  const [inviteeTimezone, setInviteeTimezone] = useState<string>('UTC')
+  const [inviteeTimezone, setInviteeTimezone] = useState<string>(
+    () => typeof window !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
+  )
   const [formData, setFormData] = useState({
     name: '',
     email: '',

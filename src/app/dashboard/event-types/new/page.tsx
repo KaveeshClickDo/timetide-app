@@ -16,6 +16,7 @@ import {
   Trash2,
   GripVertical,
   Calendar,
+  Users,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import { cn } from '@/lib/utils'
 
 const LOCATION_TYPES = [
   { value: 'GOOGLE_MEET', label: 'Google Meet', icon: Video, description: 'Auto-generate meeting link' },
+  { value: 'TEAMS', label: 'Microsoft Teams', icon: Video, description: 'Auto-generate Teams meeting link' },
   { value: 'ZOOM', label: 'Zoom', icon: Video, description: 'Use your Zoom account' },
   { value: 'PHONE', label: 'Phone Call', icon: Phone, description: 'You or invitee will call' },
   { value: 'IN_PERSON', label: 'In Person', icon: MapPin, description: 'Meet at a physical location' },
@@ -79,6 +81,9 @@ export default function NewEventTypePage() {
     periodDays: 30, // Default 30 days for ROLLING
     periodStartDate: format(new Date(), 'yyyy-MM-dd'),
     periodEndDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+    // Group booking settings
+    isGroupBooking: false,
+    seatsPerSlot: 1,
   })
 
   const [questions, setQuestions] = useState<Question[]>([])
@@ -117,6 +122,11 @@ export default function NewEventTypePage() {
       // Only include maxBookingsPerDay if > 0
       if (formData.maxBookingsPerDay > 0) {
         payload.maxBookingsPerDay = formData.maxBookingsPerDay
+      }
+
+      // Include seatsPerSlot for group bookings
+      if (formData.isGroupBooking && formData.seatsPerSlot > 1) {
+        payload.seatsPerSlot = formData.seatsPerSlot
       }
 
       // Only include questions if any exist
@@ -534,6 +544,81 @@ export default function NewEventTypePage() {
               <Plus className="h-4 w-4 mr-2" />
               Add Question
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Group Booking */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Group Booking
+            </CardTitle>
+            <CardDescription>
+              Allow multiple people to book the same time slot.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-lg border">
+              <div className="space-y-1">
+                <p className="font-medium text-gray-900">Enable Group Booking</p>
+                <p className="text-sm text-gray-500">
+                  Multiple attendees can book the same slot (e.g., workshops, webinars, office hours)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData({
+                  ...formData,
+                  isGroupBooking: !formData.isGroupBooking,
+                  seatsPerSlot: !formData.isGroupBooking ? 10 : 1
+                })}
+                className={cn(
+                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  formData.isGroupBooking ? 'bg-ocean-500' : 'bg-gray-200'
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                    formData.isGroupBooking ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </button>
+            </div>
+
+            {formData.isGroupBooking && (
+              <div className="pt-4 border-t space-y-4">
+                <div className="space-y-2">
+                  <Label>Maximum Seats Per Slot</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      min={2}
+                      max={100}
+                      value={formData.seatsPerSlot}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          seatsPerSlot: Math.min(100, Math.max(2, parseInt(e.target.value) || 2)),
+                        })
+                      }
+                      className="w-24"
+                    />
+                    <span className="text-gray-500">attendees</span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Up to {formData.seatsPerSlot} people can book each available time slot
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Use cases:</strong> Group classes, webinars, office hours, workshops, or any event where multiple guests can attend the same session.
+                  </p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

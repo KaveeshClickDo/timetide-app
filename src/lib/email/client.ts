@@ -703,3 +703,141 @@ export async function sendBookingRejectedEmail(
     replyTo: data.hostEmail,
   });
 }
+
+// ============================================================================
+// PASSWORD RESET EMAILS
+// ============================================================================
+
+export function generatePasswordResetEmail(
+  name: string,
+  resetUrl: string
+): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🌊 TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px;">
+          Reset Your Password
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          Hi ${name || 'there'}, we received a request to reset your password.
+        </p>
+
+        <div class="card">
+          <p style="margin: 0 0 16px 0; color: #475569;">
+            Click the button below to reset your password. This link will expire in 1 hour.
+          </p>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${resetUrl}" class="btn">Reset Password</a>
+          </div>
+
+          <p style="margin: 16px 0 0 0; font-size: 14px; color: #94a3b8;">
+            If you didn't request this, you can safely ignore this email. Your password won't be changed.
+          </p>
+        </div>
+
+        <div style="margin: 24px 0; padding: 16px; background: #f1f5f9; border-radius: 8px;">
+          <p style="margin: 0; font-size: 12px; color: #64748b;">
+            If the button doesn't work, copy and paste this link into your browser:
+          </p>
+          <p style="margin: 8px 0 0 0; font-size: 12px; word-break: break-all; color: #0ea5e9;">
+            ${resetUrl}
+          </p>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendPasswordResetEmail(
+  email: string,
+  name: string,
+  resetUrl: string
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: 'Reset your TimeTide password',
+    html: generatePasswordResetEmail(name, resetUrl),
+  });
+}
+
+// ============================================================================
+// EMAIL VERIFICATION EMAILS
+// ============================================================================
+
+export function generateEmailVerificationEmail(
+  name: string,
+  verifyUrl: string
+): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">🌊 TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px;">
+          Verify Your Email
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          Welcome to TimeTide, ${name || 'there'}! Please verify your email address.
+        </p>
+
+        <div class="card">
+          <p style="margin: 0 0 16px 0; color: #475569;">
+            Click the button below to verify your email address and complete your account setup.
+          </p>
+
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${verifyUrl}" class="btn">Verify Email</a>
+          </div>
+
+          <p style="margin: 16px 0 0 0; font-size: 14px; color: #94a3b8;">
+            This link will expire in 24 hours.
+          </p>
+        </div>
+
+        <div style="margin: 24px 0; padding: 16px; background: #f1f5f9; border-radius: 8px;">
+          <p style="margin: 0; font-size: 12px; color: #64748b;">
+            If the button doesn't work, copy and paste this link into your browser:
+          </p>
+          <p style="margin: 8px 0 0 0; font-size: 12px; word-break: break-all; color: #0ea5e9;">
+            ${verifyUrl}
+          </p>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendEmailVerificationEmail(
+  email: string,
+  name: string,
+  verifyUrl: string
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: 'Verify your TimeTide email address',
+    html: generateEmailVerificationEmail(name, verifyUrl),
+  });
+}

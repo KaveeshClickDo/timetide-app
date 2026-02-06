@@ -67,13 +67,6 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Type assertion for fields we need
-    const eventTypeWithPeriod = eventType as typeof eventType & {
-      periodType: 'ROLLING' | 'RANGE' | 'UNLIMITED';
-      periodStartDate: Date | null;
-      periodEndDate: Date | null;
-    };
-
     if (!eventType) {
       return NextResponse.json(
         { error: 'Event type not found' },
@@ -88,11 +81,11 @@ export async function GET(request: NextRequest) {
     let maxDays: number;
 
     // Calculate booking window based on period type
-    switch (eventTypeWithPeriod.periodType) {
+    switch (eventType.periodType) {
       case 'RANGE':
         // Use specific date range
-        const periodStart = eventTypeWithPeriod.periodStartDate ? new Date(eventTypeWithPeriod.periodStartDate) : now;
-        const periodEnd = eventTypeWithPeriod.periodEndDate ? new Date(eventTypeWithPeriod.periodEndDate) : addDays(now, 30);
+        const periodStart = eventType.periodStartDate ? new Date(eventType.periodStartDate) : now;
+        const periodEnd = eventType.periodEndDate ? new Date(eventType.periodEndDate) : addDays(now, 30);
 
         // Ensure rangeStart is not before periodStart
         if (rangeStart < periodStart) {
@@ -265,20 +258,20 @@ export async function GET(request: NextRequest) {
       update: {
         views: { increment: 1 },
       },
-    }).catch(() => {}); // Ignore errors
+    }).catch((err) => { console.warn('Analytics update failed:', err); });
 
     // Calculate booking window boundaries for the frontend
     let bookingWindowStart: Date = now;
     let bookingWindowEnd: Date | null = null;
 
-    switch (eventTypeWithPeriod.periodType) {
+    switch (eventType.periodType) {
       case 'RANGE':
-        if (eventTypeWithPeriod.periodStartDate) {
-          bookingWindowStart = new Date(eventTypeWithPeriod.periodStartDate);
+        if (eventType.periodStartDate) {
+          bookingWindowStart = new Date(eventType.periodStartDate);
           if (bookingWindowStart < now) bookingWindowStart = now;
         }
-        if (eventTypeWithPeriod.periodEndDate) {
-          bookingWindowEnd = new Date(eventTypeWithPeriod.periodEndDate);
+        if (eventType.periodEndDate) {
+          bookingWindowEnd = new Date(eventType.periodEndDate);
         }
         break;
       case 'ROLLING':
@@ -298,7 +291,7 @@ export async function GET(request: NextRequest) {
         timezone: eventType.user.timezone,
       },
       bookingWindow: {
-        type: eventTypeWithPeriod.periodType,
+        type: eventType.periodType,
         start: bookingWindowStart.toISOString(),
         end: bookingWindowEnd?.toISOString() ?? null,
       },

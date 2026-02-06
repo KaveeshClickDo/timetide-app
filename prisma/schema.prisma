@@ -574,16 +574,7 @@ enum WebhookDeliveryStatus {
 // RATE LIMITING & ANALYTICS
 // ============================================================================
 
-model RateLimit {
-  id         String   @id @default(cuid())
-  identifier String   // IP address or user ID
-  endpoint   String
-  count      Int      @default(1)
-  resetAt    DateTime
-  
-  @@unique([identifier, endpoint])
-  @@index([resetAt])
-}
+// RateLimit model removed - rate limiting is handled via Redis in src/lib/queue/rate-limiter.ts
 
 model BookingAnalytics {
   id          String   @id @default(cuid())

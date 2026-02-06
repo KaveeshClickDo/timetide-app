@@ -213,30 +213,6 @@ async function getAuthenticatedClient(calendarId: string) {
 // CALENDAR OPERATIONS
 // ============================================================================
 
-export async function listCalendars(
-  userId: string
-): Promise<calendar_v3.Schema$CalendarListEntry[]> {
-  const calendars = await prisma.calendar.findMany({
-    where: { userId, provider: 'GOOGLE', isEnabled: true },
-    include: { credentials: true },
-  });
-
-  if (calendars.length === 0) {
-    return [];
-  }
-
-  try {
-    const { oauth2Client } = await getAuthenticatedClient(calendars[0].id);
-    const calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
-
-    const response = await calendarApi.calendarList.list();
-    return response.data.items ?? [];
-  } catch (error) {
-    console.error('Failed to list calendars:', error);
-    return [];
-  }
-}
-
 /**
  * Fetch busy times from Google Calendar
  */

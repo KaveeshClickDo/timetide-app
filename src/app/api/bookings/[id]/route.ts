@@ -149,6 +149,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         eventType: {
           select: {
             title: true,
+            slug: true,
+            length: true,
             description: true,
           },
         },
@@ -226,8 +228,8 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       eventType: {
         id: booking.eventTypeId,
         title: booking.eventType.title,
-        slug: '', // Not available in this query
-        length: 0, // Not available in this query
+        slug: booking.eventType.slug,
+        length: booking.eventType.length,
       },
       host: {
         id: booking.host.id,
@@ -311,6 +313,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         eventType: {
           select: {
             title: true,
+            slug: true,
+            length: true,
             description: true,
           },
         },
@@ -412,8 +416,8 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         eventType: {
           id: booking.eventTypeId,
           title: booking.eventType.title,
-          slug: '',
-          length: 0,
+          slug: booking.eventType.slug,
+          length: booking.eventType.length,
         },
         host: {
           id: booking.host.id,

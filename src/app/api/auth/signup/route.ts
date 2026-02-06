@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { signUpSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
+import { randomBytes } from 'crypto'
+import { sendEmailVerificationEmail } from '@/lib/email/client'
 
 export async function POST(request: Request) {
   try {
@@ -89,6 +91,24 @@ export async function POST(request: Request) {
       },
     })
 
+    // Create email verification token
+    const verificationToken = randomBytes(32).toString('hex')
+    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
+
+    await prisma.verificationToken.create({
+      data: {
+        identifier: user.email,
+        token: verificationToken,
+        expires: tokenExpires,
+      },
+    })
+
+    // Send verification email (async, don't block response)
+    const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verify-email/${verificationToken}`
+    sendEmailVerificationEmail(user.email, user.name || '', verifyUrl).catch((err) => {
+      console.error('Failed to send verification email:', err)
+    })
+
     return NextResponse.json({
       success: true,
       user: {
@@ -97,6 +117,7 @@ export async function POST(request: Request) {
         email: user.email,
         username: user.username,
       },
+      message: 'Account created! Please check your email to verify your account.',
     })
   } catch (error) {
     console.error('Signup error:', error)

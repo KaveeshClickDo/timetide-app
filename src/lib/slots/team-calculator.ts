@@ -136,15 +136,17 @@ export class TeamSlotCalculator {
       };
     }
 
-    const members: TeamMemberInfo[] = assignments.map((a) => ({
-      id: a.teamMember.id,
-      userId: a.teamMember.user.id,
-      userName: a.teamMember.user.name || 'Team Member',
-      userImage: a.teamMember.user.image,
-      timezone: a.teamMember.user.timezone || 'UTC',
-      priority: a.teamMember.priority,
-      isActive: a.teamMember.isActive,
-    }));
+    const members: TeamMemberInfo[] = assignments
+      .filter((a) => a.teamMember.user) // Filter out members with null user
+      .map((a) => ({
+        id: a.teamMember.id,
+        userId: a.teamMember.user.id,
+        userName: a.teamMember.user.name || 'Team Member',
+        userImage: a.teamMember.user.image,
+        timezone: a.teamMember.user.timezone || 'UTC',
+        priority: a.teamMember.priority,
+        isActive: a.teamMember.isActive,
+      }));
 
     // Calculate slots based on scheduling type
     switch (this.schedulingType) {

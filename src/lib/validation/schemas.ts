@@ -57,6 +57,7 @@ export const updateUserSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   username: slugSchema.optional(),
   timezone: timezoneSchema.optional(),
+  timezoneAutoDetect: z.boolean().optional(),
   image: z.string().url().optional().nullable(),
 });
 

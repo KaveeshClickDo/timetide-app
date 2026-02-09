@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
@@ -45,11 +45,34 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { data: session } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const user = session?.user
+
+  // Auto-update timezone if auto-detect is enabled and browser timezone differs
+  useEffect(() => {
+    if (!user || !user.timezoneAutoDetect) return
+
+    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (detected && detected !== user.timezone) {
+      fetch('/api/users/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: detected }),
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json()
+            updateSession({ ...session, user: data.user })
+          }
+        })
+        .catch(() => {
+          // Silently fail - not critical
+        })
+    }
+  }, [user?.timezone, user?.timezoneAutoDetect])
 
   return (
     <div className="min-h-screen bg-gray-50">

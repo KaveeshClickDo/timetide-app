@@ -18,21 +18,23 @@ export default withAuth(
 
         // API routes that require authentication
         if (path.startsWith('/api/')) {
-          // Public API routes
-          const publicApiRoutes = [
-            '/api/auth',
-            '/api/slots',
-            '/api/bookings', // POST for creating bookings is public
-            '/api/users/check-username',
+          // Protected API routes (require auth)
+          const protectedApiRoutes = [
+            '/api/availability',
+            '/api/event-types',
+            '/api/users/me',
+            '/api/webhooks',
+            '/api/teams',
+            '/api/calendars',
           ]
 
-          // Check if it's a public route
-          if (publicApiRoutes.some((route) => path.startsWith(route))) {
-            return true
+          // Only require auth for explicitly protected routes
+          if (protectedApiRoutes.some((route) => path.startsWith(route))) {
+            return !!token
           }
 
-          // All other API routes require auth
-          return !!token
+          // All other API routes are public (auth, public, slots, bookings, users/[username])
+          return true
         }
 
         // All other routes are public

@@ -5,15 +5,20 @@ WORKDIR /app
 # Install dependencies for native modules
 RUN apk add --no-cache libc6-compat openssl
 
-# Copy package files
+# Copy package files and prisma config
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
-# Install dependencies
+# Dummy DATABASE_URL for prisma generate (no DB connection needed at build time)
+ARG DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ENV DATABASE_URL=$DATABASE_URL
+
+# Install dependencies (postinstall runs prisma generate)
 RUN npm ci
 
-# Generate Prisma client
-RUN npx prisma generate
+# Unset the dummy so runtime uses the real one from docker-compose
+ENV DATABASE_URL=""
 
 # Copy source code
 COPY . .

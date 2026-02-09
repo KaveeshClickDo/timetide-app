@@ -21,70 +21,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { getInitials } from '@/lib/utils'
-
-// Major world timezones - focused on economic and population centers
-const TIMEZONES = [
-  // UTC
-  { value: 'UTC', label: 'UTC (GMT+0:00)', offset: 0 },
-
-  // Americas
-  { value: 'America/New_York', label: 'New York, Toronto (GMT-5:00)', offset: -5 },
-  { value: 'America/Chicago', label: 'Chicago, Mexico City (GMT-6:00)', offset: -6 },
-  { value: 'America/Denver', label: 'Denver, Mountain Time (GMT-7:00)', offset: -7 },
-  { value: 'America/Los_Angeles', label: 'Los Angeles, San Francisco (GMT-8:00)', offset: -8 },
-  { value: 'America/Sao_Paulo', label: 'São Paulo, Brasília (GMT-3:00)', offset: -3 },
-  { value: 'America/Buenos_Aires', label: 'Buenos Aires (GMT-3:00)', offset: -3 },
-  { value: 'America/Bogota', label: 'Bogotá, Lima (GMT-5:00)', offset: -5 },
-  { value: 'America/Santiago', label: 'Santiago (GMT-4:00)', offset: -4 },
-  { value: 'America/Caracas', label: 'Caracas (GMT-4:00)', offset: -4 },
-  { value: 'Pacific/Honolulu', label: 'Honolulu (GMT-10:00)', offset: -10 },
-
-  // Europe
-  { value: 'Europe/London', label: 'London, Dublin, Lisbon (GMT+0:00)', offset: 0 },
-  { value: 'Europe/Paris', label: 'Paris, Madrid, Berlin (GMT+1:00)', offset: 1 },
-  { value: 'Europe/Rome', label: 'Rome, Amsterdam, Brussels (GMT+1:00)', offset: 1 },
-  { value: 'Europe/Warsaw', label: 'Warsaw, Stockholm (GMT+1:00)', offset: 1 },
-  { value: 'Europe/Athens', label: 'Athens, Helsinki (GMT+2:00)', offset: 2 },
-  { value: 'Europe/Istanbul', label: 'Istanbul (GMT+3:00)', offset: 3 },
-  { value: 'Europe/Moscow', label: 'Moscow (GMT+3:00)', offset: 3 },
-
-  // Africa & Middle East
-  { value: 'Africa/Cairo', label: 'Cairo (GMT+2:00)', offset: 2 },
-  { value: 'Africa/Johannesburg', label: 'Johannesburg, Cape Town (GMT+2:00)', offset: 2 },
-  { value: 'Africa/Lagos', label: 'Lagos (GMT+1:00)', offset: 1 },
-  { value: 'Africa/Nairobi', label: 'Nairobi (GMT+3:00)', offset: 3 },
-  { value: 'Asia/Dubai', label: 'Dubai, Abu Dhabi (GMT+4:00)', offset: 4 },
-  { value: 'Asia/Riyadh', label: 'Riyadh (GMT+3:00)', offset: 3 },
-  { value: 'Asia/Tel_Aviv', label: 'Tel Aviv, Jerusalem (GMT+2:00)', offset: 2 },
-  { value: 'Asia/Tehran', label: 'Tehran (GMT+3:30)', offset: 3.5 },
-
-  // South Asia
-  { value: 'Asia/Karachi', label: 'Karachi (GMT+5:00)', offset: 5 },
-  { value: 'Asia/Kolkata', label: 'Mumbai, Delhi, Bangalore (GMT+5:30)', offset: 5.5 },
-  { value: 'Asia/Colombo', label: 'Colombo (GMT+5:30)', offset: 5.5 },
-  { value: 'Asia/Dhaka', label: 'Dhaka (GMT+6:00)', offset: 6 },
-  { value: 'Asia/Kathmandu', label: 'Kathmandu (GMT+5:45)', offset: 5.75 },
-
-  // Southeast Asia
-  { value: 'Asia/Bangkok', label: 'Bangkok, Hanoi (GMT+7:00)', offset: 7 },
-  { value: 'Asia/Singapore', label: 'Singapore, Kuala Lumpur (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Jakarta', label: 'Jakarta (GMT+7:00)', offset: 7 },
-  { value: 'Asia/Manila', label: 'Manila (GMT+8:00)', offset: 8 },
-
-  // East Asia
-  { value: 'Asia/Shanghai', label: 'Beijing, Shanghai, Hong Kong (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Taipei', label: 'Taipei (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Tokyo', label: 'Tokyo, Osaka (GMT+9:00)', offset: 9 },
-  { value: 'Asia/Seoul', label: 'Seoul (GMT+9:00)', offset: 9 },
-
-  // Australia & Pacific
-  { value: 'Australia/Perth', label: 'Perth (GMT+8:00)', offset: 8 },
-  { value: 'Australia/Adelaide', label: 'Adelaide (GMT+9:30)', offset: 9.5 },
-  { value: 'Australia/Sydney', label: 'Sydney, Melbourne (GMT+10:00)', offset: 10 },
-  { value: 'Australia/Brisbane', label: 'Brisbane (GMT+10:00)', offset: 10 },
-  { value: 'Pacific/Auckland', label: 'Auckland (GMT+12:00)', offset: 12 },
-  { value: 'Pacific/Fiji', label: 'Fiji (GMT+12:00)', offset: 12 },
-].sort((a, b) => a.offset - b.offset) // Sort by GMT offset
+import { TIMEZONES } from '@/lib/constants'
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession()
@@ -95,6 +32,7 @@ export default function SettingsPage() {
     name: '',
     username: '',
     timezone: '',
+    timezoneAutoDetect: true,
     bio: '',
   })
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
@@ -137,10 +75,21 @@ export default function SettingsPage() {
         name: session.user.name || '',
         username: session.user.username || '',
         timezone: session.user.timezone || 'UTC',
+        timezoneAutoDetect: session.user.timezoneAutoDetect ?? true,
         bio: session.user.bio || '',
       })
     }
   }, [session])
+
+  // Auto-detect timezone when auto-detect is enabled
+  useEffect(() => {
+    if (formData.timezoneAutoDetect) {
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+      if (detected && detected !== formData.timezone) {
+        setFormData((prev) => ({ ...prev, timezone: detected }))
+      }
+    }
+  }, [formData.timezoneAutoDetect])
 
   // Check username availability
   useEffect(() => {
@@ -477,22 +426,57 @@ export default function SettingsPage() {
               Your timezone is used for displaying availability.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="timezone">Timezone</Label>
-              <select
-                id="timezone"
-                value={formData.timezone}
-                onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
-              >
-                {TIMEZONES.map((tz) => (
-                  <option key={tz.value} value={tz.value}>
-                    {tz.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <CardContent className="space-y-4">
+            {/* Auto-detect checkbox */}
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.timezoneAutoDetect}
+                onChange={(e) => {
+                  const autoDetect = e.target.checked
+                  setFormData((prev) => {
+                    const updated = { ...prev, timezoneAutoDetect: autoDetect }
+                    if (autoDetect) {
+                      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+                      if (detected) updated.timezone = detected
+                    }
+                    return updated
+                  })
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
+              />
+              <span className="text-sm font-medium text-gray-700">
+                Automatically detect timezone
+              </span>
+            </label>
+
+            {formData.timezoneAutoDetect ? (
+              <div className="flex items-center gap-2 px-3 py-2.5 bg-ocean-50 border border-ocean-200 rounded-lg">
+                <Globe className="h-4 w-4 text-ocean-600" />
+                <span className="text-sm text-ocean-700 font-medium">
+                  {formData.timezone}
+                </span>
+                <span className="text-xs text-ocean-500">
+                  ({TIMEZONES.find((tz) => tz.value === formData.timezone)?.label || formData.timezone})
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="timezone">Timezone</Label>
+                <select
+                  id="timezone"
+                  value={formData.timezone}
+                  onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+                  className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </CardContent>
         </Card>
 

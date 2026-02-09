@@ -17,6 +17,9 @@ prisma/dev.db
 *.sqlite
 *.db
 
+# Prisma generated client
+src/generated/
+
 # Logs
 logs/
 *.log

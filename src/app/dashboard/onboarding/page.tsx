@@ -27,54 +27,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
-
-const TIMEZONES = [
-  { value: 'UTC', label: 'UTC (GMT+0:00)', offset: 0 },
-  { value: 'America/New_York', label: 'New York, Toronto (GMT-5:00)', offset: -5 },
-  { value: 'America/Chicago', label: 'Chicago, Mexico City (GMT-6:00)', offset: -6 },
-  { value: 'America/Denver', label: 'Denver, Mountain Time (GMT-7:00)', offset: -7 },
-  { value: 'America/Los_Angeles', label: 'Los Angeles, San Francisco (GMT-8:00)', offset: -8 },
-  { value: 'America/Sao_Paulo', label: 'São Paulo, Brasília (GMT-3:00)', offset: -3 },
-  { value: 'America/Buenos_Aires', label: 'Buenos Aires (GMT-3:00)', offset: -3 },
-  { value: 'America/Bogota', label: 'Bogotá, Lima (GMT-5:00)', offset: -5 },
-  { value: 'America/Santiago', label: 'Santiago (GMT-4:00)', offset: -4 },
-  { value: 'America/Caracas', label: 'Caracas (GMT-4:00)', offset: -4 },
-  { value: 'Pacific/Honolulu', label: 'Honolulu (GMT-10:00)', offset: -10 },
-  { value: 'Europe/London', label: 'London, Dublin, Lisbon (GMT+0:00)', offset: 0 },
-  { value: 'Europe/Paris', label: 'Paris, Madrid, Berlin (GMT+1:00)', offset: 1 },
-  { value: 'Europe/Rome', label: 'Rome, Amsterdam, Brussels (GMT+1:00)', offset: 1 },
-  { value: 'Europe/Warsaw', label: 'Warsaw, Stockholm (GMT+1:00)', offset: 1 },
-  { value: 'Europe/Athens', label: 'Athens, Helsinki (GMT+2:00)', offset: 2 },
-  { value: 'Europe/Istanbul', label: 'Istanbul (GMT+3:00)', offset: 3 },
-  { value: 'Europe/Moscow', label: 'Moscow (GMT+3:00)', offset: 3 },
-  { value: 'Africa/Cairo', label: 'Cairo (GMT+2:00)', offset: 2 },
-  { value: 'Africa/Johannesburg', label: 'Johannesburg, Cape Town (GMT+2:00)', offset: 2 },
-  { value: 'Africa/Lagos', label: 'Lagos (GMT+1:00)', offset: 1 },
-  { value: 'Africa/Nairobi', label: 'Nairobi (GMT+3:00)', offset: 3 },
-  { value: 'Asia/Dubai', label: 'Dubai, Abu Dhabi (GMT+4:00)', offset: 4 },
-  { value: 'Asia/Riyadh', label: 'Riyadh (GMT+3:00)', offset: 3 },
-  { value: 'Asia/Tel_Aviv', label: 'Tel Aviv, Jerusalem (GMT+2:00)', offset: 2 },
-  { value: 'Asia/Tehran', label: 'Tehran (GMT+3:30)', offset: 3.5 },
-  { value: 'Asia/Karachi', label: 'Karachi (GMT+5:00)', offset: 5 },
-  { value: 'Asia/Kolkata', label: 'Mumbai, Delhi, Bangalore (GMT+5:30)', offset: 5.5 },
-  { value: 'Asia/Colombo', label: 'Colombo (GMT+5:30)', offset: 5.5 },
-  { value: 'Asia/Dhaka', label: 'Dhaka (GMT+6:00)', offset: 6 },
-  { value: 'Asia/Kathmandu', label: 'Kathmandu (GMT+5:45)', offset: 5.75 },
-  { value: 'Asia/Bangkok', label: 'Bangkok, Hanoi (GMT+7:00)', offset: 7 },
-  { value: 'Asia/Singapore', label: 'Singapore, Kuala Lumpur (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Jakarta', label: 'Jakarta (GMT+7:00)', offset: 7 },
-  { value: 'Asia/Manila', label: 'Manila (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Shanghai', label: 'Beijing, Shanghai, Hong Kong (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Taipei', label: 'Taipei (GMT+8:00)', offset: 8 },
-  { value: 'Asia/Tokyo', label: 'Tokyo, Osaka (GMT+9:00)', offset: 9 },
-  { value: 'Asia/Seoul', label: 'Seoul (GMT+9:00)', offset: 9 },
-  { value: 'Australia/Perth', label: 'Perth (GMT+8:00)', offset: 8 },
-  { value: 'Australia/Adelaide', label: 'Adelaide (GMT+9:30)', offset: 9.5 },
-  { value: 'Australia/Sydney', label: 'Sydney, Melbourne (GMT+10:00)', offset: 10 },
-  { value: 'Australia/Brisbane', label: 'Brisbane (GMT+10:00)', offset: 10 },
-  { value: 'Pacific/Auckland', label: 'Auckland (GMT+12:00)', offset: 12 },
-  { value: 'Pacific/Fiji', label: 'Fiji (GMT+12:00)', offset: 12 },
-].sort((a, b) => a.offset - b.offset)
+import { TIMEZONES } from '@/lib/constants'
 
 const STEPS = [
   { id: 1, title: 'Timezone', icon: Globe },
@@ -135,6 +88,7 @@ export default function OnboardingPage() {
 
   const [currentStep, setCurrentStep] = useState(1)
   const [timezone, setTimezone] = useState('')
+  const [timezoneAutoDetect, setTimezoneAutoDetect] = useState(true)
   const [username, setUsername] = useState('')
   const [copied, setCopied] = useState(false)
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null)
@@ -204,20 +158,20 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (session?.user) {
       setTimezone(session.user.timezone || 'America/New_York')
+      setTimezoneAutoDetect(session.user.timezoneAutoDetect ?? true)
       setUsername(session.user.username || '')
     }
   }, [session])
 
-  // Auto-detect timezone on mount
+  // Auto-detect timezone when auto-detect is enabled
   useEffect(() => {
-    if (!session?.user?.timezone || session.user.timezone === 'America/New_York') {
+    if (timezoneAutoDetect) {
       const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
-      const exists = TIMEZONES.find(tz => tz.value === detected)
-      if (exists) {
+      if (detected) {
         setTimezone(detected)
       }
     }
-  }, [session])
+  }, [timezoneAutoDetect])
 
   // Check username availability
   useEffect(() => {
@@ -244,7 +198,7 @@ export default function OnboardingPage() {
 
   // Save user mutation
   const saveUserMutation = useMutation({
-    mutationFn: async (data: { timezone?: string; username?: string; onboardingCompleted?: boolean }) => {
+    mutationFn: async (data: { timezone?: string; timezoneAutoDetect?: boolean; username?: string; onboardingCompleted?: boolean }) => {
       const res = await fetch('/api/users/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -347,7 +301,7 @@ export default function OnboardingPage() {
   const handleNext = async () => {
     if (currentStep === 1) {
       // Save timezone
-      await saveUserMutation.mutateAsync({ timezone })
+      await saveUserMutation.mutateAsync({ timezone, timezoneAutoDetect })
       setCurrentStep(2)
     } else if (currentStep === 2) {
       // Save availability if changed
@@ -493,22 +447,59 @@ export default function OnboardingPage() {
                     This ensures your availability is displayed correctly to people booking with you.
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="timezone">Your Timezone</Label>
-                  <select
-                    id="timezone"
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    className="w-full h-12 rounded-lg border border-input bg-background px-3 text-sm"
-                  >
-                    {TIMEZONES.map((tz) => (
-                      <option key={tz.value} value={tz.value}>
-                        {tz.label}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-2">
-                    We detected your timezone automatically. Change it if needed.
+                <div className="space-y-4">
+                  {/* Auto-detect checkbox */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={timezoneAutoDetect}
+                      onChange={(e) => {
+                        const autoDetect = e.target.checked
+                        setTimezoneAutoDetect(autoDetect)
+                        if (autoDetect) {
+                          const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
+                          if (detected) setTimezone(detected)
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      Automatically detect timezone
+                    </span>
+                  </label>
+
+                  {timezoneAutoDetect ? (
+                    <div className="flex items-center gap-2 px-3 py-2.5 bg-ocean-50 border border-ocean-200 rounded-lg">
+                      <Globe className="h-4 w-4 text-ocean-600" />
+                      <span className="text-sm text-ocean-700 font-medium">
+                        {timezone}
+                      </span>
+                      <span className="text-xs text-ocean-500">
+                        ({TIMEZONES.find((tz) => tz.value === timezone)?.label || timezone})
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Label htmlFor="timezone">Your Timezone</Label>
+                      <select
+                        id="timezone"
+                        value={timezone}
+                        onChange={(e) => setTimezone(e.target.value)}
+                        className="w-full h-12 rounded-lg border border-input bg-background px-3 text-sm"
+                      >
+                        {TIMEZONES.map((tz) => (
+                          <option key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500">
+                    {timezoneAutoDetect
+                      ? 'Your timezone was detected automatically. Uncheck to select manually.'
+                      : 'Select your timezone from the list above.'}
                   </p>
                 </div>
               </div>

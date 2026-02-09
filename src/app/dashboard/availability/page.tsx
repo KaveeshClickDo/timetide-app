@@ -76,7 +76,7 @@ export default function AvailabilityPage() {
       const res = await fetch('/api/availability')
       if (!res.ok) throw new Error('Failed to fetch')
       const data = await res.json()
-      return data.schedules as Schedule[]
+      return Array.isArray(data.schedules) ? data.schedules : []
     },
   })
 
@@ -379,7 +379,8 @@ export default function AvailabilityPage() {
       <div className="mt-6 flex items-center gap-2 text-sm text-gray-500">
         <Clock className="h-4 w-4" />
         <span>
-          Times are shown in {session?.user?.timezone || 'UTC'}. You can change your timezone in{' '}
+          Times are shown in {session?.user?.timezone || 'UTC'}
+          {session?.user?.timezoneAutoDetect ? ' (auto-detected)' : ''}. You can change your timezone in{' '}
           <a href="/dashboard/settings" className="text-ocean-600 hover:underline">
             Settings
           </a>

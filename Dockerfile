@@ -55,8 +55,8 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy dotenv for prisma.config.ts (needed by prisma migrate deploy)
-COPY --from=builder /app/node_modules/dotenv ./node_modules/dotenv
+# Install prisma CLI and dotenv for migrations
+RUN npm install --no-save prisma dotenv
 
 USER nextjs
 

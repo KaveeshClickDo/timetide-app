@@ -10,6 +10,9 @@ COPY package*.json ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 
+# Dummy URL for prisma generate (no actual connection made)
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
 RUN npm ci
 RUN npx prisma generate
 

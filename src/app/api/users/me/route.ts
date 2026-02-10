@@ -23,6 +23,7 @@ export async function GET() {
         timezoneAutoDetect: true,
         bio: true,
         onboardingCompleted: true,
+        plan: true,
         createdAt: true,
       },
     })
@@ -50,7 +51,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { name, username, timezone, timezoneAutoDetect, bio, onboardingCompleted } = body
+    const { name, username, timezone, timezoneAutoDetect, bio, onboardingCompleted, plan } = body
 
     // Validate username if provided
     if (username !== undefined) {
@@ -91,6 +92,7 @@ export async function PATCH(request: Request) {
         ...(timezoneAutoDetect !== undefined && { timezoneAutoDetect }),
         ...(bio !== undefined && { bio }),
         ...(onboardingCompleted !== undefined && { onboardingCompleted }),
+        ...(plan !== undefined && { plan }),
       },
       select: {
         id: true,
@@ -102,6 +104,7 @@ export async function PATCH(request: Request) {
         timezoneAutoDetect: true,
         bio: true,
         onboardingCompleted: true,
+        plan: true,
       },
     })
 

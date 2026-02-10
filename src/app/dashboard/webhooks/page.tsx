@@ -49,6 +49,9 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+import { useFeatureGate } from '@/hooks/use-feature-gate';
+import { FeatureGatePage } from '@/components/feature-gate-page';
+import { UpgradeModal } from '@/components/upgrade-modal';
 
 interface WebhookData {
   id: string;
@@ -239,6 +242,19 @@ export default function WebhooksPage() {
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${diffDays}d ago`;
   };
+
+  const webhookCount = data?.webhooks?.length ?? 0;
+  const webhookGate = useFeatureGate('maxWebhooks', webhookCount);
+
+  if (webhookGate.limit === 0 && webhookGate.requiresUpgrade) {
+    return (
+      <FeatureGatePage
+        feature="maxWebhooks"
+        requiredPlan={webhookGate.requiredPlan}
+        description="Automate workflows by sending real-time notifications when bookings are created, cancelled, or rescheduled. Available on the Pro plan."
+      />
+    );
+  }
 
   if (isLoading) {
     return (

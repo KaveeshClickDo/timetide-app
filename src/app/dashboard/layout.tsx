@@ -12,12 +12,14 @@ import {
   Users,
   BarChart3,
   Link as LinkIcon,
+  Webhook,
   Menu,
   X,
   LogOut,
   ChevronDown,
   Plus,
   Bell,
+  CreditCard,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,14 +31,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { cn, getInitials } from '@/lib/utils'
+import { getPlanBadgeStyles, PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
 
-const navigation = [
+const navigation: { name: string; href: string; icon: typeof Calendar; requiredPlan?: PlanTier }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
   { name: 'Event Types', href: '/dashboard/event-types', icon: LinkIcon },
   { name: 'Availability', href: '/dashboard/availability', icon: Clock },
-  { name: 'Teams', href: '/dashboard/teams', icon: Users },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
+  { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, requiredPlan: 'PRO' },
+  { name: 'Teams', href: '/dashboard/teams', icon: Users, requiredPlan: 'TEAM' },
+  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, requiredPlan: 'TEAM' },
+  { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
@@ -118,6 +124,9 @@ export default function DashboardLayout({
                 item.href === '/dashboard'
                   ? pathname === '/dashboard'
                   : pathname.startsWith(item.href)
+              const userPlan = (user?.plan as PlanTier) || 'FREE'
+              const tierOrder: PlanTier[] = ['FREE', 'PRO', 'TEAM']
+              const isLocked = item.requiredPlan && tierOrder.indexOf(userPlan) < tierOrder.indexOf(item.requiredPlan)
               return (
                 <Link
                   key={item.name}
@@ -132,6 +141,11 @@ export default function DashboardLayout({
                 >
                   <item.icon className="h-5 w-5" />
                   {item.name}
+                  {isLocked && (
+                    <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                      {item.requiredPlan}
+                    </span>
+                  )}
                 </Link>
               )
             })}
@@ -148,10 +162,15 @@ export default function DashboardLayout({
                       {user?.name ? getInitials(user.name) : 'U'}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 text-left">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {user?.name || 'User'}
-                    </p>
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {user?.name || 'User'}
+                      </p>
+                      <Badge className={cn('text-[10px] px-1.5 py-0', getPlanBadgeStyles((user?.plan as PlanTier) || 'FREE'))}>
+                        {user?.plan || 'FREE'}
+                      </Badge>
+                    </div>
                     <p className="text-xs text-gray-500 truncate">
                       {user?.email}
                     </p>
@@ -166,6 +185,12 @@ export default function DashboardLayout({
                   <Link href="/dashboard/settings">
                     <Settings className="mr-2 h-4 w-4" />
                     Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/billing">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Billing & Plans
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>

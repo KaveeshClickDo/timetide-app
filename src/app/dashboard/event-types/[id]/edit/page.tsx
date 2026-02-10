@@ -39,6 +39,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
+import { useFeatureGate } from '@/hooks/use-feature-gate'
+import { ProBadge } from '@/components/pro-badge'
 
 interface PageProps {
   params: { id: string }
@@ -110,6 +112,12 @@ export default function EditEventTypePage({ params }: PageProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+
+  // Feature gates
+  const customQuestionsGate = useFeatureGate('customQuestions')
+  const groupBookingGate = useFeatureGate('groupBooking')
+  const bufferGate = useFeatureGate('bufferTimes')
+  const bookingLimitGate = useFeatureGate('bookingLimits')
 
   // Fetch event type
   const { data: eventTypeData, isLoading } = useQuery({
@@ -665,7 +673,10 @@ export default function EditEventTypePage({ params }: PageProps) {
         {/* Custom Questions */}
         <Card>
           <CardHeader>
-            <CardTitle>Booking Questions</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Booking Questions
+              <ProBadge feature="customQuestions" />
+            </CardTitle>
             <CardDescription>
               Ask invitees for additional information when they book.
             </CardDescription>
@@ -744,9 +755,10 @@ export default function EditEventTypePage({ params }: PageProps) {
               </div>
             ))}
 
-            <Button type="button" variant="outline" onClick={addQuestion}>
+            <Button type="button" variant="outline" onClick={addQuestion} disabled={!customQuestionsGate.canAccess}>
               <Plus className="h-4 w-4 mr-2" />
               Add Question
+              {!customQuestionsGate.canAccess && <span className="ml-1 text-[10px] text-ocean-600 font-semibold">PRO</span>}
             </Button>
           </CardContent>
         </Card>
@@ -757,6 +769,7 @@ export default function EditEventTypePage({ params }: PageProps) {
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
               Group Booking
+              <ProBadge feature="groupBooking" />
             </CardTitle>
             <CardDescription>
               Allow multiple people to book the same time slot.
@@ -772,13 +785,15 @@ export default function EditEventTypePage({ params }: PageProps) {
               </div>
               <button
                 type="button"
-                onClick={() => setFormData({
+                disabled={!groupBookingGate.canAccess}
+                onClick={() => groupBookingGate.canAccess && setFormData({
                   ...formData,
                   isGroupBooking: !formData.isGroupBooking,
                   seatsPerSlot: !formData.isGroupBooking ? 10 : 1
                 })}
                 className={cn(
                   'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  !groupBookingGate.canAccess ? 'bg-gray-100 cursor-not-allowed' :
                   formData.isGroupBooking ? 'bg-ocean-500' : 'bg-gray-200'
                 )}
               >
@@ -791,7 +806,7 @@ export default function EditEventTypePage({ params }: PageProps) {
               </button>
             </div>
 
-            {formData.isGroupBooking && (
+            {formData.isGroupBooking && groupBookingGate.canAccess && (
               <div className="pt-4 border-t space-y-4">
                 <div className="space-y-2">
                   <Label>Maximum Seats Per Slot</Label>
@@ -835,7 +850,10 @@ export default function EditEventTypePage({ params }: PageProps) {
               className="flex items-center justify-between w-full text-left"
             >
               <div>
-                <CardTitle>Advanced Settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Advanced Settings
+                  <ProBadge feature="bufferTimes" />
+                </CardTitle>
                 <CardDescription>Buffer times, booking limits, and more.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
@@ -847,11 +865,15 @@ export default function EditEventTypePage({ params }: PageProps) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Buffer Before (minutes)</Label>
+                  <Label className="flex items-center gap-2">
+                    Buffer Before (minutes)
+                    {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
+                  </Label>
                   <Input
                     type="number"
                     min={0}
                     value={formData.bufferTimeBefore}
+                    disabled={!bufferGate.canAccess}
                     onChange={(e) =>
                       setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })
                     }
@@ -861,11 +883,15 @@ export default function EditEventTypePage({ params }: PageProps) {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Buffer After (minutes)</Label>
+                  <Label className="flex items-center gap-2">
+                    Buffer After (minutes)
+                    {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
+                  </Label>
                   <Input
                     type="number"
                     min={0}
                     value={formData.bufferTimeAfter}
+                    disabled={!bufferGate.canAccess}
                     onChange={(e) =>
                       setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })
                     }
@@ -890,11 +916,15 @@ export default function EditEventTypePage({ params }: PageProps) {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Max Bookings Per Day</Label>
+                  <Label className="flex items-center gap-2">
+                    Max Bookings Per Day
+                    {!bookingLimitGate.canAccess && <ProBadge feature="bookingLimits" />}
+                  </Label>
                   <Input
                     type="number"
                     min={0}
                     value={formData.maxBookingsPerDay}
+                    disabled={!bookingLimitGate.canAccess}
                     onChange={(e) =>
                       setFormData({
                         ...formData,

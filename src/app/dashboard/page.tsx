@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn, getInitials, formatTime, formatDuration } from '@/lib/utils'
+import { UpgradeBanner } from '@/components/upgrade-banner'
 
 interface Booking {
   id: string
@@ -162,6 +163,9 @@ export default function DashboardPage() {
             : 'No upcoming bookings'}
         </p>
       </div>
+
+      {/* Upgrade Banner */}
+      <UpgradeBanner />
 
       {/* Stats Cards */}
       <div className="grid sm:grid-cols-3 gap-4 mb-8">

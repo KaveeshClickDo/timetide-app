@@ -26,6 +26,8 @@ import {
   Cell,
   Legend,
 } from 'recharts'
+import { useFeatureGate } from '@/hooks/use-feature-gate'
+import { FeatureGatePage } from '@/components/feature-gate-page'
 
 interface AnalyticsData {
   stats: {
@@ -115,6 +117,18 @@ export default function AnalyticsPage() {
       return res.json()
     },
   })
+
+  const analyticsGate = useFeatureGate('analytics');
+
+  if (analyticsGate.requiresUpgrade) {
+    return (
+      <FeatureGatePage
+        feature="analytics"
+        requiredPlan={analyticsGate.requiredPlan}
+        description="View booking trends, popular event types, peak hours, and guest insights. Available on the Team plan."
+      />
+    );
+  }
 
   if (isLoading) {
     return (

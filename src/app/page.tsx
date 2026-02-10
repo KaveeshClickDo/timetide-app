@@ -14,6 +14,8 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { authOptions } from '@/lib/auth'
+import { PRICING_TIERS } from '@/lib/pricing'
+import { cn } from '@/lib/utils'
 
 export default async function HomePage() {
   // Redirect logged-in users to dashboard
@@ -308,100 +310,42 @@ export default async function HomePage() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-            {/* Free Plan */}
-            <div className="card-ocean p-8">
-              <h3 className="text-xl font-heading font-semibold text-gray-900 mb-2">
-                Free
-              </h3>
-              <p className="text-gray-600 mb-6">Perfect for individuals</p>
-              <div className="mb-6">
-                <span className="text-4xl font-heading font-bold">$0</span>
-                <span className="text-gray-500">/month</span>
+            {PRICING_TIERS.map((tier) => (
+              <div
+                key={tier.id}
+                className={cn(
+                  'card-ocean p-8',
+                  tier.isPopular && 'border-2 border-ocean-500 relative'
+                )}
+              >
+                {tier.isPopular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-ocean-500 text-white text-sm font-medium rounded-full">
+                    Popular
+                  </div>
+                )}
+                <h3 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                  {tier.name}
+                </h3>
+                <p className="text-gray-600 mb-6">{tier.description}</p>
+                <div className="mb-6">
+                  <span className="text-4xl font-heading font-bold">{tier.priceLabel}</span>
+                  <span className="text-gray-500">{tier.priceSuffix}</span>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  {tier.features.map((feature) => (
+                    <li key={feature} className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-ocean-500" />
+                      <span className="text-gray-600">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/auth/signup">
+                  <Button variant={tier.ctaVariant} className="w-full">
+                    {tier.ctaLabel}
+                  </Button>
+                </Link>
               </div>
-              <ul className="space-y-3 mb-8">
-                {[
-                  '1 Event Type',
-                  'Unlimited Bookings',
-                  'Calendar Integration',
-                  'Email Notifications',
-                ].map((feature) => (
-                  <li key={feature} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-ocean-500" />
-                    <span className="text-gray-600">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link href="/auth/signup">
-                <Button variant="outline" className="w-full">
-                  Get Started
-                </Button>
-              </Link>
-            </div>
-
-            {/* Pro Plan */}
-            <div className="card-ocean p-8 border-2 border-ocean-500 relative">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-ocean-500 text-white text-sm font-medium rounded-full">
-                Popular
-              </div>
-              <h3 className="text-xl font-heading font-semibold text-gray-900 mb-2">
-                Pro
-              </h3>
-              <p className="text-gray-600 mb-6">For growing professionals</p>
-              <div className="mb-6">
-                <span className="text-4xl font-heading font-bold">$12</span>
-                <span className="text-gray-500">/month</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                {[
-                  'Unlimited Event Types',
-                  'Custom Branding',
-                  'Multiple Calendars',
-                  'Buffer Times',
-                  'Custom Questions',
-                  'Priority Support',
-                ].map((feature) => (
-                  <li key={feature} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-ocean-500" />
-                    <span className="text-gray-600">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link href="/auth/signup">
-                <Button className="w-full">Start Free Trial</Button>
-              </Link>
-            </div>
-
-            {/* Team Plan */}
-            <div className="card-ocean p-8">
-              <h3 className="text-xl font-heading font-semibold text-gray-900 mb-2">
-                Team
-              </h3>
-              <p className="text-gray-600 mb-6">For teams and businesses</p>
-              <div className="mb-6">
-                <span className="text-4xl font-heading font-bold">$20</span>
-                <span className="text-gray-500">/user/month</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                {[
-                  'Everything in Pro',
-                  'Team Scheduling',
-                  'Round Robin',
-                  'Collective Events',
-                  'Analytics',
-                  'API Access',
-                ].map((feature) => (
-                  <li key={feature} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-ocean-500" />
-                    <span className="text-gray-600">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <Link href="/auth/signup">
-                <Button variant="outline" className="w-full">
-                  Contact Sales
-                </Button>
-              </Link>
-            </div>
+            ))}
           </div>
         </div>
       </section>

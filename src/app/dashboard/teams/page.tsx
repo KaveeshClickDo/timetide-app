@@ -43,6 +43,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
+import { useFeatureGate } from '@/hooks/use-feature-gate';
+import { FeatureGatePage } from '@/components/feature-gate-page';
 
 interface TeamMember {
   id: string;
@@ -165,6 +167,18 @@ export default function TeamsPage() {
         return 'outline';
     }
   };
+
+  const teamsGate = useFeatureGate('teams');
+
+  if (teamsGate.requiresUpgrade) {
+    return (
+      <FeatureGatePage
+        feature="teams"
+        requiredPlan={teamsGate.requiredPlan}
+        description="Create teams, add members, and set up round-robin or collective scheduling. Available on the Team plan."
+      />
+    );
+  }
 
   if (isLoading) {
     return (

@@ -114,13 +114,14 @@ export const authOptions: NextAuthOptions = {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true },
+          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true },
         });
 
         token.username = dbUser?.username ?? undefined;
         token.timezone = dbUser?.timezone ?? 'UTC';
         token.timezoneAutoDetect = dbUser?.timezoneAutoDetect ?? true;
         token.bio = dbUser?.bio ?? undefined;
+        token.plan = dbUser?.plan ?? 'FREE';
       }
 
       return token;
@@ -133,6 +134,7 @@ export const authOptions: NextAuthOptions = {
         session.user.timezone = token.timezone as string;
         session.user.timezoneAutoDetect = token.timezoneAutoDetect as boolean;
         session.user.bio = token.bio as string | undefined;
+        session.user.plan = token.plan as string;
       }
       return session;
     },
@@ -196,6 +198,7 @@ declare module 'next-auth' {
       timezone: string;
       timezoneAutoDetect: boolean;
       bio?: string;
+      plan: string;
     };
   }
 
@@ -204,6 +207,7 @@ declare module 'next-auth' {
     timezone?: string;
     timezoneAutoDetect?: boolean;
     bio?: string;
+    plan?: string;
   }
 }
 
@@ -214,6 +218,7 @@ declare module 'next-auth/jwt' {
     timezone: string;
     timezoneAutoDetect: boolean;
     bio?: string;
+    plan: string;
     accessToken?: string;
     refreshToken?: string;
     provider?: string;

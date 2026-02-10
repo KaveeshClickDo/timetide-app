@@ -32,6 +32,8 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { cn, formatDuration } from '@/lib/utils'
 import { EmbedCodeGenerator } from '@/components/embed-code-generator'
+import { useFeatureGate } from '@/hooks/use-feature-gate'
+import { UpgradeModal } from '@/components/upgrade-modal'
 
 interface EventType {
   id: string
@@ -55,6 +57,42 @@ const locationLabels: Record<string, { label: string; icon: typeof Video }> = {
   CUSTOM: { label: 'Custom Location', icon: Globe },
 }
 
+function EventTypesHeader({ eventTypeCount, onUpgradeNeeded }: { eventTypeCount: number; onUpgradeNeeded: () => void }) {
+  const { canAccess, limit, limitLabel } = useFeatureGate('maxEventTypes', eventTypeCount)
+  const isAtLimit = !canAccess
+
+  return (
+    <div className="flex items-center justify-between mb-8">
+      <div>
+        <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+          Event Types
+        </h1>
+        <p className="text-gray-600">
+          Create and manage the types of meetings people can book with you.
+          {limit !== Infinity && (
+            <span className={cn('ml-2 text-sm font-medium', isAtLimit ? 'text-amber-600' : 'text-gray-500')}>
+              ({eventTypeCount}/{limitLabel} used)
+            </span>
+          )}
+        </p>
+      </div>
+      {isAtLimit ? (
+        <Button onClick={onUpgradeNeeded}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Event Type
+        </Button>
+      ) : (
+        <Link href="/dashboard/event-types/new">
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            New Event Type
+          </Button>
+        </Link>
+      )}
+    </div>
+  )
+}
+
 export default function EventTypesPage() {
   const { data: session } = useSession()
   const { toast } = useToast()
@@ -62,6 +100,7 @@ export default function EventTypesPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const username = session?.user?.username
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
   const { data: eventTypes, isLoading } = useQuery<EventType[]>({
     queryKey: ['eventTypes'],
@@ -124,22 +163,16 @@ export default function EventTypesPage() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
-            Event Types
-          </h1>
-          <p className="text-gray-600">
-            Create and manage the types of meetings people can book with you.
-          </p>
-        </div>
-        <Link href="/dashboard/event-types/new">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            New Event Type
-          </Button>
-        </Link>
-      </div>
+      <EventTypesHeader
+        eventTypeCount={eventTypes?.length ?? 0}
+        onUpgradeNeeded={() => setShowUpgradeModal(true)}
+      />
+      <UpgradeModal
+        feature="maxEventTypes"
+        requiredPlan="PRO"
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
 
       {/* Public link info */}
       {username && (

@@ -25,6 +25,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
+import { useFeatureGate } from '@/hooks/use-feature-gate'
+import { ProBadge } from '@/components/pro-badge'
 
 const LOCATION_TYPES = [
   { value: 'GOOGLE_MEET', label: 'Google Meet', icon: Video, description: 'Auto-generate meeting link' },
@@ -58,6 +60,169 @@ interface Question {
   required: boolean
   placeholder?: string
   options?: string[]
+}
+
+function GatedAddQuestion({ onAdd }: { onAdd: () => void }) {
+  const { canAccess } = useFeatureGate('customQuestions')
+  return (
+    <Button type="button" variant="outline" onClick={onAdd} disabled={!canAccess}>
+      <Plus className="h-4 w-4 mr-2" />
+      Add Question
+      {!canAccess && <span className="ml-1 text-[10px] text-ocean-600 font-semibold">PRO</span>}
+    </Button>
+  )
+}
+
+function GatedGroupBookingContent({ formData, setFormData }: { formData: any; setFormData: (v: any) => void }) {
+  const { canAccess } = useFeatureGate('groupBooking')
+  return (
+    <CardContent className="space-y-4">
+      <div className="flex items-center justify-between p-4 rounded-lg border">
+        <div className="space-y-1">
+          <p className="font-medium text-gray-900">Enable Group Booking</p>
+          <p className="text-sm text-gray-500">
+            Multiple attendees can book the same slot (e.g., workshops, webinars, office hours)
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={!canAccess}
+          onClick={() => canAccess && setFormData({
+            ...formData,
+            isGroupBooking: !formData.isGroupBooking,
+            seatsPerSlot: !formData.isGroupBooking ? 10 : 1
+          })}
+          className={cn(
+            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+            !canAccess ? 'bg-gray-100 cursor-not-allowed' :
+            formData.isGroupBooking ? 'bg-ocean-500' : 'bg-gray-200'
+          )}
+        >
+          <span
+            className={cn(
+              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+              formData.isGroupBooking ? 'translate-x-6' : 'translate-x-1'
+            )}
+          />
+        </button>
+      </div>
+      {formData.isGroupBooking && canAccess && (
+        <div className="pt-4 border-t space-y-4">
+          <div className="space-y-2">
+            <Label>Maximum Seats Per Slot</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                type="number"
+                min={2}
+                max={100}
+                value={formData.seatsPerSlot}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    seatsPerSlot: Math.min(100, Math.max(2, parseInt(e.target.value) || 2)),
+                  })
+                }
+                className="w-24"
+              />
+              <span className="text-gray-500">attendees</span>
+            </div>
+          </div>
+          <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+            <p className="text-sm text-blue-800">
+              <strong>Use cases:</strong> Group classes, webinars, office hours, workshops, or any event where multiple guests can attend the same session.
+            </p>
+          </div>
+        </div>
+      )}
+    </CardContent>
+  )
+}
+
+function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFormData: (v: any) => void }) {
+  const bufferGate = useFeatureGate('bufferTimes')
+  const bookingLimitGate = useFeatureGate('bookingLimits')
+  return (
+    <CardContent className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            Buffer Before (minutes)
+            {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.bufferTimeBefore}
+            disabled={!bufferGate.canAccess}
+            onChange={(e) =>
+              setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })
+            }
+          />
+          <p className="text-xs text-gray-500">Free time before each meeting</p>
+        </div>
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            Buffer After (minutes)
+            {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.bufferTimeAfter}
+            disabled={!bufferGate.canAccess}
+            onChange={(e) =>
+              setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })
+            }
+          />
+          <p className="text-xs text-gray-500">Free time after each meeting</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Minimum Notice (minutes)</Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.minimumNotice}
+            onChange={(e) =>
+              setFormData({ ...formData, minimumNotice: parseInt(e.target.value) || 0 })
+            }
+          />
+          <p className="text-xs text-gray-500">How far in advance must bookings be made</p>
+        </div>
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            Max Bookings Per Day
+            {!bookingLimitGate.canAccess && <ProBadge feature="bookingLimits" />}
+          </Label>
+          <Input
+            type="number"
+            min={0}
+            value={formData.maxBookingsPerDay}
+            disabled={!bookingLimitGate.canAccess}
+            onChange={(e) =>
+              setFormData({ ...formData, maxBookingsPerDay: parseInt(e.target.value) || 0 })
+            }
+          />
+          <p className="text-xs text-gray-500">0 = unlimited</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3 pt-2">
+        <input
+          type="checkbox"
+          id="requiresConfirmation"
+          checked={formData.requiresConfirmation}
+          onChange={(e) =>
+            setFormData({ ...formData, requiresConfirmation: e.target.checked })
+          }
+          className="h-4 w-4 rounded border-gray-300 text-ocean-600"
+        />
+        <Label htmlFor="requiresConfirmation" className="font-normal">
+          Require confirmation before booking is confirmed
+        </Label>
+      </div>
+    </CardContent>
+  )
 }
 
 export default function NewEventTypePage() {
@@ -461,7 +626,10 @@ export default function NewEventTypePage() {
         {/* Custom Questions */}
         <Card>
           <CardHeader>
-            <CardTitle>Booking Questions</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Booking Questions
+              <ProBadge feature="customQuestions" />
+            </CardTitle>
             <CardDescription>
               Ask invitees for additional information when they book.
             </CardDescription>
@@ -540,10 +708,7 @@ export default function NewEventTypePage() {
               </div>
             ))}
 
-            <Button type="button" variant="outline" onClick={addQuestion}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Question
-            </Button>
+            <GatedAddQuestion onAdd={addQuestion} />
           </CardContent>
         </Card>
 
@@ -553,73 +718,16 @@ export default function NewEventTypePage() {
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
               Group Booking
+              <ProBadge feature="groupBooking" />
             </CardTitle>
             <CardDescription>
               Allow multiple people to book the same time slot.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="space-y-1">
-                <p className="font-medium text-gray-900">Enable Group Booking</p>
-                <p className="text-sm text-gray-500">
-                  Multiple attendees can book the same slot (e.g., workshops, webinars, office hours)
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFormData({
-                  ...formData,
-                  isGroupBooking: !formData.isGroupBooking,
-                  seatsPerSlot: !formData.isGroupBooking ? 10 : 1
-                })}
-                className={cn(
-                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                  formData.isGroupBooking ? 'bg-ocean-500' : 'bg-gray-200'
-                )}
-              >
-                <span
-                  className={cn(
-                    'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                    formData.isGroupBooking ? 'translate-x-6' : 'translate-x-1'
-                  )}
-                />
-              </button>
-            </div>
-
-            {formData.isGroupBooking && (
-              <div className="pt-4 border-t space-y-4">
-                <div className="space-y-2">
-                  <Label>Maximum Seats Per Slot</Label>
-                  <div className="flex items-center gap-3">
-                    <Input
-                      type="number"
-                      min={2}
-                      max={100}
-                      value={formData.seatsPerSlot}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          seatsPerSlot: Math.min(100, Math.max(2, parseInt(e.target.value) || 2)),
-                        })
-                      }
-                      className="w-24"
-                    />
-                    <span className="text-gray-500">attendees</span>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    Up to {formData.seatsPerSlot} people can book each available time slot
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    <strong>Use cases:</strong> Group classes, webinars, office hours, workshops, or any event where multiple guests can attend the same session.
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
+          <GatedGroupBookingContent
+            formData={formData}
+            setFormData={setFormData}
+          />
         </Card>
 
         {/* Advanced Settings */}
@@ -631,7 +739,10 @@ export default function NewEventTypePage() {
               className="flex items-center justify-between w-full text-left"
             >
               <div>
-                <CardTitle>Advanced Settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Advanced Settings
+                  <ProBadge feature="bufferTimes" />
+                </CardTitle>
                 <CardDescription>Buffer times, booking limits, and more.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
@@ -640,83 +751,7 @@ export default function NewEventTypePage() {
             </button>
           </CardHeader>
           {showAdvanced && (
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Buffer Before (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={formData.bufferTimeBefore}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })
-                    }
-                  />
-                  <p className="text-xs text-gray-500">
-                    Free time before each meeting
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Buffer After (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={formData.bufferTimeAfter}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })
-                    }
-                  />
-                  <p className="text-xs text-gray-500">Free time after each meeting</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Minimum Notice (minutes)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={formData.minimumNotice}
-                    onChange={(e) =>
-                      setFormData({ ...formData, minimumNotice: parseInt(e.target.value) || 0 })
-                    }
-                  />
-                  <p className="text-xs text-gray-500">
-                    How far in advance must bookings be made
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>Max Bookings Per Day</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={formData.maxBookingsPerDay}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        maxBookingsPerDay: parseInt(e.target.value) || 0,
-                      })
-                    }
-                  />
-                  <p className="text-xs text-gray-500">0 = unlimited</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <input
-                  type="checkbox"
-                  id="requiresConfirmation"
-                  checked={formData.requiresConfirmation}
-                  onChange={(e) =>
-                    setFormData({ ...formData, requiresConfirmation: e.target.checked })
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-ocean-600"
-                />
-                <Label htmlFor="requiresConfirmation" className="font-normal">
-                  Require confirmation before booking is confirmed
-                </Label>
-              </div>
-            </CardContent>
+            <GatedAdvancedSettings formData={formData} setFormData={setFormData} />
           )}
         </Card>
 

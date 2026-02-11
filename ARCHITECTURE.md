@@ -1,6 +1,6 @@
 # TimeTide.app - Architecture Documentation
 
-## 🌊 Overview
+## <img src="public/logo.svg" width="20" height="20" alt="TimeTide" /> Overview
 
 TimeTide.app is a modern scheduling platform that allows users to share their availability and let others book time with them. Built with Next.js 14 (App Router), TypeScript, and a calm oceanic design aesthetic.
 

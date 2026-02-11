@@ -17,6 +17,7 @@ import {
   rescheduleBookingReminders,
   triggerBookingRescheduledWebhook,
 } from '@/lib/queue';
+import { createNotification, buildBookingNotification } from '@/lib/notifications';
 
 interface RouteParams {
   params: { id: string };
@@ -202,6 +203,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       booking.startTime,
       booking.endTime
     ).catch(console.error);
+
+    // Only notify host if the invitee rescheduled (not the host themselves)
+    if (!isHost) {
+      const reschedNotif = buildBookingNotification('BOOKING_RESCHEDULED', {
+        inviteeName: booking.inviteeName,
+        eventTitle: booking.eventType.title,
+        startTime: formatInTimeZone(newStart, booking.timezone, 'MMM d, h:mm a'),
+      });
+      createNotification({
+        userId: booking.hostId,
+        type: 'BOOKING_RESCHEDULED',
+        ...reschedNotif,
+        bookingId: booking.id,
+      }).catch(console.error);
+    }
 
     return NextResponse.json({
       success: true,

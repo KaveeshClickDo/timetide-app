@@ -22,6 +22,7 @@ import {
   triggerBookingRejectedWebhook,
   triggerBookingCancelledWebhook,
 } from '@/lib/queue';
+import { createNotification, buildBookingNotification } from '@/lib/notifications';
 
 interface RouteParams {
   params: { id: string };
@@ -427,6 +428,21 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
       reason
     ).catch(console.error);
+
+    // Only notify host if the invitee cancelled (not the host themselves)
+    if (!isHost) {
+      const cancelNotif = buildBookingNotification('BOOKING_CANCELLED', {
+        inviteeName: booking.inviteeName,
+        eventTitle: booking.eventType.title,
+        startTime: formatInTimeZone(booking.startTime, booking.timezone, 'MMM d, h:mm a'),
+      });
+      createNotification({
+        userId: booking.hostId,
+        type: 'BOOKING_CANCELLED',
+        ...cancelNotif,
+        bookingId: booking.id,
+      }).catch(console.error);
+    }
 
     return NextResponse.json({
       success: true,

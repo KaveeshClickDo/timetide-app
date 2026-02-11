@@ -41,6 +41,7 @@ model User {
   teamMemberships      TeamMember[]
   webhooks             Webhook[]
   zoomCredential       ZoomCredential?
+  notifications        Notification[]
 
   @@index([email])
   @@index([username])
@@ -589,8 +590,38 @@ model BookingAnalytics {
   date        DateTime @db.Date
   views       Int      @default(0)
   bookings    Int      @default(0)
-  
+
   @@unique([eventTypeId, date])
   @@index([eventTypeId])
   @@index([date])
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+enum NotificationType {
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_REJECTED
+  BOOKING_CANCELLED
+  BOOKING_RESCHEDULED
+  BOOKING_REMINDER
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  bookingId String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }

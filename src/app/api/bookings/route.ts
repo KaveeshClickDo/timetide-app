@@ -12,6 +12,7 @@ import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { createBookingSchema } from '@/lib/validation/schemas';
 import { isSlotAvailable, mergeBusyTimes } from '@/lib/slots/calculator';
+import { createNotification, buildBookingNotification } from '@/lib/notifications';
 import { getAllBusyTimes } from '@/lib/calendar/google';
 import {
   createGoogleCalendarEvent,
@@ -643,6 +644,19 @@ export async function POST(request: NextRequest) {
         name: selectedHost.name,
         email: selectedHost.email!,
       },
+    }).catch(console.error);
+
+    // Create in-app notification for host
+    const notifData = buildBookingNotification('BOOKING_CREATED', {
+      inviteeName: name,
+      eventTitle: eventType.title,
+      startTime: formatInTimeZone(startDate, selectedHost.timezone || 'UTC', 'MMM d, h:mm a'),
+    });
+    createNotification({
+      userId: selectedHost.id,
+      type: 'BOOKING_CREATED',
+      ...notifData,
+      bookingId: booking.id,
     }).catch(console.error);
 
     return NextResponse.json({

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Eye, EyeOff, Lock, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,8 +98,9 @@ export default function ResetPasswordPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <Link href="/" className="inline-block mb-6">
-              <span className="text-3xl font-bold bg-gradient-to-r from-ocean-500 to-tide-500 bg-clip-text text-transparent">
-                🌊 TimeTide
+              <span className="text-3xl font-bold bg-gradient-to-r from-ocean-500 to-tide-500 bg-clip-text text-transparent inline-flex items-center gap-2">
+                <Image src="/logo.svg" alt="TimeTide" width={36} height={36} />
+                TimeTide
               </span>
             </Link>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { CheckCircle, XCircle, Loader2, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -58,8 +59,9 @@ export default function VerifyEmailPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
           {/* Logo */}
           <Link href="/" className="inline-block mb-6">
-            <span className="text-3xl font-bold bg-gradient-to-r from-ocean-500 to-tide-500 bg-clip-text text-transparent">
-              🌊 TimeTide
+            <span className="text-3xl font-bold bg-gradient-to-r from-ocean-500 to-tide-500 bg-clip-text text-transparent inline-flex items-center gap-2">
+              <Image src="/logo.svg" alt="TimeTide" width={36} height={36} />
+              TimeTide
             </span>
           </Link>
 

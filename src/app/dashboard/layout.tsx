@@ -18,7 +18,6 @@ import {
   LogOut,
   ChevronDown,
   Plus,
-  Bell,
   CreditCard,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -34,6 +33,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { cn, getInitials } from '@/lib/utils'
 import { getPlanBadgeStyles, PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
+import { NotificationDropdown } from '@/components/notification-dropdown'
 
 const navigation: { name: string; href: string; icon: typeof Calendar; requiredPlan?: PlanTier }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
@@ -237,10 +237,7 @@ export default function DashboardLayout({
               </Link>
 
               {/* Notifications */}
-              <button className="p-2 hover:bg-gray-100 rounded-lg relative">
-                <Bell className="h-5 w-5 text-gray-500" />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-ocean-500 rounded-full" />
-              </button>
+              <NotificationDropdown />
             </div>
           </div>
         </header>

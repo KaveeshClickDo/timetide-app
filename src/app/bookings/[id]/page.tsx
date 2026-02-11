@@ -18,7 +18,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -332,6 +334,13 @@ export default function PublicBookingManagementPage() {
                       variant="outline"
                       className="flex-1"
                     />
+
+                    <Link href={`/bookings/${params.id}/reschedule`} className="flex-1">
+                      <Button variant="outline" className="w-full">
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Reschedule
+                      </Button>
+                    </Link>
 
                     <Button
                       variant="destructive"

@@ -24,6 +24,7 @@ import {
   X,
   Users,
   UserPlus,
+  RefreshCw,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -638,6 +639,13 @@ export default function BookingDetailPage() {
                 bookingUid={booking.uid}
                 variant="outline"
               />
+
+              <Link href={`/bookings/${booking.uid}/reschedule`}>
+                <Button variant="outline">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reschedule
+                </Button>
+              </Link>
 
               <Button
                 variant="destructive"

@@ -1,4 +1,4 @@
-# 🌊 TimeTide.app
+# <img src="public/logo.svg" width="28" height="28" alt="TimeTide" /> TimeTide.app
 
 **Modern scheduling that flows with your time.**
 
@@ -309,4 +309,4 @@ Contributions welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
 
 ---
 
-Built with 🌊 by the TimeTide team
+Built with <img src="public/logo.svg" width="16" height="16" alt="TimeTide" /> by the TimeTide team

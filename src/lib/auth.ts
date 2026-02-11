@@ -102,7 +102,6 @@ export const authOptions: NextAuthOptions = {
       return !!existingUser?.password;
     },
 
-    // In auth.ts
     async jwt({ token, user, account, trigger, session }) {
       // Handle session updates
       if (trigger === 'update' && session) {
@@ -122,6 +121,26 @@ export const authOptions: NextAuthOptions = {
         token.timezoneAutoDetect = dbUser?.timezoneAutoDetect ?? true;
         token.bio = dbUser?.bio ?? undefined;
         token.plan = dbUser?.plan ?? 'FREE';
+        token.lastVerified = Date.now();
+      }
+
+      // Periodically verify user still exists in DB (every 5 minutes)
+      const VERIFY_INTERVAL = 5 * 60 * 1000;
+      const lastVerified = (token.lastVerified as number) ?? 0;
+
+      if (token.id && Date.now() - lastVerified > VERIFY_INTERVAL) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { id: true, plan: true },
+        });
+
+        if (!dbUser) {
+          return {} as any;
+        }
+
+        // Sync plan in case it changed
+        token.plan = dbUser.plan ?? 'FREE';
+        token.lastVerified = Date.now();
       }
 
       return token;
@@ -142,8 +161,8 @@ export const authOptions: NextAuthOptions = {
 
   events: {
     async createUser({ user }) {
-      // Generate a default username from email
-      if (user.email && !user.name) {
+      // Generate a default username from email (for ALL providers including OAuth)
+      if (user.email) {
         const username = user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
 
         // Ensure uniqueness
@@ -162,7 +181,7 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Create default availability schedule
-      await prisma.availabilitySchedule.create({
+      const schedule = await prisma.availabilitySchedule.create({
         data: {
           userId: user.id,
           name: 'Working Hours',
@@ -178,6 +197,19 @@ export const authOptions: NextAuthOptions = {
               { dayOfWeek: 5, startTime: '09:00', endTime: '17:00' },
             ],
           },
+        },
+      });
+
+      // Create default event type linked to the schedule
+      await prisma.eventType.create({
+        data: {
+          userId: user.id,
+          title: '30 Minute Meeting',
+          slug: '30-minute-meeting',
+          description: 'A quick 30-minute meeting.',
+          length: 30,
+          isActive: true,
+          scheduleId: schedule.id,
         },
       });
     },
@@ -219,6 +251,7 @@ declare module 'next-auth/jwt' {
     timezoneAutoDetect: boolean;
     bio?: string;
     plan: string;
+    lastVerified?: number;
     accessToken?: string;
     refreshToken?: string;
     provider?: string;

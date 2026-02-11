@@ -61,7 +61,7 @@ export default function DashboardLayout({
   // Redirect to login if session becomes invalid (e.g. user deleted from DB)
   useEffect(() => {
     if (status === 'unauthenticated') {
-      signOut({ callbackUrl: '/login' })
+      signOut({ callbackUrl: '/auth/signin' })
     }
   }, [status])
 

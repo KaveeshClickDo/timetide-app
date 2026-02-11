@@ -15,7 +15,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const authUrl = getZoomAuthUrl(session.user.id);
+  const returnTo = request.nextUrl.searchParams.get('returnTo') || undefined;
+  const authUrl = getZoomAuthUrl(session.user.id, returnTo);
 
   return NextResponse.redirect(authUrl);
 }

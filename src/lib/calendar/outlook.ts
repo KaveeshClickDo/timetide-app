@@ -29,7 +29,8 @@ function getMicrosoftOAuthConfig() {
   return { clientId, clientSecret, redirectUri }
 }
 
-export function getOutlookAuthUrl(userId: string): string {
+export function getOutlookAuthUrl(userId: string, returnTo?: string): string {
+  const { encodeOAuthState } = require('@/lib/oauth-state')
   const { clientId, redirectUri } = getMicrosoftOAuthConfig()
 
   const scopes = [
@@ -43,7 +44,7 @@ export function getOutlookAuthUrl(userId: string): string {
     response_type: 'code',
     redirect_uri: redirectUri,
     scope: scopes.join(' '),
-    state: userId,
+    state: encodeOAuthState(userId, returnTo),
     response_mode: 'query',
   })
 

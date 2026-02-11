@@ -51,14 +51,14 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { provider, code } = body
+    const { provider, code, returnTo } = body
 
     if (provider === 'GOOGLE') {
       if (code) {
         const calendar = await connectGoogleCalendar(session.user.id, code)
         return NextResponse.json({ calendar })
       } else {
-        const authUrl = getGoogleAuthUrl(session.user.id)
+        const authUrl = getGoogleAuthUrl(session.user.id, returnTo)
         return NextResponse.json({ authUrl })
       }
     }
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
         const calendar = await connectOutlookCalendar(session.user.id, code)
         return NextResponse.json({ calendar })
       } else {
-        const authUrl = getOutlookAuthUrl(session.user.id)
+        const authUrl = getOutlookAuthUrl(session.user.id, returnTo)
         return NextResponse.json({ authUrl })
       }
     }

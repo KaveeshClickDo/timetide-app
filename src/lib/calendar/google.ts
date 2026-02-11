@@ -20,7 +20,8 @@ export function getGoogleOAuthClient() {
   );
 }
 
-export function getGoogleAuthUrl(userId: string): string {
+export function getGoogleAuthUrl(userId: string, returnTo?: string): string {
+  const { encodeOAuthState } = require('@/lib/oauth-state');
   const oauth2Client = getGoogleOAuthClient();
 
   const scopes = [
@@ -31,7 +32,7 @@ export function getGoogleAuthUrl(userId: string): string {
   return oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
-    state: userId,
+    state: encodeOAuthState(userId, returnTo),
     prompt: 'consent',
   });
 }

@@ -17,6 +17,9 @@ import {
   GripVertical,
   Calendar,
   Users,
+  AlertTriangle,
+  Check,
+  ExternalLink,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -27,6 +30,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { ProBadge } from '@/components/pro-badge'
+import { useIntegrationStatus } from '@/hooks/use-integration-status'
 
 const LOCATION_TYPES = [
   { value: 'GOOGLE_MEET', label: 'Google Meet', icon: Video, description: 'Auto-generate meeting link' },
@@ -225,10 +229,66 @@ function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFo
   )
 }
 
+function LocationIntegrationWarning({ locationType, googleCalendar, outlookCalendar, zoomConnected }: {
+  locationType: string
+  googleCalendar: any
+  outlookCalendar: any
+  zoomConnected: boolean
+}) {
+  const needsGoogle = locationType === 'GOOGLE_MEET' && !googleCalendar
+  const needsOutlook = locationType === 'TEAMS' && !outlookCalendar
+  const needsZoom = locationType === 'ZOOM' && !zoomConnected
+
+  const isConnected =
+    (locationType === 'GOOGLE_MEET' && googleCalendar) ||
+    (locationType === 'TEAMS' && outlookCalendar) ||
+    (locationType === 'ZOOM' && zoomConnected)
+
+  if (!needsGoogle && !needsOutlook && !needsZoom && !isConnected) return null
+
+  if (isConnected) {
+    return (
+      <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
+        <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
+        <p className="text-sm text-green-800">
+          {locationType === 'GOOGLE_MEET' && 'Google Calendar connected — Meet links will be auto-generated.'}
+          {locationType === 'TEAMS' && 'Outlook Calendar connected — Teams links will be auto-generated.'}
+          {locationType === 'ZOOM' && 'Zoom connected — meeting links will be auto-generated.'}
+        </p>
+      </div>
+    )
+  }
+
+  const serviceName = needsGoogle ? 'Google Calendar' : needsOutlook ? 'Outlook Calendar' : 'Zoom'
+
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-amber-800">
+            {serviceName} not connected
+          </p>
+          <p className="text-xs text-amber-700">
+            Meeting links won&apos;t be auto-generated without this integration.
+          </p>
+        </div>
+      </div>
+      <Link href="/dashboard/settings" target="_blank">
+        <Button variant="outline" size="sm" className="flex-shrink-0 text-xs">
+          <ExternalLink className="h-3 w-3 mr-1" />
+          Connect
+        </Button>
+      </Link>
+    </div>
+  )
+}
+
 export default function NewEventTypePage() {
   const router = useRouter()
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { googleCalendar, outlookCalendar, zoomConnected } = useIntegrationStatus()
 
   const [formData, setFormData] = useState({
     title: '',
@@ -464,6 +524,13 @@ export default function NewEventTypePage() {
                 </button>
               ))}
             </div>
+
+            <LocationIntegrationWarning
+              locationType={formData.locationType}
+              googleCalendar={googleCalendar}
+              outlookCalendar={outlookCalendar}
+              zoomConnected={zoomConnected}
+            />
 
             {(formData.locationType === 'IN_PERSON' || formData.locationType === 'CUSTOM') && (
               <div className="space-y-2 pt-4">

@@ -65,7 +65,7 @@ const baseStyles = `
     .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
     .header { text-align: center; margin-bottom: 32px; }
     .logo { font-size: 24px; font-weight: 700; color: #0ea5e9; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .logo img { width: 32px; height: 32px; }
+    .logo img { width: 32px; height: 32px; display: inline-block; vertical-align: middle; }
     .card { background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; }
     .detail-row { display: flex; margin: 12px 0; }
     .detail-label { color: #64748b; width: 100px; }
@@ -91,7 +91,7 @@ export function generateBookingConfirmedEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
         
         <h2 style="text-align: center; margin-bottom: 8px;">
@@ -184,7 +184,7 @@ export function generateBookingCancelledEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
         
         <h2 style="text-align: center; margin-bottom: 8px; color: #ef4444;">
@@ -248,7 +248,7 @@ export function generateBookingRescheduledEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
         
         <h2 style="text-align: center; margin-bottom: 8px; color: #f59e0b;">
@@ -319,7 +319,7 @@ export function generateBookingPendingEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
 
         <h2 style="text-align: center; margin-bottom: 8px; color: #f59e0b;">
@@ -411,7 +411,7 @@ export function generateBookingConfirmedByHostEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
 
         <h2 style="text-align: center; margin-bottom: 8px; color: #10b981;">
@@ -488,7 +488,7 @@ export function generateBookingRejectedEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
 
         <h2 style="text-align: center; margin-bottom: 8px; color: #ef4444;">
@@ -548,7 +548,7 @@ export function generateReminderEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
         
         <h2 style="text-align: center; margin-bottom: 8px;">
@@ -720,7 +720,7 @@ export function generatePasswordResetEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
 
         <h2 style="text-align: center; margin-bottom: 8px;">
@@ -789,7 +789,7 @@ export function generateEmailVerificationEmail(
     <body>
       <div class="container">
         <div class="header">
-          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/logo.svg" alt="TimeTide" /> TimeTide</div>
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
         </div>
 
         <h2 style="text-align: center; margin-bottom: 8px;">

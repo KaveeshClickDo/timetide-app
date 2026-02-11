@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import {
@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Plus,
   Trash2,
+  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,12 +29,15 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import { TIMEZONES } from '@/lib/constants'
+import { useIntegrationStatus } from '@/hooks/use-integration-status'
+import { IntegrationConnectCard } from '@/components/integration-connect-card'
 
 const STEPS = [
   { id: 1, title: 'Timezone', icon: Globe },
   { id: 2, title: 'Availability', icon: Clock },
   { id: 3, title: 'Booking Link', icon: LinkIcon },
   { id: 4, title: 'Event Types', icon: Calendar },
+  { id: 5, title: 'Integrations', icon: Zap },
 ]
 
 const DAYS = [
@@ -81,12 +85,27 @@ interface Schedule {
 }
 
 export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-[80vh] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
+  )
+}
+
+function OnboardingContent() {
   const { data: session, update: updateSession } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
-  const [currentStep, setCurrentStep] = useState(1)
+  // Read initial step from URL (for OAuth return)
+  const initialStep = parseInt(searchParams.get('step') || '1')
+  const [currentStep, setCurrentStep] = useState(initialStep >= 1 && initialStep <= 5 ? initialStep : 1)
   const [timezone, setTimezone] = useState('')
   const [timezoneAutoDetect, setTimezoneAutoDetect] = useState(true)
   const [username, setUsername] = useState('')
@@ -95,6 +114,57 @@ export default function OnboardingPage() {
   const [checkingUsername, setCheckingUsername] = useState(false)
   const [editedSlots, setEditedSlots] = useState<Record<number, AvailabilitySlot[]>>({})
   const [availabilityChanged, setAvailabilityChanged] = useState(false)
+
+  // Integration status
+  const {
+    googleCalendar,
+    outlookCalendar,
+    zoomConnected,
+    isLoading: integrationsLoading,
+    refetchCalendars,
+    refetchZoom,
+  } = useIntegrationStatus()
+
+  // Handle OAuth callback params (calendar_connected, zoom_connected, etc.)
+  useEffect(() => {
+    const calendarConnected = searchParams.get('calendar_connected')
+    const calendarError = searchParams.get('calendar_error')
+    const zoomConnectedParam = searchParams.get('zoom_connected')
+    const error = searchParams.get('error')
+
+    if (calendarConnected === 'true') {
+      toast({
+        title: 'Calendar connected!',
+        description: 'Your calendar has been successfully connected.',
+      })
+      refetchCalendars()
+    } else if (calendarError) {
+      toast({
+        title: 'Connection failed',
+        description: `Failed to connect calendar: ${calendarError}`,
+        variant: 'destructive',
+      })
+    } else if (zoomConnectedParam === 'true') {
+      toast({
+        title: 'Zoom connected!',
+        description: 'Your Zoom account has been successfully connected.',
+      })
+      refetchZoom()
+    } else if (error) {
+      toast({
+        title: 'Connection failed',
+        description: `Failed to connect: ${error}`,
+        variant: 'destructive',
+      })
+    }
+
+    // Clean up URL params
+    if (calendarConnected || calendarError || zoomConnectedParam || error) {
+      const step = searchParams.get('step')
+      const cleanUrl = step ? `/dashboard/onboarding?step=${step}` : '/dashboard/onboarding'
+      window.history.replaceState({}, '', cleanUrl)
+    }
+  }, [])
 
   // Fetch current user to check onboarding status
   const { data: userData, isLoading: isLoadingUser } = useQuery({
@@ -334,6 +404,8 @@ export default function OnboardingPage() {
         await saveUserMutation.mutateAsync({ username })
       }
       setCurrentStep(4)
+    } else if (currentStep === 4) {
+      setCurrentStep(5)
     } else {
       // Complete onboarding - mark as completed and redirect
       await saveUserMutation.mutateAsync({ onboardingCompleted: true })
@@ -366,6 +438,8 @@ export default function OnboardingPage() {
     : `/${username}`
 
   const isSaving = saveUserMutation.isPending || saveAvailabilityMutation.isPending
+
+  const connectionsCount = [googleCalendar, outlookCalendar, zoomConnected].filter(Boolean).length
 
   // Show loading while checking onboarding status
   if (isLoadingUser || userData?.user?.onboardingCompleted) {
@@ -743,6 +817,59 @@ export default function OnboardingPage() {
                 </div>
               </div>
             )}
+
+            {/* Step 5: Connect Accounts */}
+            {currentStep === 5 && (
+              <div className="space-y-6">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-4">
+                    <Zap className="h-8 w-8 text-ocean-600" />
+                  </div>
+                  <h2 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                    Connect Your Accounts
+                  </h2>
+                  <p className="text-gray-600">
+                    Connect your calendar and video conferencing accounts to auto-generate meeting links and prevent double-bookings.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <IntegrationConnectCard
+                    provider="GOOGLE"
+                    connected={!!googleCalendar}
+                    name={googleCalendar?.name}
+                    returnTo="/dashboard/onboarding?step=5"
+                  />
+                  <IntegrationConnectCard
+                    provider="OUTLOOK"
+                    connected={!!outlookCalendar}
+                    name={outlookCalendar?.name}
+                    returnTo="/dashboard/onboarding?step=5"
+                  />
+                  <IntegrationConnectCard
+                    provider="ZOOM"
+                    connected={zoomConnected}
+                    returnTo="/dashboard/onboarding?step=5"
+                  />
+                </div>
+
+                {connectionsCount > 0 && (
+                  <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                    <p className="text-sm text-green-800">
+                      {connectionsCount} integration{connectionsCount > 1 ? 's' : ''} connected. Meeting links will be auto-generated when you create bookings.
+                    </p>
+                  </div>
+                )}
+
+                {connectionsCount === 0 && (
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-sm text-amber-800">
+                      You can skip this step and connect accounts later from Settings. Without integrations, meeting links won&apos;t be auto-generated.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -766,7 +893,7 @@ export default function OnboardingPage() {
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Saving...
               </>
-            ) : currentStep === 4 ? (
+            ) : currentStep === 5 ? (
               <>
                 Go to Dashboard
                 <ArrowRight className="h-4 w-4 ml-2" />

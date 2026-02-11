@@ -9,7 +9,8 @@ import prisma from '../prisma';
 // OAUTH
 // ============================================================================
 
-export function getZoomAuthUrl(userId: string): string {
+export function getZoomAuthUrl(userId: string, returnTo?: string): string {
+  const { encodeOAuthState } = require('@/lib/oauth-state');
   const clientId = process.env.ZOOM_CLIENT_ID;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/zoom/callback`;
 
@@ -17,7 +18,7 @@ export function getZoomAuthUrl(userId: string): string {
     response_type: 'code',
     client_id: clientId!,
     redirect_uri: redirectUri,
-    state: userId,
+    state: encodeOAuthState(userId, returnTo),
   });
 
   return `https://zoom.us/oauth/authorize?${params.toString()}`;

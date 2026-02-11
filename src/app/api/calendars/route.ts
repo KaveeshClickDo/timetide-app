@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getGoogleAuthUrl, connectGoogleCalendar } from '@/lib/calendar/google'
 import { getOutlookAuthUrl, connectOutlookCalendar } from '@/lib/calendar/outlook'
+import { checkNumericLimit } from '@/lib/plan-enforcement'
+import type { PlanTier } from '@/lib/pricing'
 
 // GET /api/calendars - List connected calendars
 export async function GET() {
@@ -49,6 +51,14 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Enforce calendar limit
+    const plan = (session.user as any).plan as PlanTier
+    const currentCount = await prisma.calendar.count({
+      where: { userId: session.user.id },
+    })
+    const limitDenied = checkNumericLimit(plan, 'maxCalendars', currentCount)
+    if (limitDenied) return limitDenied
 
     const body = await request.json()
     const { provider, code, returnTo } = body

@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { startOfMonth, endOfMonth, subDays, startOfDay, format } from 'date-fns'
+import { checkFeatureAccess } from '@/lib/plan-enforcement'
+import type { PlanTier } from '@/lib/pricing'
 
 export async function GET() {
   try {
@@ -10,6 +12,11 @@ export async function GET() {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Enforce analytics feature gate
+    const plan = (session.user as any).plan as PlanTier
+    const featureDenied = checkFeatureAccess(plan, 'analytics')
+    if (featureDenied) return featureDenied
 
     const userId = session.user.id
     const now = new Date()

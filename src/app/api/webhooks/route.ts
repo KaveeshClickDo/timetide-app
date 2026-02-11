@@ -10,6 +10,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { createWebhookSchema } from '@/lib/validation/schemas';
 import crypto from 'crypto';
+import { checkNumericLimit } from '@/lib/plan-enforcement';
+import type { PlanTier } from '@/lib/pricing';
 
 /**
  * GET /api/webhooks
@@ -111,17 +113,13 @@ export async function POST(request: NextRequest) {
     const { url, eventTriggers, secret: providedSecret } = result.data;
     const name = body.name;
 
-    // Check webhook limit (max 10 per user)
+    // Enforce plan-based webhook limit
+    const plan = (session.user as any).plan as PlanTier;
     const existingCount = await prisma.webhook.count({
       where: { userId: session.user.id },
     });
-
-    if (existingCount >= 10) {
-      return NextResponse.json(
-        { error: 'Maximum webhook limit (10) reached' },
-        { status: 400 }
-      );
-    }
+    const limitDenied = checkNumericLimit(plan, 'maxWebhooks', existingCount);
+    if (limitDenied) return limitDenied;
 
     // Check for duplicate URL
     const existingUrl = await prisma.webhook.findFirst({

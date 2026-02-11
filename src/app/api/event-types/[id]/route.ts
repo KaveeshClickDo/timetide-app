@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { checkEventTypeFeatures } from '@/lib/plan-enforcement'
+import type { PlanTier } from '@/lib/pricing'
 
 interface RouteParams {
   params: { id: string }
@@ -71,6 +73,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     if (!existing) {
       return NextResponse.json({ error: 'Event type not found' }, { status: 404 })
     }
+
+    // Enforce pro feature gates
+    const plan = (session.user as any).plan as PlanTier
+    const featureDenied = checkEventTypeFeatures(plan, body as Record<string, unknown>)
+    if (featureDenied) return featureDenied
 
     // Handle slug update
     let newSlug = existing.slug

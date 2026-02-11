@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createEventTypeSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
+import { checkNumericLimit, checkEventTypeFeatures } from '@/lib/plan-enforcement'
+import type { PlanTier } from '@/lib/pricing'
 
 // GET /api/event-types - List all event types for current user
 export async function GET() {
@@ -56,6 +58,19 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    const plan = (session.user as any).plan as PlanTier
+
+    // Enforce event type limit
+    const currentCount = await prisma.eventType.count({
+      where: { userId: session.user.id },
+    })
+    const limitDenied = checkNumericLimit(plan, 'maxEventTypes', currentCount)
+    if (limitDenied) return limitDenied
+
+    // Enforce pro feature gates
+    const featureDenied = checkEventTypeFeatures(plan, result.data as Record<string, unknown>)
+    if (featureDenied) return featureDenied
 
     const { title, description, slug: inputSlug, length, locationType, questions, ...rest } = result.data
 

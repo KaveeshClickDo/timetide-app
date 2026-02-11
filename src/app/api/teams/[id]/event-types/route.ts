@@ -9,6 +9,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { checkFeatureAccess, checkEventTypeFeatures } from '@/lib/plan-enforcement';
+import type { PlanTier } from '@/lib/pricing';
 import {
   slugSchema,
   locationTypeSchema,
@@ -135,6 +137,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // Enforce teams feature gate + pro feature gates
+    const plan = (session.user as any).plan as PlanTier;
+    const teamsDenied = checkFeatureAccess(plan, 'teams');
+    if (teamsDenied) return teamsDenied;
+
     const body = await request.json();
     const result = createTeamEventTypeSchema.safeParse(body);
 
@@ -144,6 +151,10 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 400 }
       );
     }
+
+    // Enforce pro feature gates on event type fields
+    const eventFeatureDenied = checkEventTypeFeatures(plan, result.data as Record<string, unknown>);
+    if (eventFeatureDenied) return eventFeatureDenied;
 
     const { questions, memberIds, ...eventTypeData } = result.data;
 

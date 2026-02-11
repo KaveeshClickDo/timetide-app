@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createTeamSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
+import { checkFeatureAccess } from '@/lib/plan-enforcement'
+import type { PlanTier } from '@/lib/pricing'
 
 // GET /api/teams - List user's teams
 export async function GET() {
@@ -71,6 +73,11 @@ export async function POST(request: Request) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // Enforce teams feature gate
+    const plan = (session.user as any).plan as PlanTier
+    const featureDenied = checkFeatureAccess(plan, 'teams')
+    if (featureDenied) return featureDenied
 
     const body = await request.json()
     const result = createTeamSchema.safeParse(body)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSession } from 'next-auth/react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import {
@@ -13,6 +13,7 @@ import {
   Check,
   AlertCircle,
   Video,
+  Camera,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +41,7 @@ export default function SettingsPage() {
   const [connectingGoogle, setConnectingGoogle] = useState(false)
   const [connectingOutlook, setConnectingOutlook] = useState(false)
   const [connectingZoom, setConnectingZoom] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch connected calendars
   const { data: calendarsData, refetch: refetchCalendars } = useQuery({
@@ -142,6 +144,54 @@ export default function SettingsPage() {
       })
     },
   })
+
+  const avatarMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/users/me/avatar', {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to upload')
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      updateSession({ ...session, user: data.user })
+      toast({
+        title: 'Photo updated',
+        description: 'Your profile photo has been changed.',
+      })
+    },
+    onError: (error) => {
+      toast({
+        title: 'Upload failed',
+        description: error instanceof Error ? error.message : 'Failed to upload photo',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Please select an image under 2MB.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    avatarMutation.mutate(file)
+    // Reset input so the same file can be selected again
+    e.target.value = ''
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -343,15 +393,45 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             {/* Avatar */}
             <div className="flex items-center gap-4">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src={session?.user?.image || undefined} />
-                <AvatarFallback className="text-xl">
-                  {session?.user?.name ? getInitials(session.user.name) : 'U'}
-                </AvatarFallback>
-              </Avatar>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                onChange={handleAvatarChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={avatarMutation.isPending}
+                className="relative group"
+              >
+                <Avatar className="h-20 w-20">
+                  <AvatarImage src={session?.user?.image || undefined} />
+                  <AvatarFallback className="text-xl">
+                    {session?.user?.name ? getInitials(session.user.name) : 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                  {avatarMutation.isPending ? (
+                    <Loader2 className="h-6 w-6 text-white animate-spin" />
+                  ) : (
+                    <Camera className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
+                </div>
+              </button>
               <div>
-                <p className="text-sm text-gray-500">
-                  Profile photo is managed through your connected account.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarMutation.isPending}
+                >
+                  {avatarMutation.isPending ? 'Uploading...' : 'Change photo'}
+                </Button>
+                <p className="text-xs text-gray-500 mt-1">
+                  JPG, PNG, WebP or GIF. Max 2MB.
                 </p>
               </div>
             </div>

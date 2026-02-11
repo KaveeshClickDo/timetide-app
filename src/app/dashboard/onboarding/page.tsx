@@ -185,17 +185,16 @@ function OnboardingContent() {
   }, [userData, router])
 
   // Fetch event types
-  const { data: eventTypesData } = useQuery({
+  const { data: eventTypes = [] } = useQuery<EventType[]>({
     queryKey: ['eventTypes'],
     queryFn: async () => {
       const res = await fetch('/api/event-types')
       if (!res.ok) throw new Error('Failed to fetch event types')
-      return res.json()
+      const data = await res.json()
+      return data.eventTypes
     },
     enabled: !!session?.user?.id,
   })
-
-  const eventTypes: EventType[] = eventTypesData?.eventTypes || []
 
   // Fetch availability schedules
   const { data: schedulesData } = useQuery({

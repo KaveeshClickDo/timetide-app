@@ -42,6 +42,10 @@ coverage/
 .playwright/
 .vitest/
 
+# User uploads (keep directory structure)
+public/uploads/avatars/*
+!public/uploads/avatars/.gitkeep
+
 # Misc
 *.tsbuildinfo
 .eslintcache

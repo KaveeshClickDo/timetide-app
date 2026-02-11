@@ -24,9 +24,30 @@ export async function POST(request: Request) {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
+      include: { accounts: { select: { provider: true } } },
     })
 
     if (existingUser) {
+      // If the user signed up via OAuth and has no password, let them set one
+      if (!existingUser.password && existingUser.accounts.length > 0) {
+        const hashedPassword = await bcrypt.hash(password, 12)
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: { password: hashedPassword, name: existingUser.name || name },
+        })
+        const providers = existingUser.accounts.map((a) => a.provider).join(', ')
+        return NextResponse.json({
+          success: true,
+          user: {
+            id: existingUser.id,
+            name: existingUser.name || name,
+            email: existingUser.email,
+            username: existingUser.username,
+          },
+          message: `Password added! You previously signed in with ${providers}. Now you can use either method.`,
+        })
+      }
+
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 400 }
@@ -46,48 +67,54 @@ export async function POST(request: Request) {
       counter++
     }
 
-    // Create user with default availability
+    // Create user first
     const user = await prisma.user.create({
       data: {
         name,
         email: email.toLowerCase(),
         password: hashedPassword,
         username,
-        timezone: 'America/New_York', // Default, can be updated later
-        // Create default availability schedule
-        availabilitySchedules: {
-          create: {
-            name: 'Working Hours',
-            isDefault: true,
-            slots: {
-              create: [
-                // Monday - Friday, 9 AM - 5 PM
-                { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' },
-                { dayOfWeek: 2, startTime: '09:00', endTime: '17:00' },
-                { dayOfWeek: 3, startTime: '09:00', endTime: '17:00' },
-                { dayOfWeek: 4, startTime: '09:00', endTime: '17:00' },
-                { dayOfWeek: 5, startTime: '09:00', endTime: '17:00' },
-              ],
-            },
-          },
-        },
-        // Create default 30-minute meeting event type
-        eventTypes: {
-          create: {
-            title: '30 Minute Meeting',
-            slug: `30min-${nanoid(6)}`,
-            description: 'A quick 30-minute meeting',
-            length: 30,
-            locationType: 'GOOGLE_MEET',
-            isActive: true,
-          },
-        },
+        timezone: 'UTC',
       },
       select: {
         id: true,
         name: true,
         email: true,
         username: true,
+      },
+    })
+
+    // Create default availability schedule
+    const schedule = await prisma.availabilitySchedule.create({
+      data: {
+        userId: user.id,
+        name: 'Working Hours',
+        isDefault: true,
+        timezone: 'UTC',
+        slots: {
+          create: [
+            // Monday - Friday, 9 AM - 5 PM
+            { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' },
+            { dayOfWeek: 2, startTime: '09:00', endTime: '17:00' },
+            { dayOfWeek: 3, startTime: '09:00', endTime: '17:00' },
+            { dayOfWeek: 4, startTime: '09:00', endTime: '17:00' },
+            { dayOfWeek: 5, startTime: '09:00', endTime: '17:00' },
+          ],
+        },
+      },
+    })
+
+    // Create default 30-minute meeting event type linked to the schedule
+    await prisma.eventType.create({
+      data: {
+        userId: user.id,
+        title: '30 Minute Meeting',
+        slug: `30min-${nanoid(6)}`,
+        description: 'A quick 30-minute meeting',
+        length: 30,
+        locationType: 'GOOGLE_MEET',
+        isActive: true,
+        scheduleId: schedule.id,
       },
     })
 

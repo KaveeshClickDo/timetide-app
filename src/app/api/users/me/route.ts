@@ -51,7 +51,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { name, username, timezone, timezoneAutoDetect, bio, onboardingCompleted, plan } = body
+    const { name, username, timezone, timezoneAutoDetect, bio, image, onboardingCompleted, plan } = body
 
     // Validate username if provided
     if (username !== undefined) {
@@ -91,6 +91,7 @@ export async function PATCH(request: Request) {
         ...(timezone !== undefined && { timezone }),
         ...(timezoneAutoDetect !== undefined && { timezoneAutoDetect }),
         ...(bio !== undefined && { bio }),
+        ...(image !== undefined && { image }),
         ...(onboardingCompleted !== undefined && { onboardingCompleted }),
         ...(plan !== undefined && { plan }),
       },

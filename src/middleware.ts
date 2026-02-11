@@ -12,8 +12,9 @@ export default withAuth(
         const path = req.nextUrl.pathname
 
         // Protected routes that require authentication
+        // Check token.id (not just !!token) so invalidated tokens {} are rejected
         if (path.startsWith('/dashboard')) {
-          return !!token
+          return !!token?.id
         }
 
         // API routes that require authentication
@@ -30,7 +31,7 @@ export default withAuth(
 
           // Only require auth for explicitly protected routes
           if (protectedApiRoutes.some((route) => path.startsWith(route))) {
-            return !!token
+            return !!token?.id
           }
 
           // All other API routes are public (auth, public, slots, bookings, users/[username])

@@ -64,12 +64,12 @@ const baseStyles = `
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; }
     .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
     .header { text-align: center; margin-bottom: 32px; }
-    .logo { font-size: 24px; font-weight: 700; color: #0ea5e9; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .logo img { width: 32px; height: 32px; display: inline-block; vertical-align: middle; }
+    .logo { font-size: 24px; font-weight: 700; color: #0ea5e9; text-align: center; }
+    .logo img { width: 32px; height: 32px; display: inline-block; vertical-align: middle; margin-right: 8px; }
     .card { background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; }
-    .detail-row { display: flex; margin: 12px 0; }
-    .detail-label { color: #64748b; width: 100px; }
-    .detail-value { font-weight: 500; }
+    .detail-row { margin: 12px 0; }
+    .detail-label { color: #64748b; width: 100px; display: inline-block; vertical-align: top; }
+    .detail-value { font-weight: 500; display: inline-block; vertical-align: top; }
     .btn { display: inline-block; padding: 12px 24px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 8px; font-weight: 500; }
     .btn-outline { background: transparent; border: 1px solid #0ea5e9; color: #0ea5e9; }
     .footer { text-align: center; margin-top: 40px; color: #94a3b8; font-size: 14px; }

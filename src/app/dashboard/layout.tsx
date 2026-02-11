@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession, signOut } from 'next-auth/react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Calendar,
   Clock,
@@ -34,6 +35,8 @@ import { Badge } from '@/components/ui/badge'
 import { cn, getInitials } from '@/lib/utils'
 import { getPlanBadgeStyles, PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
 import { NotificationDropdown } from '@/components/notification-dropdown'
+import { useFeatureGate } from '@/hooks/use-feature-gate'
+import { UpgradeModal } from '@/components/upgrade-modal'
 
 const navigation: { name: string; href: string; icon: typeof Calendar; requiredPlan?: PlanTier }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
@@ -51,11 +54,33 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { data: session, update: updateSession } = useSession()
+  const { data: session, status, update: updateSession } = useSession()
   const pathname = usePathname()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Redirect to login if session becomes invalid (e.g. user deleted from DB)
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      signOut({ callbackUrl: '/login' })
+    }
+  }, [status])
+
   const user = session?.user
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+
+  // Fetch event type count for feature gating the header "New Event Type" button
+  const { data: eventTypes } = useQuery<{ id: string }[]>({
+    queryKey: ['eventTypes'],
+    queryFn: async () => {
+      const res = await fetch('/api/event-types')
+      if (!res.ok) throw new Error('Failed to fetch event types')
+      const data = await res.json()
+      return data.eventTypes
+    },
+    enabled: !!user?.id,
+  })
+
+  const { canAccess: canCreateEvent } = useFeatureGate('maxEventTypes', eventTypes?.length ?? 0)
 
   // Auto-update timezone if auto-detect is enabled and browser timezone differs
   useEffect(() => {
@@ -229,18 +254,32 @@ export default function DashboardLayout({
 
             <div className="flex items-center gap-3">
               {/* Quick actions */}
-              <Link href="/dashboard/event-types/new">
-                <Button size="sm">
+              {canCreateEvent ? (
+                <Link href="/dashboard/event-types/new">
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-1" />
+                    New Event Type
+                  </Button>
+                </Link>
+              ) : (
+                <Button size="sm" onClick={() => setShowUpgradeModal(true)}>
                   <Plus className="h-4 w-4 mr-1" />
                   New Event Type
                 </Button>
-              </Link>
+              )}
 
               {/* Notifications */}
               <NotificationDropdown />
             </div>
           </div>
         </header>
+
+        <UpgradeModal
+          feature="maxEventTypes"
+          requiredPlan="PRO"
+          open={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+        />
 
         {/* Page content */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>

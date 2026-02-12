@@ -131,7 +131,7 @@ function LocationIntegrationWarning({ locationType, googleCalendar, outlookCalen
         </div>
       </div>
       <Link href="/dashboard/settings" target="_blank">
-        <Button variant="outline" size="sm" className="flex-shrink-0 text-xs">
+        <Button type="button" variant="outline" size="sm" className="flex-shrink-0 text-xs">
           <ExternalLink className="h-3 w-3 mr-1" />
           Connect
         </Button>

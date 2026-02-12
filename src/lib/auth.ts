@@ -107,7 +107,12 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account, trigger, session }) {
       // Handle session updates
       if (trigger === 'update' && session) {
-        return { ...token, ...session.user }
+        const updated = { ...token, ...session.user }
+        // NextAuth uses token.picture for session.user.image
+        if (session.user?.image !== undefined) {
+          updated.picture = session.user.image
+        }
+        return updated
       }
 
       if (user) {

@@ -28,26 +28,9 @@ export async function POST(request: Request) {
     })
 
     if (existingUser) {
-      // If the user signed up via OAuth and has no password, let them set one
-      if (!existingUser.password && existingUser.accounts.length > 0) {
-        const hashedPassword = await bcrypt.hash(password, 12)
-        await prisma.user.update({
-          where: { id: existingUser.id },
-          data: { password: hashedPassword, name: existingUser.name || name },
-        })
-        const providers = existingUser.accounts.map((a) => a.provider).join(', ')
-        return NextResponse.json({
-          success: true,
-          user: {
-            id: existingUser.id,
-            name: existingUser.name || name,
-            email: existingUser.email,
-            username: existingUser.username,
-          },
-          message: `Password added! You previously signed in with ${providers}. Now you can use either method.`,
-        })
-      }
-
+      // Always reject — don't allow setting a password on an OAuth account
+      // from the public signup page (no way to verify email ownership here).
+      // Users can add a password from Settings after signing in via OAuth.
       return NextResponse.json(
         { error: 'An account with this email already exists' },
         { status: 400 }

@@ -103,7 +103,22 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       }
     }
 
-    const { questions, ...updateData } = body
+    const { questions } = body
+
+    // Whitelist allowed fields to prevent mass assignment
+    const allowedFields = [
+      'title', 'description', 'length', 'locationType', 'locationValue',
+      'isActive', 'requiresConfirmation', 'minimumNotice', 'bufferTimeBefore',
+      'bufferTimeAfter', 'maxBookingsPerDay', 'scheduleId', 'color',
+      'periodType', 'periodDays', 'periodStartDate', 'periodEndDate',
+      'seatsPerSlot',
+    ] as const
+    const updateData: Record<string, unknown> = {}
+    for (const field of allowedFields) {
+      if (body[field] !== undefined) {
+        updateData[field] = body[field]
+      }
+    }
 
     const eventType = await prisma.eventType.update({
       where: { id: params.id },

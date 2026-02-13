@@ -5,6 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 interface RouteParams {
@@ -160,7 +162,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const { searchParams } = request.nextUrl;
     const provider = searchParams.get('provider') || 'google'; // Default to Google
 
-    // Find the booking by ID or UID
+    // Only allow access via booking UID (not internal ID) for unauthenticated users
+    const session = await getServerSession(authOptions);
     const booking = await prisma.booking.findFirst({
       where: {
         OR: [{ id }, { uid: id }],
@@ -187,6 +190,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         { error: 'Booking not found or cannot be added to calendar' },
         { status: 404 }
       );
+    }
+
+    // Verify access: must be the host or accessed via UID
+    const isHost = session?.user?.id === booking.hostId;
+    const accessedByUid = id === booking.uid;
+    if (!isHost && !accessedByUid) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     // Generate calendar URL for supported providers

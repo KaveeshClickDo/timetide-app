@@ -95,7 +95,6 @@ TimeTide is a modern, self-hostable scheduling platform that enables users to sh
 | Provider | Method |
 |----------|--------|
 | **Google OAuth** | Social login + Calendar access |
-| **GitHub OAuth** | Social login |
 | **Email/Password** | Credentials-based authentication |
 
 ### Third-Party Services
@@ -294,7 +293,6 @@ const MIN_SLOT_DURATION = 5;        // Minimum slot length
 | Feature | Status | Description | Notes |
 |---------|--------|-------------|-------|
 | Google OAuth | **Completed** | Sign in with Google account | Includes offline access for calendar |
-| GitHub OAuth | **Completed** | Sign in with GitHub account | Basic profile info only |
 | Email/Password | **Completed** | Traditional credentials auth | Password hashing with bcrypt |
 | Session Management | **Completed** | JWT-based 30-day sessions | Automatic refresh via NextAuth |
 | Auto-generated Username | **Completed** | Creates username from email on signup | Ensures uniqueness |
@@ -414,7 +412,7 @@ const MIN_SLOT_DURATION = 5;        // Minimum slot length
 | Quick Stats | **Completed** | Booking counts | Cards on dashboard |
 | Profile Settings | **Completed** | Edit name, username, bio | With validation |
 | Timezone Settings | **Completed** | Select user timezone | 40+ options |
-| Profile Picture | **Completed** | Display OAuth avatar | From Google/GitHub |
+| Profile Picture | **Completed** | Display OAuth avatar | From Google |
 | Booking Link Display | **Completed** | Show shareable URL | Copy button |
 
 ---
@@ -501,7 +499,7 @@ const MIN_SLOT_DURATION = 5;        // Minimum slot length
 │                    AUTHENTICATION FLOW                          │
 └─────────────────────────────────────────────────────────────────┘
 
-OAuth Flow (Google/GitHub):
+OAuth Flow (Google):
 ┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
 │  Click   │────▶│ Redirect │────▶│ Provider │────▶│ Callback │
 │  Login   │     │to Provider│     │  Login   │     │  /api/   │
@@ -662,13 +660,6 @@ NODE_ENV="development"
 ### Optional Environment Variables
 
 ```env
-# ===================
-# GitHub OAuth (Optional)
-# ===================
-# Get from: https://github.com/settings/developers
-GITHUB_CLIENT_ID="your-github-client-id"
-GITHUB_CLIENT_SECRET="your-github-client-secret"
-
 # ===================
 # Email Service (Optional but recommended)
 # ===================

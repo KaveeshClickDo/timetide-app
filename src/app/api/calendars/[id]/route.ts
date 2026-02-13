@@ -24,8 +24,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         credentials: {
           select: {
             id: true,
-            accessToken: true,
-            refreshToken: true,
             expiresAt: true,
           },
         },

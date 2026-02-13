@@ -7,6 +7,17 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+/** Escape HTML special characters to prevent injection in email templates */
+function esc(str: string | null | undefined): string {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export interface EmailOptions {
   to: string | string[];
   subject: string;
@@ -99,57 +110,57 @@ export function generateBookingConfirmedEmail(
         </h2>
         <p style="text-align: center; color: #64748b;">
           ${isHost
-            ? `${data.inviteeName} has booked a meeting with you`
-            : `Your meeting with ${data.hostName} is scheduled`}
+            ? `${esc(data.inviteeName)} has booked a meeting with you`
+            : `Your meeting with ${esc(data.hostName)} is scheduled`}
         </p>
-        
+
         <div class="card">
-          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
-          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${data.eventDescription}</p>` : ''}
-          
+          <h3 style="margin: 0 0 16px 0;">${esc(data.eventTitle)}</h3>
+          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${esc(data.eventDescription)}</p>` : ''}
+
           <div class="detail-row">
             <span class="detail-label">📅 When</span>
-            <span class="detail-value">${data.startTime} - ${data.endTime}</span>
+            <span class="detail-value">${esc(data.startTime)} - ${esc(data.endTime)}</span>
           </div>
-          
+
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${data.timezone}</span>
+            <span class="detail-value">${esc(data.timezone)}</span>
           </div>
-          
+
           ${data.location ? `
           <div class="detail-row">
             <span class="detail-label">📍 Where</span>
-            <span class="detail-value">${data.location}</span>
+            <span class="detail-value">${esc(data.location)}</span>
           </div>
           ` : ''}
-          
+
           ${data.meetingUrl ? `
           <div class="detail-row">
             <span class="detail-label">🔗 Link</span>
             <span class="detail-value">
-              <a href="${data.meetingUrl}" style="color: #0ea5e9;">${data.meetingUrl}</a>
+              <a href="${esc(data.meetingUrl)}" style="color: #0ea5e9;">${esc(data.meetingUrl)}</a>
             </span>
           </div>
           ` : ''}
-          
+
           <div class="divider"></div>
-          
+
           <div class="detail-row">
             <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
-            <span class="detail-value">${isHost ? data.inviteeName : data.hostName}</span>
+            <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
           </div>
-          
+
           <div class="detail-row">
             <span class="detail-label">✉️ Email</span>
-            <span class="detail-value">${isHost ? data.inviteeEmail : data.hostEmail}</span>
+            <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
           </div>
-          
+
           ${data.notes ? `
           <div class="divider"></div>
           <div>
             <span class="detail-label">📝 Notes</span>
-            <p style="margin: 8px 0 0 0; color: #475569;">${data.notes}</p>
+            <p style="margin: 8px 0 0 0; color: #475569;">${esc(data.notes)}</p>
           </div>
           ` : ''}
         </div>
@@ -192,34 +203,34 @@ export function generateBookingCancelledEmail(
         </h2>
         <p style="text-align: center; color: #64748b;">
           ${isHost
-            ? `${data.inviteeName} has cancelled their booking`
-            : `Your meeting with ${data.hostName} has been cancelled`}
+            ? `${esc(data.inviteeName)} has cancelled their booking`
+            : `Your meeting with ${esc(data.hostName)} has been cancelled`}
         </p>
-        
+
         <div class="card" style="border-left: 4px solid #ef4444;">
           <h3 style="margin: 0 0 16px 0; text-decoration: line-through; color: #94a3b8;">
-            ${data.eventTitle}
+            ${esc(data.eventTitle)}
           </h3>
-          
+
           <div class="detail-row">
             <span class="detail-label">📅 Was</span>
             <span class="detail-value" style="text-decoration: line-through; color: #94a3b8;">
-              ${data.startTime} - ${data.endTime}
+              ${esc(data.startTime)} - ${esc(data.endTime)}
             </span>
           </div>
-          
+
           ${reason ? `
           <div class="divider"></div>
           <div>
             <span class="detail-label">📝 Reason</span>
-            <p style="margin: 8px 0 0 0; color: #475569;">${reason}</p>
+            <p style="margin: 8px 0 0 0; color: #475569;">${esc(reason)}</p>
           </div>
           ` : ''}
         </div>
         
         ${!isHost ? `
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${process.env.NEXT_PUBLIC_APP_URL}/${data.hostName}/${data.eventTitle}" class="btn">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL}/${esc(data.hostName)}/${esc(data.eventTitle)}" class="btn">
             Book a New Time
           </a>
         </div>
@@ -256,38 +267,38 @@ export function generateBookingRescheduledEmail(
         </h2>
         <p style="text-align: center; color: #64748b;">
           ${isHost
-            ? `${data.inviteeName} has rescheduled their booking`
-            : `Your meeting with ${data.hostName} has been rescheduled`}
+            ? `${esc(data.inviteeName)} has rescheduled their booking`
+            : `Your meeting with ${esc(data.hostName)} has been rescheduled`}
         </p>
-        
+
         <div class="card">
-          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
-          
+          <h3 style="margin: 0 0 16px 0;">${esc(data.eventTitle)}</h3>
+
           <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
             <p style="margin: 0; font-size: 14px; color: #92400e;">
-              <strong>Old time:</strong> 
-              <span style="text-decoration: line-through;">${oldTime.start} - ${oldTime.end}</span>
+              <strong>Old time:</strong>
+              <span style="text-decoration: line-through;">${esc(oldTime.start)} - ${esc(oldTime.end)}</span>
             </p>
           </div>
-          
+
           <div style="background: #d1fae5; padding: 12px; border-radius: 8px;">
             <p style="margin: 0; font-size: 14px; color: #065f46;">
-              <strong>New time:</strong> ${data.startTime} - ${data.endTime}
+              <strong>New time:</strong> ${esc(data.startTime)} - ${esc(data.endTime)}
             </p>
           </div>
-          
+
           <div class="divider"></div>
-          
+
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${data.timezone}</span>
+            <span class="detail-value">${esc(data.timezone)}</span>
           </div>
-          
+
           ${data.meetingUrl ? `
           <div class="detail-row">
             <span class="detail-label">🔗 Link</span>
             <span class="detail-value">
-              <a href="${data.meetingUrl}" style="color: #0ea5e9;">${data.meetingUrl}</a>
+              <a href="${esc(data.meetingUrl)}" style="color: #0ea5e9;">${esc(data.meetingUrl)}</a>
             </span>
           </div>
           ` : ''}
@@ -327,28 +338,28 @@ export function generateBookingPendingEmail(
         </h2>
         <p style="text-align: center; color: #64748b;">
           ${isHost
-            ? `${data.inviteeName} has requested a meeting with you`
-            : `Your meeting request with ${data.hostName} is awaiting confirmation`}
+            ? `${esc(data.inviteeName)} has requested a meeting with you`
+            : `Your meeting request with ${esc(data.hostName)} is awaiting confirmation`}
         </p>
 
         <div class="card" style="border-left: 4px solid #f59e0b;">
-          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
-          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${data.eventDescription}</p>` : ''}
+          <h3 style="margin: 0 0 16px 0;">${esc(data.eventTitle)}</h3>
+          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${esc(data.eventDescription)}</p>` : ''}
 
           <div class="detail-row">
             <span class="detail-label">📅 When</span>
-            <span class="detail-value">${data.startTime} - ${data.endTime}</span>
+            <span class="detail-value">${esc(data.startTime)} - ${esc(data.endTime)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${data.timezone}</span>
+            <span class="detail-value">${esc(data.timezone)}</span>
           </div>
 
           ${data.location ? `
           <div class="detail-row">
             <span class="detail-label">📍 Where</span>
-            <span class="detail-value">${data.location}</span>
+            <span class="detail-value">${esc(data.location)}</span>
           </div>
           ` : ''}
 
@@ -356,19 +367,19 @@ export function generateBookingPendingEmail(
 
           <div class="detail-row">
             <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
-            <span class="detail-value">${isHost ? data.inviteeName : data.hostName}</span>
+            <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">✉️ Email</span>
-            <span class="detail-value">${isHost ? data.inviteeEmail : data.hostEmail}</span>
+            <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
           </div>
 
           ${data.notes ? `
           <div class="divider"></div>
           <div>
             <span class="detail-label">📝 Notes</span>
-            <p style="margin: 8px 0 0 0; color: #475569;">${data.notes}</p>
+            <p style="margin: 8px 0 0 0; color: #475569;">${esc(data.notes)}</p>
           </div>
           ` : ''}
         </div>
@@ -381,7 +392,7 @@ export function generateBookingPendingEmail(
         ` : `
         <div style="text-align: center; margin: 32px 0; padding: 16px; background: #fef3c7; border-radius: 8px;">
           <p style="color: #92400e; margin: 0;">
-            ⏳ This booking is pending confirmation by ${data.hostName}. You will receive another email once it's confirmed.
+            ⏳ This booking is pending confirmation by ${esc(data.hostName)}. You will receive another email once it's confirmed.
           </p>
         </div>
         <div style="text-align: center; margin: 24px 0;">
@@ -418,27 +429,27 @@ export function generateBookingConfirmedByHostEmail(
           Your Booking is Confirmed!
         </h2>
         <p style="text-align: center; color: #64748b;">
-          ${data.hostName} has confirmed your meeting request
+          ${esc(data.hostName)} has confirmed your meeting request
         </p>
 
         <div class="card" style="border-left: 4px solid #10b981;">
-          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
-          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${data.eventDescription}</p>` : ''}
+          <h3 style="margin: 0 0 16px 0;">${esc(data.eventTitle)}</h3>
+          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${esc(data.eventDescription)}</p>` : ''}
 
           <div class="detail-row">
             <span class="detail-label">📅 When</span>
-            <span class="detail-value">${data.startTime} - ${data.endTime}</span>
+            <span class="detail-value">${esc(data.startTime)} - ${esc(data.endTime)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${data.timezone}</span>
+            <span class="detail-value">${esc(data.timezone)}</span>
           </div>
 
           ${data.location ? `
           <div class="detail-row">
             <span class="detail-label">📍 Where</span>
-            <span class="detail-value">${data.location}</span>
+            <span class="detail-value">${esc(data.location)}</span>
           </div>
           ` : ''}
 
@@ -446,7 +457,7 @@ export function generateBookingConfirmedByHostEmail(
           <div class="detail-row">
             <span class="detail-label">🔗 Link</span>
             <span class="detail-value">
-              <a href="${data.meetingUrl}" style="color: #0ea5e9;">${data.meetingUrl}</a>
+              <a href="${esc(data.meetingUrl)}" style="color: #0ea5e9;">${esc(data.meetingUrl)}</a>
             </span>
           </div>
           ` : ''}
@@ -455,7 +466,7 @@ export function generateBookingConfirmedByHostEmail(
 
           <div class="detail-row">
             <span class="detail-label">👤 Host</span>
-            <span class="detail-value">${data.hostName}</span>
+            <span class="detail-value">${esc(data.hostName)}</span>
           </div>
         </div>
 
@@ -495,18 +506,18 @@ export function generateBookingRejectedEmail(
           Booking Request Declined
         </h2>
         <p style="text-align: center; color: #64748b;">
-          Unfortunately, ${data.hostName} was unable to confirm your meeting request
+          Unfortunately, ${esc(data.hostName)} was unable to confirm your meeting request
         </p>
 
         <div class="card" style="border-left: 4px solid #ef4444;">
           <h3 style="margin: 0 0 16px 0; text-decoration: line-through; color: #94a3b8;">
-            ${data.eventTitle}
+            ${esc(data.eventTitle)}
           </h3>
 
           <div class="detail-row">
             <span class="detail-label">📅 Was</span>
             <span class="detail-value" style="text-decoration: line-through; color: #94a3b8;">
-              ${data.startTime} - ${data.endTime}
+              ${esc(data.startTime)} - ${esc(data.endTime)}
             </span>
           </div>
 
@@ -514,7 +525,7 @@ export function generateBookingRejectedEmail(
           <div class="divider"></div>
           <div>
             <span class="detail-label">📝 Message from host</span>
-            <p style="margin: 8px 0 0 0; color: #475569;">${reason}</p>
+            <p style="margin: 8px 0 0 0; color: #475569;">${esc(reason)}</p>
           </div>
           ` : ''}
         </div>
@@ -559,22 +570,22 @@ export function generateReminderEmail(
         </p>
         
         <div class="card">
-          <h3 style="margin: 0 0 16px 0;">${data.eventTitle}</h3>
-          
+          <h3 style="margin: 0 0 16px 0;">${esc(data.eventTitle)}</h3>
+
           <div class="detail-row">
             <span class="detail-label">📅 When</span>
-            <span class="detail-value">${data.startTime} - ${data.endTime}</span>
+            <span class="detail-value">${esc(data.startTime)} - ${esc(data.endTime)}</span>
           </div>
-          
+
           <div class="detail-row">
             <span class="detail-label">👤 With</span>
-            <span class="detail-value">${data.hostName}</span>
+            <span class="detail-value">${esc(data.hostName)}</span>
           </div>
-          
+
           ${data.meetingUrl ? `
           <div class="divider"></div>
           <div style="text-align: center;">
-            <a href="${data.meetingUrl}" class="btn">Join Meeting</a>
+            <a href="${esc(data.meetingUrl)}" class="btn">Join Meeting</a>
           </div>
           ` : ''}
         </div>
@@ -727,7 +738,7 @@ export function generatePasswordResetEmail(
           Reset Your Password
         </h2>
         <p style="text-align: center; color: #64748b;">
-          Hi ${name || 'there'}, we received a request to reset your password.
+          Hi ${esc(name) || 'there'}, we received a request to reset your password.
         </p>
 
         <div class="card">
@@ -796,7 +807,7 @@ export function generateEmailVerificationEmail(
           Verify Your Email
         </h2>
         <p style="text-align: center; color: #64748b;">
-          Welcome to TimeTide, ${name || 'there'}! Please verify your email address.
+          Welcome to TimeTide, ${esc(name) || 'there'}! Please verify your email address.
         </p>
 
         <div class="card">

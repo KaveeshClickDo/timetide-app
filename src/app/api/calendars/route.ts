@@ -23,8 +23,6 @@ export async function GET() {
         credentials: {
           select: {
             id: true,
-            accessToken: true,
-            refreshToken: true,
             expiresAt: true,
           },
         },

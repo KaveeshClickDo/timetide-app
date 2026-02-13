@@ -271,16 +271,42 @@ export const webhookEventSchema = z.enum([
   'booking.rejected',
 ]);
 
+/** Validate webhook URL is HTTPS and not targeting internal/private networks */
+const safeWebhookUrl = z.string().url().refine((url) => {
+  try {
+    const parsed = new URL(url);
+    // Must be HTTPS
+    if (parsed.protocol !== 'https:') return false;
+    // Block private/internal hostnames
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host.startsWith('10.') ||
+      host.startsWith('192.168.') ||
+      host.startsWith('172.') ||
+      host === '169.254.169.254' ||
+      host.endsWith('.internal') ||
+      host.endsWith('.local')
+    ) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}, { message: 'Webhook URL must be a public HTTPS URL' });
+
 export const createWebhookSchema = z.object({
   name: z.string().max(100).optional(),
-  url: z.string().url(),
+  url: safeWebhookUrl,
   eventTriggers: z.array(webhookEventSchema).min(1),
   secret: z.string().min(16).max(128).optional(),
 });
 
 export const updateWebhookSchema = z.object({
   name: z.string().max(100).optional().nullable(),
-  url: z.string().url().optional(),
+  url: safeWebhookUrl.optional(),
   eventTriggers: z.array(webhookEventSchema).min(1).optional(),
   isActive: z.boolean().optional(),
   regenerateSecret: z.boolean().optional(),

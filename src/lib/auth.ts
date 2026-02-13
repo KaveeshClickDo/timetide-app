@@ -1,12 +1,12 @@
 /**
  * NextAuth Configuration for TimeTide
- * Supports: Google OAuth, GitHub OAuth, Email/Password
+ * Supports: Google OAuth, Email/Password
  */
 
 import { NextAuthOptions } from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import GoogleProvider from 'next-auth/providers/google';
-import GitHubProvider from 'next-auth/providers/github';
+
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import prisma from './prisma';
@@ -27,12 +27,6 @@ export const authOptions: NextAuthOptions = {
           response_type: 'code',
         },
       },
-    }),
-
-    GitHubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
     }),
 
     CredentialsProvider({

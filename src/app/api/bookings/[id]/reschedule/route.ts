@@ -98,6 +98,24 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Calculate new end time based on event duration
     const newEnd = addMinutes(newStart, booking.eventType.length);
 
+    // Check for conflicting bookings at the new time (exclude this booking)
+    const conflict = await prisma.booking.findFirst({
+      where: {
+        hostId: booking.hostId,
+        id: { not: booking.id },
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        startTime: { lt: newEnd },
+        endTime: { gt: newStart },
+      },
+    });
+
+    if (conflict) {
+      return NextResponse.json(
+        { error: 'This time slot conflicts with another booking' },
+        { status: 409 }
+      );
+    }
+
     // Store old times for email
     const oldStartFormatted = formatInTimeZone(
       booking.startTime,

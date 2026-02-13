@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Mail, Lock, Chrome, Github, Loader2 } from 'lucide-react'
+import { Mail, Lock, Chrome, Loader2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 
 export default function SignInPage() {
@@ -25,7 +25,13 @@ export default function SignInPage() {
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search)
-      setCallbackUrl(params.get('callbackUrl') || '/dashboard')
+      const url = params.get('callbackUrl') || '/dashboard'
+      // Only allow relative paths to prevent open redirect attacks
+      if (url.startsWith('/') && !url.startsWith('//')) {
+        setCallbackUrl(url)
+      } else {
+        setCallbackUrl('/dashboard')
+      }
     } catch (e) {
       setCallbackUrl('/dashboard')
     }
@@ -62,7 +68,7 @@ export default function SignInPage() {
     }
   }
 
-  const handleOAuthSignIn = async (provider: 'google' | 'github') => {
+  const handleOAuthSignIn = async (provider: 'google') => {
     setIsLoading(true)
     await signIn(provider, { callbackUrl })
   }
@@ -92,22 +98,15 @@ export default function SignInPage() {
           </CardHeader>
           <CardContent>
             {/* OAuth Buttons */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="mb-6">
               <Button
                 variant="outline"
+                className="w-full"
                 onClick={() => handleOAuthSignIn('google')}
                 disabled={isLoading}
               >
                 <Chrome className="mr-2 h-4 w-4" />
-                Google
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handleOAuthSignIn('github')}
-                disabled={isLoading}
-              >
-                <Github className="mr-2 h-4 w-4" />
-                GitHub
+                Continue with Google
               </Button>
             </div>
 

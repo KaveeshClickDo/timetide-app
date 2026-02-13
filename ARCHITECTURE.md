@@ -180,7 +180,7 @@ The slot calculation is the heart of TimeTide. It determines available time slot
 ## 🔐 Security Model
 
 ### Authentication
-- NextAuth with OAuth providers (Google, GitHub) + credentials
+- NextAuth with OAuth providers (Google) + credentials
 - JWT tokens for API authentication
 - CSRF protection on all mutations
 
@@ -315,8 +315,6 @@ NEXTAUTH_URL=
 # OAuth
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
 
 # Calendars
 GOOGLE_CALENDAR_CLIENT_ID=

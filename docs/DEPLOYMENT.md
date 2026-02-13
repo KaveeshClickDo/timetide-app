@@ -108,9 +108,6 @@ NEXTAUTH_SECRET="generate-with-openssl-rand-base64-32"
 GOOGLE_CLIENT_ID="your-google-client-id"
 GOOGLE_CLIENT_SECRET="your-google-client-secret"
 
-# GitHub OAuth (optional)
-GITHUB_CLIENT_ID=""
-GITHUB_CLIENT_SECRET=""
 
 # Email
 RESEND_API_KEY="re_xxxxxxxxxxxx"

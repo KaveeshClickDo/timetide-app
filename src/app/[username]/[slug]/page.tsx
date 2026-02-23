@@ -28,6 +28,7 @@ interface EventType {
   description: string | null
   length: number
   locationType: string
+  seatsPerSlot?: number
   questions?: Question[]
 }
 
@@ -93,6 +94,7 @@ export default function BookingPage() {
           description: eventType.description,
           length: eventType.length,
           locationType: eventType.locationType,
+          seatsPerSlot: eventType.seatsPerSlot,
           questions: eventType.questions?.map((q) => ({
             id: q.id,
             type: q.type as unknown as string,

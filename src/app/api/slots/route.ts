@@ -140,6 +140,7 @@ export async function GET(request: NextRequest) {
       select: {
         startTime: true,
         endTime: true,
+        eventTypeId: true,
       },
     });
 
@@ -158,11 +159,49 @@ export async function GET(request: NextRequest) {
       // Calendar not connected or error - proceed without external busy times
     }
 
-    // Convert existing bookings to busy times
-    const bookingBusyTimes = allHostBookings.map((b) => ({
-      start: b.startTime,
-      end: b.endTime,
-    }));
+    // For group events (seatsPerSlot > 1): don't treat this event type's bookings as busy
+    // times unless the slot is fully booked. Other event types' bookings still block as usual.
+    const isGroupEvent = (eventType.seatsPerSlot ?? 1) > 1;
+    const seatsPerSlot = eventType.seatsPerSlot ?? 1;
+
+    // Track per-slot booking counts for group events
+    const slotBookingCounts = new Map<string, number>();
+
+    let bookingBusyTimes: { start: Date; end: Date }[];
+    if (isGroupEvent) {
+      // Separate bookings: other event types always block, same event type only when full
+      const otherEventBookings: { start: Date; end: Date }[] = [];
+
+      for (const b of allHostBookings) {
+        if (b.eventTypeId === eventTypeId) {
+          // Count bookings per time slot for this group event
+          const slotKey = b.startTime.toISOString();
+          slotBookingCounts.set(slotKey, (slotBookingCounts.get(slotKey) ?? 0) + 1);
+        } else {
+          otherEventBookings.push({ start: b.startTime, end: b.endTime });
+        }
+      }
+
+      // Add fully-booked group slots as busy times
+      const fullyBookedSlots: { start: Date; end: Date }[] = [];
+      for (const b of allHostBookings) {
+        if (b.eventTypeId === eventTypeId) {
+          const slotKey = b.startTime.toISOString();
+          const count = slotBookingCounts.get(slotKey) ?? 0;
+          if (count >= seatsPerSlot) {
+            fullyBookedSlots.push({ start: b.startTime, end: b.endTime });
+          }
+        }
+      }
+
+      bookingBusyTimes = [...otherEventBookings, ...fullyBookedSlots];
+    } else {
+      // Regular events: all bookings are busy times
+      bookingBusyTimes = allHostBookings.map((b) => ({
+        start: b.startTime,
+        end: b.endTime,
+      }));
+    }
 
     // Merge all busy times
     const allBusyTimes = mergeBusyTimes([
@@ -240,7 +279,25 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate available slots
-    const slots = calculator.calculate(rangeStart);
+    const calculatedSlots = calculator.calculate(rangeStart);
+
+    // For group events, enrich slots with remaining seat counts
+    let slots: Record<string, Array<{ start: Date; end: Date; seatsRemaining?: number }>>;
+    if (isGroupEvent) {
+      slots = {};
+      for (const [dateKey, daySlots] of Object.entries(calculatedSlots)) {
+        slots[dateKey] = daySlots.map((slot) => {
+          const slotKey = slot.start.toISOString();
+          const booked = slotBookingCounts.get(slotKey) ?? 0;
+          return {
+            ...slot,
+            seatsRemaining: seatsPerSlot - booked,
+          };
+        });
+      }
+    } else {
+      slots = calculatedSlots;
+    }
 
     // Track analytics (fire and forget)
     prisma.bookingAnalytics.upsert({
@@ -289,6 +346,7 @@ export async function GET(request: NextRequest) {
         title: eventType.title,
         duration: eventType.length,
         timezone: eventType.user.timezone,
+        seatsPerSlot: seatsPerSlot,
       },
       bookingWindow: {
         type: eventType.periodType,

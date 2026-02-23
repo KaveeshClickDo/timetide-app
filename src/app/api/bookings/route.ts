@@ -367,10 +367,36 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const bookingBusyTimes = existingBookings.map((b) => ({
-      start: b.startTime,
-      end: b.endTime,
-    }));
+    const isGroupEvent = (eventType.seatsPerSlot ?? 1) > 1;
+    const seatsPerSlot = eventType.seatsPerSlot ?? 1;
+
+    // For group events: check seat capacity separately, exclude same-event bookings from busy times
+    if (isGroupEvent) {
+      // Count existing bookings for THIS event type at THIS exact slot
+      const slotBookingCount = await prisma.booking.count({
+        where: {
+          eventTypeId,
+          startTime: startDate,
+          status: { in: ['PENDING', 'CONFIRMED'] },
+        },
+      });
+
+      if (slotBookingCount >= seatsPerSlot) {
+        return NextResponse.json(
+          { error: 'All seats for this time slot are taken. Please select another time.' },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Build busy times: for group events, exclude this event type's bookings
+    // (they don't block the host since multiple people share the same slot)
+    const bookingBusyTimes = existingBookings
+      .filter((b) => !isGroupEvent || b.eventTypeId !== eventTypeId)
+      .map((b) => ({
+        start: b.startTime,
+        end: b.endTime,
+      }));
 
     const allBusyTimes = mergeBusyTimes([
       ...calendarBusyTimes,

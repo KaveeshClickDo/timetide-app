@@ -21,6 +21,7 @@ model User {
   name          String?
   username      String?   @unique
   image         String?
+  avatarData    Bytes?    // Profile picture stored as binary (WebP)
   password      String?   // Hashed, null for OAuth-only users
   timezone      String    @default("UTC")
   timezoneAutoDetect Boolean @default(true)

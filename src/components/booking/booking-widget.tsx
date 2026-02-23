@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Calendar,
   User,
+  Users,
   Mail,
   AlertCircle,
 } from 'lucide-react'
@@ -33,6 +34,7 @@ interface TimeSlot {
   start: Date
   end: Date
   formattedTime: string
+  seatsRemaining?: number
 }
 
 interface BookingWindow {
@@ -54,6 +56,7 @@ interface BookingWidgetProps {
     description: string | null
     length: number
     locationType: string
+    seatsPerSlot?: number
     questions: Array<{
       id: string
       type: string
@@ -157,8 +160,8 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 time: slot.start,
                 start: startDate,
                 end: endDate,
-                // Format time in invitee's timezone to ensure correct display
-                formattedTime: formatInTimeZone(startDate, inviteeTimezone, 'h:mm a')
+                formattedTime: formatInTimeZone(startDate, inviteeTimezone, 'h:mm a'),
+                ...(slot.seatsRemaining != null && { seatsRemaining: slot.seatsRemaining }),
               }
             })
           }
@@ -385,6 +388,12 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 <Globe className="h-4 w-4 text-ocean-500" />
                 {inviteeTimezone}
               </div>
+              {(eventType.seatsPerSlot ?? 1) > 1 && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Users className="h-4 w-4 text-ocean-500" />
+                  Group event · {eventType.seatsPerSlot} seats
+                </div>
+              )}
             </div>
 
             {selectedDate && (
@@ -532,7 +541,15 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                           selectedSlot === slot.time && 'time-slot-selected'
                         )}
                       >
-                        {slot.formattedTime}
+                        <span>{slot.formattedTime}</span>
+                        {slot.seatsRemaining != null && slot.seatsRemaining < (eventType.seatsPerSlot ?? 1) && (
+                          <span className={cn(
+                            'text-[10px] font-medium block leading-tight',
+                            slot.seatsRemaining <= 2 ? 'text-amber-600' : 'text-gray-500'
+                          )}>
+                            {slot.seatsRemaining} {slot.seatsRemaining === 1 ? 'seat' : 'seats'} left
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>

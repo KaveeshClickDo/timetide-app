@@ -168,7 +168,7 @@ function BillingContent() {
       </p>
 
       {/* Demo Mode - Development Only */}
-      {/* {process.env.NODE_ENV === 'development' && ( */}
+      {process.env.NODE_ENV === 'development' && (
         <Card className="mt-8 border-dashed border-2 border-amber-300">
           <CardHeader>
             <CardTitle className="text-base text-amber-700">
@@ -197,7 +197,7 @@ function BillingContent() {
             </p>
           </CardContent>
         </Card>
-      {/* )} */}
+      )}
     </div>
   )
 }

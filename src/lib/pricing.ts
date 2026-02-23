@@ -107,26 +107,27 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   FREE: {
-    maxEventTypes: 1,
-    maxCalendars: 1,
-    maxWebhooks: 0,
-    bufferTimes: false,
-    customQuestions: false,
-    groupBooking: false,
-    bookingLimits: false,
-    teams: false,
-    analytics: false,
-  },
-  PRO: {
+    // TODO: Restore original FREE limits when enabling paid tiers
     maxEventTypes: Infinity,
-    maxCalendars: 3,
-    maxWebhooks: 5,
+    maxCalendars: Infinity,
+    maxWebhooks: Infinity,
     bufferTimes: true,
     customQuestions: true,
     groupBooking: true,
     bookingLimits: true,
-    teams: false,
-    analytics: false,
+    teams: true,
+    analytics: true,
+  },
+  PRO: {
+    maxEventTypes: Infinity,
+    maxCalendars: Infinity,
+    maxWebhooks: Infinity,
+    bufferTimes: true,
+    customQuestions: true,
+    groupBooking: true,
+    bookingLimits: true,
+    teams: true,
+    analytics: true,
   },
   TEAM: {
     maxEventTypes: Infinity,

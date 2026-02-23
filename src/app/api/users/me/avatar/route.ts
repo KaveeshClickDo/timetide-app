@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       where: { id: session.user.id },
       data: {
         image: imageUrl,
-        avatarData: optimized,
+        avatarData: new Uint8Array(optimized),
       },
       select: {
         id: true,

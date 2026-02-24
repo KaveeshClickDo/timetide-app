@@ -166,8 +166,13 @@ export default function DashboardLayout({
                 >
                   <item.icon className="h-5 w-5" />
                   {item.name}
-                  {isLocked && (
-                    <span className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                  {item.requiredPlan && (
+                    <span className={cn(
+                      'ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded',
+                      item.requiredPlan === 'TEAM'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-ocean-100 text-ocean-700'
+                    )}>
                       {item.requiredPlan}
                     </span>
                   )}

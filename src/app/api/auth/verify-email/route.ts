@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendWelcomeEmail } from '@/lib/email/client';
 import { z } from 'zod';
 
 const verifyEmailSchema = z.object({
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
     // Check if already verified
     if (user.emailVerified) {
       // Delete the token since it's no longer needed
-      await prisma.verificationToken.delete({
+      await prisma.verificationToken.deleteMany({
         where: { token },
       });
 
@@ -117,19 +118,23 @@ export async function POST(request: Request) {
       });
     }
 
-    // Update user emailVerified and delete token in a transaction
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerified: new Date() },
-      }),
-      prisma.verificationToken.delete({
-        where: { token },
-      }),
-    ]);
+    // Update user emailVerified and delete token
+    // Use deleteMany to avoid errors if token was already deleted by a concurrent request
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: new Date() },
+    });
+    await prisma.verificationToken.deleteMany({
+      where: { token },
+    });
+
+    // Send welcome email after successful verification
+    sendWelcomeEmail(user.email!, user.name || '').catch((err) => {
+      console.error('Failed to send welcome email:', err);
+    });
 
     return NextResponse.json({
-      message: 'Email verified successfully! You can now use all features.',
+      message: 'Email verified successfully! You can now sign in.',
     });
   } catch (error) {
     console.error('Verify email error:', error);

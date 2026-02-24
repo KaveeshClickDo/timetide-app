@@ -11,6 +11,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import prisma from './prisma';
 import { loginSchema } from './validation/schemas';
+import { sendWelcomeEmail } from './email/client';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions['adapter'],
@@ -78,24 +79,34 @@ export const authOptions: NextAuthOptions = {
     signIn: '/auth/signin',
     signOut: '/auth/signin',
     error: '/auth/signin',
-    newUser: '/dashboard/onboarding',
+    // Don't use newUser here - it fires for account linking too.
+    // Onboarding redirect is handled in signIn callback instead.
   },
 
   callbacks: {
     async signIn({ user, account }) {
-      // Allow OAuth sign in
-      if (account?.provider !== 'credentials') {
-        return true;
+      // For credentials, user must exist with password
+      if (account?.provider === 'credentials') {
+        if (!user.email) return false;
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
+        return !!existingUser?.password;
       }
 
-      // For credentials, user must exist with password
-      if (!user.email) return false;
+      // For OAuth: redirect new users (not yet onboarded) to onboarding
+      // Existing users linking a new OAuth provider should go to dashboard
+      if (user.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { onboardingCompleted: true },
+        });
+        if (dbUser && !dbUser.onboardingCompleted) {
+          return '/dashboard/onboarding';
+        }
+      }
 
-      const existingUser = await prisma.user.findUnique({
-        where: { email: user.email },
-      });
-
-      return !!existingUser?.password;
+      return true;
     },
 
     async jwt({ token, user, account, trigger, session }) {
@@ -114,7 +125,7 @@ export const authOptions: NextAuthOptions = {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true },
+          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, emailVerified: true, password: true },
         });
 
         token.username = dbUser?.username ?? undefined;
@@ -122,6 +133,8 @@ export const authOptions: NextAuthOptions = {
         token.timezoneAutoDetect = dbUser?.timezoneAutoDetect ?? true;
         token.bio = dbUser?.bio ?? undefined;
         token.plan = dbUser?.plan ?? 'FREE';
+        // Only require email verification for credential users (have password)
+        token.emailVerified = !!dbUser?.emailVerified || !dbUser?.password;
         token.lastVerified = Date.now();
       }
 
@@ -132,15 +145,16 @@ export const authOptions: NextAuthOptions = {
       if (token.id && Date.now() - lastVerified > VERIFY_INTERVAL) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { id: true, plan: true },
+          select: { id: true, plan: true, emailVerified: true, password: true },
         });
 
         if (!dbUser) {
           return {} as any;
         }
 
-        // Sync plan in case it changed
+        // Sync plan and emailVerified in case they changed
         token.plan = dbUser.plan ?? 'FREE';
+        token.emailVerified = !!dbUser.emailVerified || !dbUser.password;
         token.lastVerified = Date.now();
       }
 
@@ -155,6 +169,7 @@ export const authOptions: NextAuthOptions = {
         session.user.timezoneAutoDetect = token.timezoneAutoDetect as boolean;
         session.user.bio = token.bio as string | undefined;
         session.user.plan = token.plan as string;
+        session.user.emailVerified = token.emailVerified as boolean;
       }
       return session;
     },
@@ -162,57 +177,83 @@ export const authOptions: NextAuthOptions = {
 
   events: {
     async createUser({ user }) {
-      // Generate a default username from email (for ALL providers including OAuth)
+      // Check if this user already has data (e.g. credential user now linking OAuth)
+      const existingSchedule = await prisma.availabilitySchedule.findFirst({
+        where: { userId: user.id },
+      });
+
+      // Generate a default username if not already set
       if (user.email) {
-        const username = user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-
-        // Ensure uniqueness
-        let finalUsername = username;
-        let counter = 1;
-
-        while (await prisma.user.findUnique({ where: { username: finalUsername } })) {
-          finalUsername = `${username}${counter}`;
-          counter++;
-        }
-
-        await prisma.user.update({
+        const currentUser = await prisma.user.findUnique({
           where: { id: user.id },
-          data: { username: finalUsername },
+          select: { username: true },
+        });
+
+        if (!currentUser?.username) {
+          const username = user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+          let finalUsername = username;
+          let counter = 1;
+
+          while (await prisma.user.findUnique({ where: { username: finalUsername } })) {
+            finalUsername = `${username}${counter}`;
+            counter++;
+          }
+
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { username: finalUsername },
+          });
+        }
+      }
+
+      // Only create defaults if user doesn't already have them
+      // (credential signup creates these via the signup API route)
+      if (!existingSchedule) {
+        const schedule = await prisma.availabilitySchedule.create({
+          data: {
+            userId: user.id,
+            name: 'Working Hours',
+            isDefault: true,
+            timezone: 'UTC',
+            slots: {
+              create: [
+                { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' },
+                { dayOfWeek: 2, startTime: '09:00', endTime: '17:00' },
+                { dayOfWeek: 3, startTime: '09:00', endTime: '17:00' },
+                { dayOfWeek: 4, startTime: '09:00', endTime: '17:00' },
+                { dayOfWeek: 5, startTime: '09:00', endTime: '17:00' },
+              ],
+            },
+          },
+        });
+
+        await prisma.eventType.create({
+          data: {
+            userId: user.id,
+            title: '30 Minute Meeting',
+            slug: '30-minute-meeting',
+            description: 'A quick 30-minute meeting.',
+            length: 30,
+            isActive: true,
+            scheduleId: schedule.id,
+          },
         });
       }
 
-      // Create default availability schedule
-      const schedule = await prisma.availabilitySchedule.create({
-        data: {
-          userId: user.id,
-          name: 'Working Hours',
-          isDefault: true,
-          timezone: 'UTC',
-          slots: {
-            create: [
-              // Monday - Friday, 9am - 5pm
-              { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' },
-              { dayOfWeek: 2, startTime: '09:00', endTime: '17:00' },
-              { dayOfWeek: 3, startTime: '09:00', endTime: '17:00' },
-              { dayOfWeek: 4, startTime: '09:00', endTime: '17:00' },
-              { dayOfWeek: 5, startTime: '09:00', endTime: '17:00' },
-            ],
-          },
-        },
-      });
-
-      // Create default event type linked to the schedule
-      await prisma.eventType.create({
-        data: {
-          userId: user.id,
-          title: '30 Minute Meeting',
-          slug: '30-minute-meeting',
-          description: 'A quick 30-minute meeting.',
-          length: 30,
-          isActive: true,
-          scheduleId: schedule.id,
-        },
-      });
+      // Send welcome email only for truly new OAuth users
+      // Don't send if user already has data (existing credential user linking OAuth)
+      if (user.email && !existingSchedule) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { emailVerified: true, password: true },
+        });
+        // OAuth users have emailVerified set and no password
+        if (dbUser?.emailVerified || !dbUser?.password) {
+          sendWelcomeEmail(user.email, user.name || '').catch((err) => {
+            console.error('Failed to send welcome email:', err);
+          });
+        }
+      }
     },
   },
 
@@ -232,6 +273,7 @@ declare module 'next-auth' {
       timezoneAutoDetect: boolean;
       bio?: string;
       plan: string;
+      emailVerified: boolean;
     };
   }
 
@@ -252,6 +294,7 @@ declare module 'next-auth/jwt' {
     timezoneAutoDetect: boolean;
     bio?: string;
     plan: string;
+    emailVerified: boolean;
     lastVerified?: number;
     accessToken?: string;
     refreshToken?: string;

@@ -160,6 +160,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             id: true,
             name: true,
             email: true,
+            username: true,
             timezone: true,
           },
         },
@@ -195,9 +196,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
       hostEmail: booking.host.email!,
+      hostUsername: booking.host.username ?? undefined,
       inviteeName: booking.inviteeName,
       inviteeEmail: booking.inviteeEmail,
       eventTitle: booking.eventType.title,
+      eventSlug: booking.eventType.slug,
       eventDescription: booking.eventType.description ?? undefined,
       startTime: formatInTimeZone(
         booking.startTime,
@@ -324,6 +327,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             id: true,
             name: true,
             email: true,
+            username: true,
             timezone: true,
           },
         },
@@ -377,9 +381,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
       hostEmail: booking.host.email!,
+      hostUsername: booking.host.username ?? undefined,
       inviteeName: booking.inviteeName,
       inviteeEmail: booking.inviteeEmail,
       eventTitle: booking.eventType.title,
+      eventSlug: booking.eventType.slug,
       eventDescription: booking.eventType.description ?? undefined,
       startTime: formatInTimeZone(
         booking.startTime,

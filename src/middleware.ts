@@ -3,7 +3,21 @@ import { NextResponse } from 'next/server'
 
 export default withAuth(
   function middleware(req) {
-    // Allow the request to continue
+    const token = req.nextauth.token
+    const path = req.nextUrl.pathname
+
+    // If user is authenticated but email not verified, redirect to verification page
+    // (emailVerified is false only for credential users who haven't verified)
+    if (
+      token?.id &&
+      token.emailVerified === false &&
+      path.startsWith('/dashboard')
+    ) {
+      return NextResponse.redirect(
+        new URL('/auth/verify-email-required', req.url)
+      )
+    }
+
     return NextResponse.next()
   },
   {

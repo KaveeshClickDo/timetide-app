@@ -347,15 +347,17 @@ export async function queueBookingRejectedEmail(
  */
 export async function queueReminderEmail(
   data: BookingEmailData,
-  hoursUntil: number
+  hoursUntil: number,
+  toOverride?: string
 ): Promise<void> {
+  const to = toOverride || data.inviteeEmail;
   await queueEmail({
     type: 'booking_reminder',
-    to: data.inviteeEmail,
-    subject: `Reminder: ${data.eventTitle} with ${data.hostName} in ${hoursUntil === 1 ? '1 hour' : `${hoursUntil} hours`}`,
+    to,
+    subject: `Reminder: ${data.eventTitle} with ${to === data.hostEmail ? data.inviteeName : data.hostName} in ${hoursUntil === 1 ? '1 hour' : `${hoursUntil} hours`}`,
     bookingData: data,
     hoursUntil,
-    replyTo: data.hostEmail,
+    replyTo: to === data.hostEmail ? data.inviteeEmail : data.hostEmail,
   });
 }
 

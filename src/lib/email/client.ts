@@ -57,9 +57,11 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
 export interface BookingEmailData {
   hostName: string;
   hostEmail: string;
+  hostUsername?: string;
   inviteeName: string;
   inviteeEmail: string;
   eventTitle: string;
+  eventSlug?: string;
   eventDescription?: string;
   startTime: string; // Formatted string
   endTime: string;
@@ -81,8 +83,8 @@ const baseStyles = `
     .detail-row { margin: 12px 0; }
     .detail-label { color: #64748b; width: 100px; display: inline-block; vertical-align: top; }
     .detail-value { font-weight: 500; display: inline-block; vertical-align: top; }
-    .btn { display: inline-block; padding: 12px 24px; background: #0ea5e9; color: white; text-decoration: none; border-radius: 8px; font-weight: 500; }
-    .btn-outline { background: transparent; border: 1px solid #0ea5e9; color: #0ea5e9; }
+    .btn { display: inline-block; padding: 12px 24px; background: #0ea5e9; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 500; }
+    .btn-outline { background: #f0f9ff; border: 1px solid #0ea5e9; color: #0369a1 !important; }
     .footer { text-align: center; margin-top: 40px; color: #94a3b8; font-size: 14px; }
     .divider { border-top: 1px solid #e2e8f0; margin: 24px 0; }
   </style>
@@ -166,8 +168,8 @@ export function generateBookingConfirmedEmail(
         </div>
         
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${manageUrl}" class="btn">Manage Booking</a>
-          <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px;">Add to Calendar</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff;">Manage Booking</a>
+          <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>
         </div>
         
         <div class="footer">
@@ -230,7 +232,9 @@ export function generateBookingCancelledEmail(
         
         ${!isHost ? `
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${process.env.NEXT_PUBLIC_APP_URL}/${esc(data.hostName)}/${esc(data.eventTitle)}" class="btn">
+          <a href="${data.hostUsername && data.eventSlug
+            ? `${process.env.NEXT_PUBLIC_APP_URL}/${encodeURIComponent(data.hostUsername)}/${encodeURIComponent(data.eventSlug)}`
+            : process.env.NEXT_PUBLIC_APP_URL}" class="btn" style="color: #ffffff;">
             Book a New Time
           </a>
         </div>
@@ -305,7 +309,7 @@ export function generateBookingRescheduledEmail(
         </div>
         
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${manageUrl}" class="btn">View Booking</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff;">View Booking</a>
         </div>
         
         <div class="footer">
@@ -387,7 +391,7 @@ export function generateBookingPendingEmail(
         ${isHost ? `
         <div style="text-align: center; margin: 32px 0;">
           <p style="color: #64748b; margin-bottom: 16px;">Please review and confirm or decline this booking request.</p>
-          <a href="${manageUrl}" class="btn">Review Booking</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff;">Review Booking</a>
         </div>
         ` : `
         <div style="text-align: center; margin: 32px 0; padding: 16px; background: #fef3c7; border-radius: 8px;">
@@ -396,7 +400,7 @@ export function generateBookingPendingEmail(
           </p>
         </div>
         <div style="text-align: center; margin: 24px 0;">
-          <a href="${manageUrl}" class="btn btn-outline">View Booking Details</a>
+          <a href="${manageUrl}" class="btn btn-outline" style="color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">View Booking Details</a>
         </div>
         `}
 
@@ -471,8 +475,8 @@ export function generateBookingConfirmedByHostEmail(
         </div>
 
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${manageUrl}" class="btn">View Booking</a>
-          <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px;">Add to Calendar</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff;">View Booking</a>
+          <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>
         </div>
 
         <div class="footer">
@@ -532,7 +536,9 @@ export function generateBookingRejectedEmail(
 
         <div style="text-align: center; margin: 32px 0;">
           <p style="color: #64748b; margin-bottom: 16px;">You can try booking a different time.</p>
-          <a href="${process.env.NEXT_PUBLIC_APP_URL}" class="btn">
+          <a href="${data.hostUsername && data.eventSlug
+            ? `${process.env.NEXT_PUBLIC_APP_URL}/${encodeURIComponent(data.hostUsername)}/${encodeURIComponent(data.eventSlug)}`
+            : process.env.NEXT_PUBLIC_APP_URL}" class="btn" style="color: #ffffff;">
             Book a New Time
           </a>
         </div>
@@ -585,7 +591,7 @@ export function generateReminderEmail(
           ${data.meetingUrl ? `
           <div class="divider"></div>
           <div style="text-align: center;">
-            <a href="${esc(data.meetingUrl)}" class="btn">Join Meeting</a>
+            <a href="${esc(data.meetingUrl)}" class="btn" style="color: #ffffff;">Join Meeting</a>
           </div>
           ` : ''}
         </div>
@@ -747,7 +753,7 @@ export function generatePasswordResetEmail(
           </p>
 
           <div style="text-align: center; margin: 24px 0;">
-            <a href="${resetUrl}" class="btn">Reset Password</a>
+            <a href="${resetUrl}" class="btn" style="color: #ffffff;">Reset Password</a>
           </div>
 
           <p style="margin: 16px 0 0 0; font-size: 14px; color: #94a3b8;">
@@ -816,7 +822,7 @@ export function generateEmailVerificationEmail(
           </p>
 
           <div style="text-align: center; margin: 24px 0;">
-            <a href="${verifyUrl}" class="btn">Verify Email</a>
+            <a href="${verifyUrl}" class="btn" style="color: #ffffff;">Verify Email</a>
           </div>
 
           <p style="margin: 16px 0 0 0; font-size: 14px; color: #94a3b8;">
@@ -851,5 +857,74 @@ export async function sendEmailVerificationEmail(
     to: email,
     subject: 'Verify your TimeTide email address',
     html: generateEmailVerificationEmail(name, verifyUrl),
+  });
+}
+
+// ============================================================================
+// WELCOME EMAILS
+// ============================================================================
+
+export function generateWelcomeEmail(name: string): string {
+  const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`;
+  const settingsUrl = `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/settings`;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px;">
+          Welcome to TimeTide!
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          Hi ${esc(name) || 'there'}, your account is all set up and ready to go.
+        </p>
+
+        <div class="card">
+          <h3 style="margin: 0 0 16px 0;">Get started in 3 easy steps:</h3>
+
+          <div style="margin: 12px 0; padding: 12px; background: #f0f9ff; border-radius: 8px;">
+            <p style="margin: 0; color: #0369a1;"><strong>1.</strong> Set your availability schedule</p>
+          </div>
+
+          <div style="margin: 12px 0; padding: 12px; background: #f0f9ff; border-radius: 8px;">
+            <p style="margin: 0; color: #0369a1;"><strong>2.</strong> Customize your booking page</p>
+          </div>
+
+          <div style="margin: 12px 0; padding: 12px; background: #f0f9ff; border-radius: 8px;">
+            <p style="margin: 0; color: #0369a1;"><strong>3.</strong> Share your link and start getting bookings</p>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${dashboardUrl}" class="btn" style="color: #ffffff;">Go to Dashboard</a>
+          <a href="${settingsUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Settings</a>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+          <p style="font-size: 12px; color: #94a3b8;">
+            You're receiving this because you created a TimeTide account.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendWelcomeEmail(
+  email: string,
+  name: string
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: 'Welcome to TimeTide - Let\'s get you started!',
+    html: generateWelcomeEmail(name),
   });
 }

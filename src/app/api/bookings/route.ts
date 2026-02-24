@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
             id: true,
             name: true,
             email: true,
+            username: true,
             timezone: true,
           },
         },
@@ -159,6 +160,7 @@ export async function POST(request: NextRequest) {
                     id: true,
                     name: true,
                     email: true,
+                    username: true,
                     timezone: true,
                   },
                 },
@@ -189,6 +191,7 @@ export async function POST(request: NextRequest) {
       id: eventType.userId,
       name: eventType.user.name,
       email: eventType.user.email,
+      username: eventType.user.username,
       timezone: eventType.user.timezone,
     };
 
@@ -256,6 +259,7 @@ export async function POST(request: NextRequest) {
               id: member.user.id,
               name: member.user.name,
               email: member.user.email,
+              username: member.user.username,
               timezone: member.user.timezone,
             };
             assignedUserId = member.user.id;
@@ -329,6 +333,7 @@ export async function POST(request: NextRequest) {
           id: assignedMembers[0].user.id,
           name: assignedMembers[0].user.name,
           email: assignedMembers[0].user.email,
+          username: assignedMembers[0].user.username,
           timezone: assignedMembers[0].user.timezone,
         };
         // For collective, the assigned user is effectively all members (host handles it)
@@ -340,6 +345,7 @@ export async function POST(request: NextRequest) {
           id: eventType.user.id,
           name: eventType.user.name,
           email: eventType.user.email,
+          username: eventType.user.username,
           timezone: eventType.user.timezone,
         };
         // assignedUserId remains undefined - will be set by host/admin later
@@ -627,9 +633,11 @@ export async function POST(request: NextRequest) {
     const emailData: BookingEmailData = {
       hostName: selectedHost.name ?? 'Host',
       hostEmail: selectedHost.email!,
+      hostUsername: selectedHost.username ?? undefined,
       inviteeName: name,
       inviteeEmail: email,
       eventTitle: eventType.title,
+      eventSlug: eventType.slug,
       eventDescription: eventType.description ?? undefined,
       startTime: formatInTimeZone(startDate, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
       endTime: formatInTimeZone(endDate, timezone, 'h:mm a'),

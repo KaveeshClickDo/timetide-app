@@ -2,23 +2,23 @@
 
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Mail, Lock, User, Chrome, Loader2, CheckCircle2 } from 'lucide-react'
+import { Mail, Lock, User, Chrome, Loader2, CheckCircle2, CheckCircle } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 
 export default function SignUpPage() {
-  const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [isSignupComplete, setIsSignupComplete] = useState(false)
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,24 +38,8 @@ export default function SignUpPage() {
         throw new Error(data.error || 'Failed to create account')
       }
 
-      // Sign in after successful signup
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
-
-      if (result?.error) {
-        throw new Error('Failed to sign in')
-      }
-
-      toast({
-        title: 'Account created!',
-        description: 'Welcome to TimeTide. Let\'s set up your first event type.',
-        variant: 'success',
-      })
-
-      router.push('/dashboard/onboarding')
+      // Show "check your email" state instead of auto-signing in
+      setIsSignupComplete(true)
     } catch (error) {
       toast({
         title: 'Error',
@@ -127,6 +111,36 @@ export default function SignUpPage() {
             </Link>
           </div>
 
+          {isSignupComplete ? (
+            <Card>
+              <CardContent className="pt-8 text-center">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle className="h-8 w-8 text-green-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Check your email
+                </h2>
+                <p className="text-gray-600 mb-2">
+                  We&apos;ve sent a verification link to <strong>{email}</strong>.
+                </p>
+                <p className="text-sm text-gray-500 mb-6">
+                  Please verify your email address to complete your account setup. The link will expire in 24 hours.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <Link href="/auth/signin" className="block">
+                    <Button className="w-full bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-600 hover:to-ocean-700">
+                      Go to Sign in
+                    </Button>
+                  </Link>
+                  <Link href="/auth/resend-verification" className="block">
+                    <Button variant="outline" className="w-full">
+                      Resend verification email
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardHeader className="text-center">
               <CardTitle className="text-2xl">Create your account</CardTitle>
@@ -244,6 +258,7 @@ export default function SignUpPage() {
               </p>
             </CardContent>
           </Card>
+          )}
         </div>
       </div>
     </div>

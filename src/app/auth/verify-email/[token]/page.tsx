@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -13,11 +13,15 @@ export default function VerifyEmailPage() {
   const params = useParams();
   const router = useRouter();
   const token = params?.token as string;
+  const calledRef = useRef(false);
 
   const [state, setState] = useState<VerificationState>('loading');
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!token || calledRef.current) return;
+    calledRef.current = true;
+
     const verifyEmail = async () => {
       try {
         const res = await fetch('/api/auth/verify-email', {
@@ -38,9 +42,9 @@ export default function VerifyEmailPage() {
           setState('success');
         }
 
-        // Redirect to dashboard after 3 seconds
+        // Redirect to sign in after 3 seconds
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push('/auth/signin');
         }, 3000);
       } catch (err) {
         setState('error');
@@ -48,9 +52,7 @@ export default function VerifyEmailPage() {
       }
     };
 
-    if (token) {
-      verifyEmail();
-    }
+    verifyEmail();
   }, [token, router]);
 
   return (
@@ -90,11 +92,11 @@ export default function VerifyEmailPage() {
                 Email verified!
               </h1>
               <p className="text-gray-600 mb-6">
-                Your email has been verified successfully. Redirecting to dashboard...
+                Your email has been verified successfully. You can now sign in. Redirecting...
               </p>
-              <Link href="/dashboard">
+              <Link href="/auth/signin">
                 <Button className="w-full bg-gradient-to-r from-ocean-500 to-ocean-600">
-                  Go to Dashboard
+                  Sign in
                 </Button>
               </Link>
             </>
@@ -110,11 +112,11 @@ export default function VerifyEmailPage() {
                 Already verified
               </h1>
               <p className="text-gray-600 mb-6">
-                Your email is already verified. Redirecting to dashboard...
+                Your email is already verified. Redirecting to sign in...
               </p>
-              <Link href="/dashboard">
+              <Link href="/auth/signin">
                 <Button className="w-full bg-gradient-to-r from-ocean-500 to-ocean-600">
-                  Go to Dashboard
+                  Sign in
                 </Button>
               </Link>
             </>
@@ -133,13 +135,13 @@ export default function VerifyEmailPage() {
               <p className="text-sm text-gray-500 mb-6">
                 The verification link may have expired or already been used.
               </p>
-              <div className="space-y-3">
-                <Link href="/auth/signin">
+              <div className="flex flex-col gap-3">
+                <Link href="/auth/signin" className="block">
                   <Button className="w-full bg-gradient-to-r from-ocean-500 to-ocean-600">
                     Sign in
                   </Button>
                 </Link>
-                <Link href="/auth/resend-verification">
+                <Link href="/auth/resend-verification" className="block">
                   <Button variant="outline" className="w-full">
                     Resend verification email
                   </Button>

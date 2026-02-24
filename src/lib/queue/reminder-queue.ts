@@ -131,6 +131,7 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
         select: {
           name: true,
           email: true,
+          timezone: true,
         },
       },
     },
@@ -174,13 +175,15 @@ async function processReminderJob(job: Job<ReminderJobData>): Promise<void> {
 
   // Also send reminder to host for 1-hour reminder
   if (hoursUntil === 1) {
+    const hostTimezone = booking.host.timezone || booking.timezone;
     const hostEmailData: BookingEmailData = {
       ...emailData,
-      // Swap so host sees their own upcoming meeting
-      startTime: formatInTimeZone(booking.startTime, booking.host.email ? 'UTC' : booking.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
+      startTime: formatInTimeZone(booking.startTime, hostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
+      endTime: formatInTimeZone(booking.endTime, hostTimezone, 'h:mm a'),
+      timezone: hostTimezone,
     };
 
-    await queueReminderEmail(hostEmailData, hoursUntil);
+    await queueReminderEmail(hostEmailData, hoursUntil, emailData.hostEmail);
   }
 }
 

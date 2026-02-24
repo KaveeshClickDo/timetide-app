@@ -27,14 +27,31 @@ export async function POST(request: Request) {
 
     const { email } = result.data;
 
-    // Find user by email
+    // Find user by email with their linked accounts
     const user = await prisma.user.findUnique({
       where: { email: email.toLowerCase() },
-      select: { id: true, name: true, email: true, password: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        accounts: {
+          select: { provider: true },
+        },
+      },
     });
 
-    // Always return success to prevent email enumeration
-    // But only send email if user exists and has a password (not OAuth-only)
+    // User exists but is OAuth-only (no password set)
+    if (user && !user.password) {
+      const providers = user.accounts.map((a) => a.provider);
+      return NextResponse.json({
+        message: 'This account uses a social login provider.',
+        oauthOnly: true,
+        providers,
+      });
+    }
+
+    // User exists and has a password - send reset email
     if (user && user.password) {
       // Delete any existing tokens for this user
       await prisma.verificationToken.deleteMany({
@@ -59,7 +76,7 @@ export async function POST(request: Request) {
       await sendPasswordResetEmail(user.email, user.name || '', resetUrl);
     }
 
-    // Always return success (security: don't reveal if email exists)
+    // User not found OR email sent - return generic success
     return NextResponse.json({
       message: 'If an account with that email exists, we sent a password reset link.',
     });

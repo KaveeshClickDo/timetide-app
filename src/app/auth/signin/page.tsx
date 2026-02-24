@@ -55,6 +55,17 @@ export default function SignInPage() {
           variant: 'destructive',
         })
       } else {
+        // Check if user needs onboarding
+        try {
+          const res = await fetch('/api/auth/check-onboarding')
+          const data = await res.json()
+          if (data.needsOnboarding) {
+            router.push('/dashboard/onboarding')
+            return
+          }
+        } catch {
+          // Fall through to default redirect
+        }
         router.push(callbackUrl)
       }
     } catch (error) {

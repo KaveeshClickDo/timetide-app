@@ -12,6 +12,7 @@ import {
   Loader2,
   Check,
   AlertCircle,
+  AlertTriangle,
   Video,
   Camera,
 } from 'lucide-react'
@@ -805,10 +806,17 @@ export default function SettingsPage() {
                     <p className="font-medium">Microsoft Teams</p>
                     <p className="text-sm text-gray-500">
                       {outlookCalendar ? (
-                        <>
-                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
-                          Auto-enabled via Outlook Calendar
-                        </>
+                        outlookCalendar.teamsCapable ? (
+                          <>
+                            <Check className="inline h-3 w-3 mr-1 text-green-500" />
+                            Auto-enabled via Outlook Calendar
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="inline h-3 w-3 mr-1 text-amber-500" />
+                            Your Outlook account doesn&apos;t support Teams meetings. A Microsoft 365 work/school account is required.
+                          </>
+                        )
                       ) : (
                         'Connect Outlook Calendar to enable'
                       )}

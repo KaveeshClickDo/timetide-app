@@ -37,6 +37,7 @@ export function getOutlookAuthUrl(userId: string, returnTo?: string): string {
     'offline_access',
     'User.Read',
     'Calendars.ReadWrite',
+    'OnlineMeetings.ReadWrite',
   ]
 
   const params = new URLSearchParams({
@@ -184,6 +185,7 @@ interface MicrosoftCalendarResponse {
   name: string
   color: string
   isDefaultCalendar: boolean
+  allowedOnlineMeetingProviders?: string[]
 }
 
 export async function connectOutlookCalendar(userId: string, code: string) {
@@ -206,12 +208,18 @@ export async function connectOutlookCalendar(userId: string, code: string) {
   }
   const user: MicrosoftUserResponse = await userResponse.json()
 
-  // Get primary calendar
-  const calendarResponse = await fetch(`${GRAPH_API_BASE}/me/calendar`, { headers })
+  // Get primary calendar with online meeting provider info
+  const calendarResponse = await fetch(
+    `${GRAPH_API_BASE}/me/calendar?$select=id,name,color,isDefaultCalendar,allowedOnlineMeetingProviders`,
+    { headers }
+  )
   if (!calendarResponse.ok) {
     throw new Error('Failed to fetch Microsoft calendar')
   }
   const calendarData: MicrosoftCalendarResponse = await calendarResponse.json()
+
+  // Check if account supports Teams meeting creation
+  const teamsCapable = calendarData.allowedOnlineMeetingProviders?.includes('teamsForBusiness') ?? false
 
   // Check if calendar already exists for this user
   const existingCalendar = await prisma.calendar.findFirst({
@@ -231,6 +239,7 @@ export async function connectOutlookCalendar(userId: string, code: string) {
       data: {
         name: calendarData.name || `${user.displayName}'s Calendar`,
         isEnabled: true,
+        teamsCapable,
         credentials: {
           upsert: {
             create: {
@@ -267,6 +276,7 @@ export async function connectOutlookCalendar(userId: string, code: string) {
       externalId: calendarData.id,
       isPrimary: hasExistingCalendars === 0,
       isEnabled: true,
+      teamsCapable,
       credentials: {
         create: {
           accessToken: tokens.access_token,
@@ -448,14 +458,43 @@ export async function createOutlookCalendarEvent(
 
     const createdEvent: MicrosoftEventResponse = await response.json()
 
+    let meetLink = createdEvent.onlineMeeting?.joinUrl ?? null
+
+    // If Teams link wasn't generated via calendar event (e.g. personal account),
+    // try the dedicated Online Meetings API as fallback
+    if (params.conferenceData && !meetLink) {
+      console.warn('Teams link not generated via calendar event, trying Online Meetings API fallback')
+      try {
+        const meetingResponse = await fetch(`${GRAPH_API_BASE}/me/onlineMeetings`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            startDateTime: params.startTime.toISOString(),
+            endDateTime: params.endTime.toISOString(),
+            subject: params.summary,
+          }),
+        })
+
+        if (meetingResponse.ok) {
+          const meeting = await meetingResponse.json()
+          meetLink = meeting.joinWebUrl ?? meeting.joinUrl ?? null
+        } else {
+          const fallbackError = await meetingResponse.text()
+          console.warn('Online Meetings API fallback also failed:', fallbackError)
+        }
+      } catch (fallbackErr) {
+        console.warn('Online Meetings API fallback error:', fallbackErr)
+      }
+    }
+
     console.log('Created Outlook Calendar event:', {
       eventId: createdEvent.id,
-      hasMeetLink: !!createdEvent.onlineMeeting?.joinUrl,
+      hasMeetLink: !!meetLink,
     })
 
     return {
       eventId: createdEvent.id,
-      meetLink: createdEvent.onlineMeeting?.joinUrl ?? null,
+      meetLink,
     }
   } catch (error) {
     console.error('Failed to create Outlook Calendar event:', error)

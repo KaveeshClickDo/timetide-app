@@ -11,6 +11,7 @@ import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { rescheduleBookingSchema } from '@/lib/validation/schemas';
 import { updateGoogleCalendarEvent } from '@/lib/calendar/google';
+import { updateOutlookCalendarEvent } from '@/lib/calendar/outlook';
 import { BookingEmailData } from '@/lib/email/client';
 import {
   queueBookingRescheduledEmails,
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Store old times for email
+    // Store old times for email (invitee's timezone)
     const oldStartFormatted = formatInTimeZone(
       booking.startTime,
       booking.timezone,
@@ -128,34 +129,65 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       'h:mm a'
     );
 
+    // Store old times in host's timezone for host email
+    const hostTimezone = booking.host.timezone || booking.timezone;
+    const hostOldStartFormatted = formatInTimeZone(
+      booking.startTime,
+      hostTimezone,
+      'EEEE, MMMM d, yyyy h:mm a'
+    );
+    const hostOldEndFormatted = formatInTimeZone(
+      booking.endTime,
+      hostTimezone,
+      'h:mm a'
+    );
+
     // Update the booking
     const updatedBooking = await prisma.booking.update({
       where: { id: booking.id },
       data: {
         startTime: newStart,
         endTime: newEnd,
+        rescheduleReason: reason || null,
+        lastRescheduledAt: new Date(),
       },
     });
 
     // Update calendar event if exists
     if (booking.calendarEventId) {
-      const primaryCalendar = await prisma.calendar.findFirst({
+      // Find the calendar that owns this event (could be Google or Outlook)
+      const calendar = await prisma.calendar.findFirst({
         where: {
           userId: booking.hostId,
-          isPrimary: true,
-          provider: 'GOOGLE',
+          isEnabled: true,
         },
+        orderBy: { isPrimary: 'desc' },
       });
 
-      if (primaryCalendar) {
-        await updateGoogleCalendarEvent(
-          primaryCalendar.id,
-          booking.calendarEventId,
-          {
-            startTime: newStart,
-            endTime: newEnd,
+      if (calendar) {
+        try {
+          if (calendar.provider === 'GOOGLE') {
+            await updateGoogleCalendarEvent(
+              calendar.id,
+              booking.calendarEventId,
+              {
+                startTime: newStart,
+                endTime: newEnd,
+              }
+            );
+          } else if (calendar.provider === 'OUTLOOK') {
+            await updateOutlookCalendarEvent(
+              calendar.id,
+              booking.calendarEventId,
+              {
+                startTime: newStart,
+                endTime: newEnd,
+              }
+            );
           }
-        );
+        } catch (calendarError) {
+          console.warn('Failed to update calendar event:', calendarError);
+        }
       }
     }
 
@@ -183,7 +215,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     queueBookingRescheduledEmails(
       emailData,
       { start: oldStartFormatted, end: oldEndFormatted },
-      isHost
+      { start: hostOldStartFormatted, end: hostOldEndFormatted },
+      isHost,
+      reason || undefined
     ).catch(console.error);
 
     // Reschedule reminders

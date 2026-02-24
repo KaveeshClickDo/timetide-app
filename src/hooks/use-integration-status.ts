@@ -29,10 +29,12 @@ export function useIntegrationStatus() {
   })
 
   const calendars = calendarsData?.calendars || []
+  const outlookCalendar = calendars.find((cal: any) => cal.provider === 'OUTLOOK') || null
 
   return {
     googleCalendar: calendars.find((cal: any) => cal.provider === 'GOOGLE') || null,
-    outlookCalendar: calendars.find((cal: any) => cal.provider === 'OUTLOOK') || null,
+    outlookCalendar,
+    teamsCapable: outlookCalendar?.teamsCapable ?? false,
     zoomConnected: zoomData?.connected || false,
     isLoading: loadingCalendars || loadingZoom,
     refetchCalendars,

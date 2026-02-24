@@ -511,7 +511,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Create calendar event
-    const primaryCalendar = await prisma.calendar.findFirst({
+    // Determine the correct calendar based on location type:
+    // - Google Meet requires Google Calendar (to generate Meet link)
+    // - Microsoft Teams requires Outlook Calendar (to generate Teams link)
+    // - Other types use the primary calendar without conference data
+    let calendarForEvent = await prisma.calendar.findFirst({
       where: {
         userId: selectedHost.id,
         isPrimary: true,
@@ -519,9 +523,31 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (primaryCalendar) {
+    let needsConferenceData = false;
+
+    if (eventType.locationType === 'GOOGLE_MEET') {
+      // Must use Google Calendar for Meet link generation
+      const googleCalendar = await prisma.calendar.findFirst({
+        where: { userId: selectedHost.id, provider: 'GOOGLE', isEnabled: true },
+      });
+      if (googleCalendar) {
+        calendarForEvent = googleCalendar;
+        needsConferenceData = true;
+      }
+    } else if (eventType.locationType === 'TEAMS') {
+      // Must use Outlook Calendar for Teams link generation
+      const outlookCalendar = await prisma.calendar.findFirst({
+        where: { userId: selectedHost.id, provider: 'OUTLOOK', isEnabled: true },
+      });
+      if (outlookCalendar) {
+        calendarForEvent = outlookCalendar;
+        needsConferenceData = true;
+      }
+    }
+
+    if (calendarForEvent) {
       const eventParams: CreateCalendarEventParams = {
-        calendarId: primaryCalendar.id,
+        calendarId: calendarForEvent.id,
         summary: `${eventType.title} with ${name}`,
         description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}`,
         startTime: startDate,
@@ -531,14 +557,14 @@ export async function POST(request: NextRequest) {
           { email: selectedHost.email!, name: selectedHost.name ?? undefined },
         ],
         location,
-        conferenceData: eventType.locationType === 'GOOGLE_MEET' || eventType.locationType === 'TEAMS',
+        conferenceData: needsConferenceData,
       };
 
       let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
 
-      if (primaryCalendar.provider === 'GOOGLE') {
+      if (calendarForEvent.provider === 'GOOGLE') {
         result = await createGoogleCalendarEvent(eventParams);
-      } else if (primaryCalendar.provider === 'OUTLOOK') {
+      } else if (calendarForEvent.provider === 'OUTLOOK') {
         result = await createOutlookCalendarEvent(eventParams);
       }
 

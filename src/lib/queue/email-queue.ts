@@ -365,7 +365,9 @@ export async function queueReminderEmail(
 export async function queueBookingRescheduledEmails(
   data: BookingEmailData,
   oldTime: { start: string; end: string },
-  rescheduledByHost: boolean = false
+  hostOldTime: { start: string; end: string },
+  rescheduledByHost: boolean = false,
+  reason?: string
 ): Promise<void> {
   // Always notify the invitee
   await queueEmail({
@@ -375,6 +377,7 @@ export async function queueBookingRescheduledEmails(
     bookingData: data,
     isHost: false,
     oldTime,
+    reason,
     replyTo: data.hostEmail,
   });
 
@@ -386,7 +389,8 @@ export async function queueBookingRescheduledEmails(
       subject: `Rescheduled: ${data.eventTitle} - ${data.inviteeName} changed time`,
       bookingData: data,
       isHost: true,
-      oldTime,
+      oldTime: hostOldTime,
+      reason,
       replyTo: data.inviteeEmail,
     });
   }

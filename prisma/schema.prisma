@@ -110,6 +110,9 @@ model Calendar {
   isEnabled    Boolean      @default(true)
   color        String?
 
+  // Capability flags
+  teamsCapable  Boolean      @default(false)  // Whether this Outlook account supports Teams meeting creation
+
   // Sync tracking
   syncStatus    CalendarSyncStatus @default(PENDING)
   lastSyncedAt  DateTime?
@@ -407,6 +410,8 @@ model Booking {
   cancelledAt   DateTime?
   
   // Rescheduling
+  rescheduleReason  String?
+  lastRescheduledAt DateTime?
   rescheduledFromId String?   @unique
   
   createdAt DateTime @default(now())

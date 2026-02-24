@@ -359,7 +359,7 @@ export default function ReschedulePage() {
                   <p className="text-xs text-gray-500 font-medium mb-2">NEW TIME</p>
                   <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                     <p className="text-sm font-medium text-green-800">
-                      {selectedDate && format(selectedDate, 'EEEE, MMMM d')}
+                      {selectedSlot && formatInTimeZone(new Date(selectedSlot), inviteeTimezone, 'EEEE, MMMM d')}
                     </p>
                     <p className="text-sm text-green-700">
                       {formatInTimeZone(new Date(selectedSlot), inviteeTimezone, 'h:mm a')}

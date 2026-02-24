@@ -33,18 +33,18 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { cn, getInitials } from '@/lib/utils'
-import { getPlanBadgeStyles, PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
+import { getPlanBadgeStyles, PLAN_LIMITS, type PlanTier, type PlanLimits, getRequiredPlan } from '@/lib/pricing'
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { UpgradeModal } from '@/components/upgrade-modal'
 
-const navigation: { name: string; href: string; icon: typeof Calendar; requiredPlan?: PlanTier }[] = [
+const navigation: { name: string; href: string; icon: typeof Calendar; gateFeature?: keyof PlanLimits }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
   { name: 'Event Types', href: '/dashboard/event-types', icon: LinkIcon },
   { name: 'Availability', href: '/dashboard/availability', icon: Clock },
-  { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, requiredPlan: 'PRO' },
-  { name: 'Teams', href: '/dashboard/teams', icon: Users, requiredPlan: 'TEAM' },
-  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, requiredPlan: 'TEAM' },
+  { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, gateFeature: 'maxWebhooks' },
+  { name: 'Teams', href: '/dashboard/teams', icon: Users, gateFeature: 'teams' },
+  { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, gateFeature: 'analytics' },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
@@ -150,8 +150,9 @@ export default function DashboardLayout({
                   ? pathname === '/dashboard'
                   : pathname.startsWith(item.href)
               const userPlan = (user?.plan as PlanTier) || 'FREE'
-              const tierOrder: PlanTier[] = ['FREE', 'PRO', 'TEAM']
-              const isLocked = item.requiredPlan && tierOrder.indexOf(userPlan) < tierOrder.indexOf(item.requiredPlan)
+              const userLimits = PLAN_LIMITS[userPlan]
+              const isLocked = item.gateFeature && !userLimits[item.gateFeature]
+              const requiredPlan = item.gateFeature ? getRequiredPlan(item.gateFeature) : null
               return (
                 <Link
                   key={item.name}
@@ -166,14 +167,14 @@ export default function DashboardLayout({
                 >
                   <item.icon className="h-5 w-5" />
                   {item.name}
-                  {item.requiredPlan && (
+                  {isLocked && requiredPlan && (
                     <span className={cn(
                       'ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded',
-                      item.requiredPlan === 'TEAM'
+                      requiredPlan === 'TEAM'
                         ? 'bg-purple-100 text-purple-700'
                         : 'bg-ocean-100 text-ocean-700'
                     )}>
-                      {item.requiredPlan}
+                      {requiredPlan}
                     </span>
                   )}
                 </Link>

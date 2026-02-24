@@ -35,7 +35,7 @@ import { useIntegrationStatus } from '@/hooks/use-integration-status'
 const LOCATION_TYPES = [
   { value: 'GOOGLE_MEET', label: 'Google Meet', icon: Video, description: 'Auto-generate meeting link' },
   { value: 'TEAMS', label: 'Microsoft Teams', icon: Video, description: 'Auto-generate Teams meeting link' },
-  { value: 'ZOOM', label: 'Zoom', icon: Video, description: 'Use your Zoom account' },
+  { value: 'ZOOM', label: 'Zoom', icon: Video, description: 'Auto-generate Zoom meeting link' },
   { value: 'PHONE', label: 'Phone Call', icon: Phone, description: 'You or invitee will call' },
   { value: 'IN_PERSON', label: 'In Person', icon: MapPin, description: 'Meet at a physical location' },
   { value: 'CUSTOM', label: 'Custom', icon: Globe, description: 'Provide custom location details' },
@@ -229,22 +229,42 @@ function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFo
   )
 }
 
-function LocationIntegrationWarning({ locationType, googleCalendar, outlookCalendar, zoomConnected }: {
+function LocationIntegrationWarning({ locationType, googleCalendar, outlookCalendar, teamsCapable, zoomConnected }: {
   locationType: string
   googleCalendar: any
   outlookCalendar: any
+  teamsCapable: boolean
   zoomConnected: boolean
 }) {
   const needsGoogle = locationType === 'GOOGLE_MEET' && !googleCalendar
   const needsOutlook = locationType === 'TEAMS' && !outlookCalendar
   const needsZoom = locationType === 'ZOOM' && !zoomConnected
 
+  // Outlook connected but account doesn't support Teams meetings
+  const teamsUnsupported = locationType === 'TEAMS' && outlookCalendar && !teamsCapable
+
   const isConnected =
     (locationType === 'GOOGLE_MEET' && googleCalendar) ||
-    (locationType === 'TEAMS' && outlookCalendar) ||
+    (locationType === 'TEAMS' && outlookCalendar && teamsCapable) ||
     (locationType === 'ZOOM' && zoomConnected)
 
-  if (!needsGoogle && !needsOutlook && !needsZoom && !isConnected) return null
+  if (!needsGoogle && !needsOutlook && !needsZoom && !isConnected && !teamsUnsupported) return null
+
+  if (teamsUnsupported) {
+    return (
+      <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
+        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-amber-800">
+            Teams meetings not supported
+          </p>
+          <p className="text-xs text-amber-700">
+            Your Outlook account doesn&apos;t support creating Teams meeting links. A Microsoft 365 work or school account is required for this feature.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (isConnected) {
     return (
@@ -288,7 +308,7 @@ export default function NewEventTypePage() {
   const router = useRouter()
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const { googleCalendar, outlookCalendar, zoomConnected } = useIntegrationStatus()
+  const { googleCalendar, outlookCalendar, teamsCapable, zoomConnected } = useIntegrationStatus()
 
   const [formData, setFormData] = useState({
     title: '',
@@ -495,40 +515,56 @@ export default function NewEventTypePage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3">
-              {LOCATION_TYPES.map((loc) => (
-                <button
-                  key={loc.value}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, locationType: loc.value })}
-                  className={cn(
-                    'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
-                    formData.locationType === loc.value
-                      ? 'border-ocean-500 bg-ocean-50 ring-2 ring-ocean-500/20'
-                      : 'border-gray-200 hover:border-gray-300'
-                  )}
-                >
-                  <div
+              {LOCATION_TYPES.map((loc) => {
+                const isTeamsDisabled = loc.value === 'TEAMS' && outlookCalendar && !teamsCapable
+                return (
+                  <button
+                    key={loc.value}
+                    type="button"
+                    disabled={isTeamsDisabled}
+                    onClick={() => !isTeamsDisabled && setFormData({ ...formData, locationType: loc.value })}
                     className={cn(
-                      'w-10 h-10 rounded-lg flex items-center justify-center',
-                      formData.locationType === loc.value
-                        ? 'bg-ocean-500 text-white'
-                        : 'bg-gray-100 text-gray-500'
+                      'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
+                      isTeamsDisabled
+                        ? 'border-gray-200 opacity-50 cursor-not-allowed'
+                        : formData.locationType === loc.value
+                          ? 'border-ocean-500 bg-ocean-50 ring-2 ring-ocean-500/20'
+                          : 'border-gray-200 hover:border-gray-300'
                     )}
                   >
-                    <loc.icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{loc.label}</p>
-                    <p className="text-sm text-gray-500">{loc.description}</p>
-                  </div>
-                </button>
-              ))}
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center',
+                        isTeamsDisabled
+                          ? 'bg-gray-100 text-gray-400'
+                          : formData.locationType === loc.value
+                            ? 'bg-ocean-500 text-white'
+                            : 'bg-gray-100 text-gray-500'
+                      )}
+                    >
+                      <loc.icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className={cn('font-medium', isTeamsDisabled ? 'text-gray-400' : 'text-gray-900')}>{loc.label}</p>
+                        {isTeamsDisabled && (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                            Requires M365 work account
+                          </span>
+                        )}
+                      </div>
+                      <p className={cn('text-sm', isTeamsDisabled ? 'text-gray-400' : 'text-gray-500')}>{loc.description}</p>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
 
             <LocationIntegrationWarning
               locationType={formData.locationType}
               googleCalendar={googleCalendar}
               outlookCalendar={outlookCalendar}
+              teamsCapable={teamsCapable}
               zoomConnected={zoomConnected}
             />
 

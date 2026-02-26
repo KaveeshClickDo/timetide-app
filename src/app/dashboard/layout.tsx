@@ -37,6 +37,7 @@ import { getPlanBadgeStyles, PLAN_LIMITS, type PlanTier, type PlanLimits, getReq
 import { NotificationDropdown } from '@/components/notification-dropdown'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { UpgradeModal } from '@/components/upgrade-modal'
+import { PwaInstallBanner } from '@/components/pwa-install-banner'
 
 const navigation: { name: string; href: string; icon: typeof Calendar; gateFeature?: keyof PlanLimits }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
@@ -137,6 +138,7 @@ export default function DashboardLayout({
             <button
               className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
               onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
             >
               <X className="h-5 w-5" />
             </button>
@@ -149,7 +151,7 @@ export default function DashboardLayout({
                 item.href === '/dashboard'
                   ? pathname === '/dashboard'
                   : pathname.startsWith(item.href)
-              const userPlan = (user?.plan as PlanTier) || 'FREE'
+              const userPlan: PlanTier = (user?.plan as PlanTier) ?? 'FREE'
               const userLimits = PLAN_LIMITS[userPlan]
               const isLocked = item.gateFeature && !userLimits[item.gateFeature]
               const requiredPlan = item.gateFeature ? getRequiredPlan(item.gateFeature) : null
@@ -252,6 +254,7 @@ export default function DashboardLayout({
             <button
               className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar menu"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -288,7 +291,10 @@ export default function DashboardLayout({
         />
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <PwaInstallBanner />
+          {children}
+        </main>
 
         {/* Footer */}
         <footer className="mt-auto border-t border-gray-200 bg-white px-4 sm:px-6 lg:px-8 py-4">

@@ -49,7 +49,11 @@ export async function GET(request: NextRequest) {
     const upcoming = searchParams.get('upcoming') === 'true';
     const past = searchParams.get('past') === 'true';
 
-    const where: any = {
+    const where: {
+      hostId: string;
+      status?: string | { in: string[] } | { notIn: string[] };
+      startTime?: { gte: Date } | { lt: Date };
+    } = {
       hostId: session.user.id,
     };
 

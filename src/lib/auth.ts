@@ -149,7 +149,8 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (!dbUser) {
-          return {} as any;
+          // Return empty token to force session invalidation
+          return {} as typeof token;
         }
 
         // Sync plan and emailVerified in case they changed

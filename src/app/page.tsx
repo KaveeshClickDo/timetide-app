@@ -17,6 +17,45 @@ import { authOptions } from '@/lib/auth'
 import { PRICING_TIERS } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      name: 'TimeTide',
+      url: 'https://timetide.app',
+      logo: 'https://timetide.app/logo.svg',
+      description:
+        'Modern scheduling platform that flows with your time. Create booking pages, sync calendars, and let clients schedule meetings effortlessly.',
+      foundingDate: '2024',
+      sameAs: [],
+    },
+    {
+      '@type': 'WebSite',
+      name: 'TimeTide',
+      url: 'https://timetide.app',
+      description:
+        'Modern scheduling platform that flows with your time.',
+      publisher: { '@type': 'Organization', name: 'TimeTide' },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'TimeTide',
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      url: 'https://timetide.app',
+      description:
+        'Create booking pages, sync calendars, and let clients schedule meetings effortlessly.',
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'GBP',
+        description: 'Free plan available',
+      },
+    },
+  ],
+}
+
 export default async function HomePage() {
   // Redirect logged-in users to dashboard
   const session = await getServerSession(authOptions)
@@ -26,6 +65,10 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-ocean-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

@@ -73,7 +73,7 @@ export function NotificationDropdown() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="p-2 hover:bg-gray-100 rounded-lg relative">
+        <button className="p-2 hover:bg-gray-100 rounded-lg relative" aria-label="Notifications">
           <Bell className="h-5 w-5 text-gray-500" />
           {unreadCount > 0 && (
             <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-ocean-500 text-[10px] font-bold text-white">

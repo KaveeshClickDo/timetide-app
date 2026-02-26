@@ -79,8 +79,31 @@ export default function BookingPage() {
 
   const { user, eventType } = data
 
+  const eventJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: eventType.title,
+    ...(eventType.description && { description: eventType.description }),
+    url: `https://timetide.app/${user.username}/${slug}`,
+    provider: {
+      '@type': 'Person',
+      name: user.name || 'User',
+      url: `https://timetide.app/${user.username}`,
+    },
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'GBP',
+      availability: 'https://schema.org/InStock',
+    },
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(eventJsonLd) }}
+      />
       <BookingWidget
         user={{
           name: user.name || 'User',

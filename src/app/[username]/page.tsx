@@ -104,8 +104,24 @@ export default function UserProfilePage() {
   const user = userData.user
   const eventTypes = eventTypesData?.eventTypes || []
 
+  const profileJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ProfilePage',
+    mainEntity: {
+      '@type': 'Person',
+      name: user.name,
+      url: `https://timetide.app/${user.username}`,
+      ...(user.image && { image: user.image }),
+      ...(user.bio && { description: user.bio }),
+    },
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(profileJsonLd) }}
+      />
       <div className="max-w-2xl mx-auto py-12 px-4">
         {/* User header */}
         <div className="text-center mb-10">

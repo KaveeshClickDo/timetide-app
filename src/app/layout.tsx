@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
 import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/toaster'
+import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import './globals.css'
 
 const inter = Inter({
@@ -50,6 +51,13 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  manifest: '/manifest.json',
+  themeColor: '#0ea5e9',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'TimeTide',
+  },
 }
 
 export default function RootLayout({
@@ -59,8 +67,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+      </head>
       <body className={`${inter.variable} ${plusJakarta.variable} font-sans antialiased`}>
         <Providers>
+          <ServiceWorkerRegister />
           {children}
           <Toaster />
         </Providers>

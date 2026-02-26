@@ -211,20 +211,6 @@ function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFo
           <p className="text-xs text-gray-500">0 = unlimited</p>
         </div>
       </div>
-      <div className="flex items-center gap-3 pt-2">
-        <input
-          type="checkbox"
-          id="requiresConfirmation"
-          checked={formData.requiresConfirmation}
-          onChange={(e) =>
-            setFormData({ ...formData, requiresConfirmation: e.target.checked })
-          }
-          className="h-4 w-4 rounded border-gray-300 text-ocean-600"
-        />
-        <Label htmlFor="requiresConfirmation" className="font-normal">
-          Require confirmation before booking is confirmed
-        </Label>
-      </div>
     </CardContent>
   )
 }
@@ -726,6 +712,29 @@ export default function NewEventTypePage() {
           </CardContent>
         </Card>
 
+        {/* Booking Confirmation */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="font-medium text-gray-900">Require Confirmation</p>
+                <p className="text-sm text-gray-500">
+                  Bookings will be held as pending until you manually confirm or decline them.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                id="requiresConfirmation"
+                checked={formData.requiresConfirmation}
+                onChange={(e) =>
+                  setFormData({ ...formData, requiresConfirmation: e.target.checked })
+                }
+                className="h-5 w-5 rounded border-gray-300 text-ocean-600"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Custom Questions */}
         <Card>
           <CardHeader>
@@ -846,7 +855,7 @@ export default function NewEventTypePage() {
                   Advanced Settings
                   <ProBadge feature="bufferTimes" />
                 </CardTitle>
-                <CardDescription>Buffer times, booking limits, and more.</CardDescription>
+                <CardDescription>Buffer times, minimum notice, and booking limits.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
                 {showAdvanced ? 'Hide' : 'Show'}

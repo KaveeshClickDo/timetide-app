@@ -51,9 +51,10 @@ export async function GET() {
       (b) => b.startTime >= monthStart && b.startTime <= monthEnd
     ).length
 
-    // Calculate total hours booked (confirmed + completed bookings only)
+    // Calculate total hours booked (past confirmed/completed bookings only)
     const completedBookings = allBookings.filter(
-      (b) => b.status === 'CONFIRMED' || b.status === 'COMPLETED'
+      (b) => b.status === 'COMPLETED' ||
+      ((b.status === 'CONFIRMED' || b.status === 'PENDING') && b.endTime < now)
     )
     const totalMinutes = completedBookings.reduce((acc, b) => {
       const duration = (b.endTime.getTime() - b.startTime.getTime()) / (1000 * 60)
@@ -197,23 +198,36 @@ export async function GET() {
       { label: '6+ Bookings', guests: repeatGuestsData.sixPlus, color: '#8b5cf6' },
     ].filter((d) => d.guests > 0)
 
-    // Cancellation rate
-    const cancelledBookings = allBookings.filter((b) => b.status === 'CANCELLED').length
-    const completedCount = allBookings.filter(
-      (b) => b.status === 'CONFIRMED' || b.status === 'COMPLETED'
-    ).length
-    const pendingCount = allBookings.filter((b) => b.status === 'PENDING').length
+    // Status distribution (time-aware, matching dashboard logic)
+    const cancelledCount = allBookings.filter((b) => b.status === 'CANCELLED').length
     const rejectedCount = allBookings.filter((b) => b.status === 'REJECTED').length
+
+    // Completed = COMPLETED status OR (PENDING/CONFIRMED) with past end time
+    const completedCount = allBookings.filter(
+      (b) => b.status === 'COMPLETED' ||
+      ((b.status === 'PENDING' || b.status === 'CONFIRMED') && b.endTime < now)
+    ).length
+
+    // Confirmed = CONFIRMED with future end time
+    const confirmedCount = allBookings.filter(
+      (b) => b.status === 'CONFIRMED' && b.endTime >= now
+    ).length
+
+    // Pending = PENDING with future end time
+    const pendingCount = allBookings.filter(
+      (b) => b.status === 'PENDING' && b.endTime >= now
+    ).length
 
     const statusDistribution = [
       { status: 'Completed', count: completedCount, color: '#22c55e' },
+      { status: 'Confirmed', count: confirmedCount, color: '#0ea5e9' },
       { status: 'Pending', count: pendingCount, color: '#f59e0b' },
-      { status: 'Cancelled', count: cancelledBookings, color: '#ef4444' },
-      { status: 'Rejected', count: rejectedCount, color: '#6b7280' },
+      { status: 'Cancelled', count: cancelledCount, color: '#ef4444' },
+      { status: 'Declined', count: rejectedCount, color: '#6b7280' },
     ].filter((s) => s.count > 0)
 
     const cancellationRate = totalBookings > 0
-      ? Math.round((cancelledBookings / totalBookings) * 100)
+      ? Math.round((cancelledCount / totalBookings) * 100)
       : 0
 
     return NextResponse.json({

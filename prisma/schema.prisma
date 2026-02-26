@@ -460,12 +460,15 @@ model Team {
   slug        String  @unique
   description String?
   logo        String?
-  
+  logoData    Bytes?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members    TeamMember[]
-  eventTypes EventType[]
+  members     TeamMember[]
+  eventTypes  EventType[]
+  auditLogs   TeamAuditLog[]
+  invitations TeamInvitation[]
 
   @@index([slug])
 }
@@ -510,6 +513,59 @@ enum TeamMemberRole {
   OWNER
   ADMIN
   MEMBER
+}
+
+// ============================================================================
+// TEAM AUDIT LOG
+// ============================================================================
+
+model TeamAuditLog {
+  id         String   @id @default(cuid())
+  teamId     String
+  userId     String
+  action     String
+  targetType String?
+  targetId   String?
+  changes    Json?
+
+  createdAt  DateTime @default(now())
+
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
+  @@index([teamId, action])
+}
+
+// ============================================================================
+// TEAM INVITATIONS
+// ============================================================================
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model TeamInvitation {
+  id         String           @id @default(cuid())
+  teamId     String
+  email      String
+  role       TeamMemberRole   @default(MEMBER)
+  token      String           @unique @default(cuid())
+  status     InvitationStatus @default(PENDING)
+  invitedBy  String
+
+  expiresAt  DateTime
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  team       Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, email])
+  @@index([token])
+  @@index([teamId, status])
+  @@index([email])
 }
 
 // ============================================================================
@@ -613,6 +669,8 @@ enum NotificationType {
   BOOKING_CANCELLED
   BOOKING_RESCHEDULED
   BOOKING_REMINDER
+  TEAM_MEMBER_ADDED
+  TEAM_INVITATION_RECEIVED
 }
 
 model Notification {

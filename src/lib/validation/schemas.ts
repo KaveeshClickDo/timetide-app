@@ -248,6 +248,24 @@ export const updateTeamMemberSchema = z.object({
   priority: z.number().int().min(0).max(100).optional(),
 });
 
+export const createTeamInvitationSchema = z.object({
+  email: emailSchema,
+  role: teamRoleSchema.default('MEMBER'),
+});
+
+export const acceptTeamInvitationSchema = z.object({
+  token: z.string().min(1, 'Token is required'),
+});
+
+export const bulkMemberActionSchema = z.object({
+  action: z.enum(['change_role', 'remove', 'activate', 'deactivate']),
+  memberIds: z.array(z.string().min(1)).min(1).max(50),
+  role: teamRoleSchema.optional(),
+}).refine(
+  (data) => data.action !== 'change_role' || data.role !== undefined,
+  { message: 'Role is required for change_role action', path: ['role'] }
+);
+
 // ============================================================================
 // SLOT QUERY SCHEMAS
 // ============================================================================

@@ -11,6 +11,7 @@ import {
   sendEmail,
   EmailOptions,
   BookingEmailData,
+  TeamEmailData,
   generateBookingConfirmedEmail,
   generateBookingCancelledEmail,
   generateBookingPendingEmail,
@@ -18,6 +19,8 @@ import {
   generateBookingRejectedEmail,
   generateReminderEmail,
   generateBookingRescheduledEmail,
+  generateTeamMemberAddedEmail,
+  generateTeamInvitationEmail,
 } from '../email/client';
 
 // ============================================================================
@@ -32,6 +35,8 @@ export type EmailJobType =
   | 'booking_rejected'
   | 'booking_reminder'
   | 'booking_rescheduled'
+  | 'team_member_added'
+  | 'team_invitation'
   | 'custom';
 
 export interface EmailJobData {
@@ -39,6 +44,7 @@ export interface EmailJobData {
   to: string;
   subject: string;
   bookingData?: BookingEmailData;
+  teamData?: TeamEmailData & { expiresIn?: string; acceptUrl?: string };
   isHost?: boolean;
   reason?: string;
   hoursUntil?: number;
@@ -178,6 +184,16 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
       if (!bookingData) throw new Error('Missing bookingData for booking_rescheduled');
       if (!job.data.oldTime) throw new Error('Missing oldTime for booking_rescheduled');
       html = generateBookingRescheduledEmail(bookingData, job.data.oldTime, isHost ?? false);
+      break;
+
+    case 'team_member_added':
+      if (!job.data.teamData) throw new Error('Missing teamData for team_member_added');
+      html = generateTeamMemberAddedEmail(job.data.teamData);
+      break;
+
+    case 'team_invitation':
+      if (!job.data.teamData) throw new Error('Missing teamData for team_invitation');
+      html = generateTeamInvitationEmail(job.data.teamData as TeamEmailData & { expiresIn: string; acceptUrl: string });
       break;
 
     case 'custom':
@@ -396,4 +412,34 @@ export async function queueBookingRescheduledEmails(
       replyTo: data.inviteeEmail,
     });
   }
+}
+
+/**
+ * Queue team member added email
+ */
+export async function queueTeamMemberAddedEmail(
+  email: string,
+  data: TeamEmailData
+): Promise<void> {
+  await queueEmail({
+    type: 'team_member_added',
+    to: email,
+    subject: `You've been added to ${data.teamName} on TimeTide`,
+    teamData: data,
+  });
+}
+
+/**
+ * Queue team invitation email
+ */
+export async function queueTeamInvitationEmail(
+  email: string,
+  data: TeamEmailData & { expiresIn: string; acceptUrl: string }
+): Promise<void> {
+  await queueEmail({
+    type: 'team_invitation',
+    to: email,
+    subject: `You're invited to join ${data.teamName} on TimeTide`,
+    teamData: data,
+  });
 }

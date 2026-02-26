@@ -928,3 +928,139 @@ export async function sendWelcomeEmail(
     html: generateWelcomeEmail(name),
   });
 }
+
+// ============================================================================
+// Team Emails
+// ============================================================================
+
+export interface TeamEmailData {
+  memberName: string;
+  teamName: string;
+  actorName: string;
+  role: string;
+  teamUrl: string;
+}
+
+export function generateTeamMemberAddedEmail(data: TeamEmailData): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; color: #0f172a; margin-bottom: 8px;">You've been added to a team!</h2>
+        <p style="text-align: center; color: #64748b;">
+          ${esc(data.actorName)} added you to <strong>${esc(data.teamName)}</strong> as a <strong>${esc(data.role)}</strong>.
+        </p>
+
+        <div class="card">
+          <div class="detail-row">
+            <span class="detail-label">Team</span>
+            <span class="detail-value">${esc(data.teamName)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Your Role</span>
+            <span class="detail-value">${esc(data.role)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Added By</span>
+            <span class="detail-value">${esc(data.actorName)}</span>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${data.teamUrl}" class="btn" style="color: #ffffff;">View Team</a>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+          <p style="font-size: 12px; color: #94a3b8;">
+            You're receiving this because you were added to a team on TimeTide.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendTeamMemberAddedEmail(
+  email: string,
+  data: TeamEmailData
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: `You've been added to ${data.teamName} on TimeTide`,
+    html: generateTeamMemberAddedEmail(data),
+  });
+}
+
+export function generateTeamInvitationEmail(data: TeamEmailData & { expiresIn: string; acceptUrl: string }): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; color: #0f172a; margin-bottom: 8px;">You're invited to join a team!</h2>
+        <p style="text-align: center; color: #64748b;">
+          ${esc(data.actorName)} has invited you to join <strong>${esc(data.teamName)}</strong> as a <strong>${esc(data.role)}</strong>.
+        </p>
+
+        <div class="card">
+          <div class="detail-row">
+            <span class="detail-label">Team</span>
+            <span class="detail-value">${esc(data.teamName)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Your Role</span>
+            <span class="detail-value">${esc(data.role)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Invited By</span>
+            <span class="detail-value">${esc(data.actorName)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Expires</span>
+            <span class="detail-value">${esc(data.expiresIn)}</span>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${data.acceptUrl}" class="btn" style="color: #ffffff;">Accept Invitation</a>
+        </div>
+
+        <p style="text-align: center; color: #94a3b8; font-size: 13px;">
+          If you don't have a TimeTide account, you'll need to create one first using this email address.
+        </p>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+          <p style="font-size: 12px; color: #94a3b8;">
+            You're receiving this because someone invited you to a team on TimeTide.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendTeamInvitationEmail(
+  email: string,
+  data: TeamEmailData & { expiresIn: string; acceptUrl: string }
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: `You're invited to join ${data.teamName} on TimeTide`,
+    html: generateTeamInvitationEmail(data),
+  });
+}

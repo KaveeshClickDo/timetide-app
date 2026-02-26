@@ -10,6 +10,8 @@ import {
   XCircle,
   Clock,
   RefreshCw,
+  Users,
+  Mail,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -29,6 +31,8 @@ const typeIcons: Record<string, typeof Calendar> = {
   BOOKING_CANCELLED: XCircle,
   BOOKING_RESCHEDULED: RefreshCw,
   BOOKING_REMINDER: Clock,
+  TEAM_MEMBER_ADDED: Users,
+  TEAM_INVITATION_RECEIVED: Mail,
 }
 
 const typeColors: Record<string, string> = {
@@ -38,6 +42,8 @@ const typeColors: Record<string, string> = {
   BOOKING_CANCELLED: 'text-red-600 bg-red-50',
   BOOKING_RESCHEDULED: 'text-yellow-600 bg-yellow-50',
   BOOKING_REMINDER: 'text-blue-600 bg-blue-50',
+  TEAM_MEMBER_ADDED: 'text-purple-600 bg-purple-50',
+  TEAM_INVITATION_RECEIVED: 'text-indigo-600 bg-indigo-50',
 }
 
 export function NotificationDropdown() {

@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { updateTeamMemberSchema } from '@/lib/validation/schemas';
+import { logTeamAction } from '@/lib/team-audit';
 
 interface RouteParams {
   params: { id: string; memberId: string };
@@ -170,6 +171,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       },
     });
 
+    const action = role !== undefined ? 'member.role_changed' : isActive !== undefined ? 'member.status_changed' : 'member.updated';
+    logTeamAction({
+      teamId: params.id,
+      userId: session.user.id,
+      action,
+      targetType: 'TeamMember',
+      targetId: params.memberId,
+      changes: {
+        ...(role !== undefined && { role: { from: targetMember.role, to: role } }),
+        ...(isActive !== undefined && { isActive: { from: targetMember.isActive, to: isActive } }),
+        ...(priority !== undefined && { priority: { from: targetMember.priority, to: priority } }),
+      },
+    }).catch(() => {})
+
     return NextResponse.json({ member: updatedMember });
   } catch (error) {
     console.error('Error updating team member:', error);
@@ -233,6 +248,15 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     await prisma.teamMember.delete({
       where: { id: params.memberId },
     });
+
+    logTeamAction({
+      teamId: params.id,
+      userId: session.user.id,
+      action: 'member.removed',
+      targetType: 'TeamMember',
+      targetId: params.memberId,
+      changes: { role: targetMember.role, userId: targetMember.userId },
+    }).catch(() => {})
 
     return NextResponse.json({ success: true, message: 'Member removed successfully' });
   } catch (error) {

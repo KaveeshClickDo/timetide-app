@@ -58,6 +58,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           select: {
             id: true,
             title: true,
+            slug: true,
             description: true,
             length: true,
           },
@@ -243,7 +244,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         eventType: {
           id: booking.eventType.id,
           title: booking.eventType.title,
-          slug: '',
+          slug: booking.eventType.slug,
           length: booking.eventType.length,
         },
         host: {

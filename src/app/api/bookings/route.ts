@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     if (past) {
       where.startTime = { lt: new Date() };
-      where.status = { notIn: ['CANCELLED'] }; // Exclude cancelled from past
+      where.status = { notIn: ['CANCELLED', 'REJECTED'] }; // Exclude cancelled and rejected from past
     }
 
     const bookings = await prisma.booking.findMany({

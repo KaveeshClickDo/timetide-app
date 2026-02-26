@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Webhook,
@@ -18,6 +18,10 @@ import {
   EyeOff,
   Copy,
   AlertTriangle,
+  Pencil,
+  History,
+  KeyRound,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,6 +57,18 @@ import { useFeatureGate } from '@/hooks/use-feature-gate';
 import { FeatureGatePage } from '@/components/feature-gate-page';
 import { UpgradeModal } from '@/components/upgrade-modal';
 
+interface WebhookDelivery {
+  id: string;
+  eventType: string;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'RETRYING';
+  attempts: number;
+  responseStatus: number | null;
+  responseTimeMs: number | null;
+  errorMessage: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
 interface WebhookData {
   id: string;
   name: string | null;
@@ -85,7 +101,16 @@ export default function WebhooksPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeliveryDialogOpen, setIsDeliveryDialogOpen] = useState(false);
   const [selectedWebhook, setSelectedWebhook] = useState<WebhookData | null>(null);
+  const [editingWebhook, setEditingWebhook] = useState<{
+    id: string;
+    name: string;
+    url: string;
+    eventTriggers: string[];
+  } | null>(null);
+  const [deliveryWebhookId, setDeliveryWebhookId] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [newWebhook, setNewWebhook] = useState({
     name: '',
@@ -204,6 +229,129 @@ export default function WebhooksPage() {
       toast({ title: error.message, variant: 'destructive' });
     },
   });
+
+  // Update webhook mutation
+  const updateMutation = useMutation({
+    mutationFn: async (data: { id: string; name?: string | null; url?: string; eventTriggers?: string[]; regenerateSecret?: boolean }) => {
+      const { id, ...body } = data;
+      const res = await fetch(`/api/webhooks/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to update webhook');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+      setIsEditDialogOpen(false);
+      setEditingWebhook(null);
+      toast({ title: 'Webhook updated successfully' });
+      if (data.webhook.secret) {
+        setShowSecrets((prev) => ({ ...prev, [data.webhook.id]: true }));
+      }
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: 'destructive' });
+    },
+  });
+
+  // Fetch webhook deliveries
+  const { data: deliveryData, isLoading: isDeliveryLoading } = useQuery<{
+    webhook: WebhookData & { deliveries: WebhookDelivery[]; stats: { success: number; failed: number; pending: number } };
+  }>({
+    queryKey: ['webhook-deliveries', deliveryWebhookId],
+    queryFn: async () => {
+      const res = await fetch(`/api/webhooks/${deliveryWebhookId}`);
+      if (!res.ok) throw new Error('Failed to fetch deliveries');
+      return res.json();
+    },
+    enabled: !!deliveryWebhookId && isDeliveryDialogOpen,
+  });
+
+  // Retry delivery mutation
+  const retryMutation = useMutation({
+    mutationFn: async ({ webhookId, deliveryId }: { webhookId: string; deliveryId: string }) => {
+      const res = await fetch(`/api/webhooks/${webhookId}/deliveries/${deliveryId}/retry`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to retry delivery');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhook-deliveries', deliveryWebhookId] });
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+      toast({ title: 'Retry queued successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: 'destructive' });
+    },
+  });
+
+  const openEditDialog = useCallback((webhook: WebhookData) => {
+    setEditingWebhook({
+      id: webhook.id,
+      name: webhook.name || '',
+      url: webhook.url,
+      eventTriggers: [...webhook.eventTriggers],
+    });
+    setIsEditDialogOpen(true);
+  }, []);
+
+  const openDeliveryDialog = useCallback((webhookId: string) => {
+    setDeliveryWebhookId(webhookId);
+    setIsDeliveryDialogOpen(true);
+  }, []);
+
+  const toggleEditEventTrigger = (event: string) => {
+    if (!editingWebhook) return;
+    setEditingWebhook((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        eventTriggers: prev.eventTriggers.includes(event)
+          ? prev.eventTriggers.filter((e) => e !== event)
+          : [...prev.eventTriggers, event],
+      };
+    });
+  };
+
+  const handleUpdateWebhook = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingWebhook) return;
+    if (editingWebhook.eventTriggers.length === 0) {
+      toast({ title: 'Please select at least one event', variant: 'destructive' });
+      return;
+    }
+    updateMutation.mutate({
+      id: editingWebhook.id,
+      name: editingWebhook.name || null,
+      url: editingWebhook.url,
+      eventTriggers: editingWebhook.eventTriggers,
+    });
+  };
+
+  const handleRegenerateSecret = (webhookId: string) => {
+    if (confirm('Are you sure? The old secret will stop working immediately.')) {
+      updateMutation.mutate({ id: webhookId, regenerateSecret: true });
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'SUCCESS': return 'bg-green-100 text-green-700';
+      case 'FAILED': return 'bg-red-100 text-red-700';
+      case 'PENDING': return 'bg-yellow-100 text-yellow-700';
+      case 'RETRYING': return 'bg-blue-100 text-blue-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
 
   const handleCreateWebhook = (e: React.FormEvent) => {
     e.preventDefault();
@@ -442,6 +590,18 @@ export default function WebhooksPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
+                          onClick={() => openEditDialog(webhook)}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => openDeliveryDialog(webhook.id)}
+                        >
+                          <History className="h-4 w-4 mr-2" />
+                          Delivery History
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() => testMutation.mutate(webhook.id)}
                           disabled={testMutation.isPending}
                         >
@@ -453,6 +613,12 @@ export default function WebhooksPage() {
                         >
                           <Copy className="h-4 w-4 mr-2" />
                           Copy URL
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => handleRegenerateSecret(webhook.id)}
+                        >
+                          <KeyRound className="h-4 w-4 mr-2" />
+                          Regenerate Secret
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -547,6 +713,200 @@ export default function WebhooksPage() {
           ))}
         </div>
       )}
+
+      {/* Edit Webhook Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open);
+        if (!open) setEditingWebhook(null);
+      }}>
+        <DialogContent className="max-w-lg">
+          <form onSubmit={handleUpdateWebhook}>
+            <DialogHeader>
+              <DialogTitle>Edit Webhook</DialogTitle>
+              <DialogDescription>
+                Update your webhook endpoint settings.
+              </DialogDescription>
+            </DialogHeader>
+            {editingWebhook && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Name (optional)</Label>
+                  <Input
+                    id="edit-name"
+                    value={editingWebhook.name}
+                    onChange={(e) => setEditingWebhook({ ...editingWebhook, name: e.target.value })}
+                    placeholder="My Webhook"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-url">Endpoint URL</Label>
+                  <Input
+                    id="edit-url"
+                    type="url"
+                    value={editingWebhook.url}
+                    onChange={(e) => setEditingWebhook({ ...editingWebhook, url: e.target.value })}
+                    placeholder="https://example.com/webhooks"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Events to Subscribe</Label>
+                  <div className="space-y-2">
+                    {EVENT_OPTIONS.map((event) => (
+                      <label
+                        key={event.value}
+                        className={cn(
+                          'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                          editingWebhook.eventTriggers.includes(event.value)
+                            ? 'border-ocean-500 bg-ocean-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editingWebhook.eventTriggers.includes(event.value)}
+                          onChange={() => toggleEditEventTrigger(event.value)}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="font-medium text-sm">{event.label}</div>
+                          <div className="text-xs text-gray-500">{event.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delivery History Dialog */}
+      <Dialog open={isDeliveryDialogOpen} onOpenChange={(open) => {
+        setIsDeliveryDialogOpen(open);
+        if (!open) setDeliveryWebhookId(null);
+      }}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Delivery History</DialogTitle>
+            <DialogDescription>
+              Recent webhook delivery attempts and their status.
+            </DialogDescription>
+          </DialogHeader>
+          {isDeliveryLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-ocean-500" />
+            </div>
+          ) : deliveryData?.webhook ? (
+            <div className="space-y-4">
+              {/* Stats Summary */}
+              <div className="flex gap-4 text-sm">
+                <div className="flex items-center gap-1.5 text-green-600">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>{deliveryData.webhook.stats.success} success</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-red-600">
+                  <XCircle className="h-4 w-4" />
+                  <span>{deliveryData.webhook.stats.failed} failed</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-yellow-600">
+                  <Clock className="h-4 w-4" />
+                  <span>{deliveryData.webhook.stats.pending} pending</span>
+                </div>
+              </div>
+
+              {/* Deliveries List */}
+              <div className="overflow-y-auto max-h-[50vh] space-y-2">
+                {deliveryData.webhook.deliveries.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No deliveries yet.
+                  </div>
+                ) : (
+                  deliveryData.webhook.deliveries.map((delivery: WebhookDelivery) => (
+                    <div
+                      key={delivery.id}
+                      className="border rounded-lg p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge className={cn('text-xs', getStatusColor(delivery.status))}>
+                            {delivery.status}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {delivery.eventType}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {delivery.responseTimeMs && (
+                            <span className="text-xs text-gray-500">
+                              {delivery.responseTimeMs}ms
+                            </span>
+                          )}
+                          {delivery.responseStatus && (
+                            <Badge variant="outline" className="text-xs">
+                              HTTP {delivery.responseStatus}
+                            </Badge>
+                          )}
+                          {(delivery.status === 'FAILED') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() =>
+                                retryMutation.mutate({
+                                  webhookId: deliveryWebhookId!,
+                                  deliveryId: delivery.id,
+                                })
+                              }
+                              disabled={retryMutation.isPending}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Retry
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>Attempts: {delivery.attempts}</span>
+                        <span>{formatRelativeTime(delivery.createdAt)}</span>
+                      </div>
+                      {delivery.errorMessage && (
+                        <div className="text-xs text-red-600 font-mono bg-red-50 p-2 rounded truncate">
+                          {delivery.errorMessage}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              Failed to load deliveries.
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Documentation Section */}
       <Card className="mt-8">

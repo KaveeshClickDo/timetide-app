@@ -91,7 +91,7 @@ function getDateLabel(dateStr: string): string {
 
 export default function DashboardPage() {
   const { data: session } = useSession()
-  const [filter, setFilter] = useState<'upcoming' | 'past' | 'cancelled'>('upcoming')
+  const [filter, setFilter] = useState<'upcoming' | 'past' | 'cancelled' | 'declined'>('upcoming')
 
   // Get host's timezone from session (defaults to UTC)
   const hostTimezone = session?.user?.timezone || 'UTC'
@@ -118,6 +118,8 @@ export default function DashboardPage() {
         params.set('past', 'true')
       } else if (filter === 'cancelled') {
         params.set('status', 'CANCELLED')
+      } else if (filter === 'declined') {
+        params.set('status', 'REJECTED')
       }
 
       const res = await fetch(`/api/bookings?${params}`)
@@ -149,6 +151,7 @@ export default function DashboardPage() {
   ).length || 0
 
   const cancelledCount = allBookings?.filter((b) => b.status === 'CANCELLED').length || 0
+  const declinedCount = allBookings?.filter((b) => b.status === 'REJECTED').length || 0
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -236,6 +239,12 @@ export default function DashboardPage() {
         >
           Cancelled
         </Button>
+        <Button
+          variant={filter === 'declined' ? 'default' : 'ghost'}
+          onClick={() => setFilter('declined')}
+        >
+          Declined
+        </Button>
       </div>
 
       {/* Bookings List */}
@@ -255,6 +264,8 @@ export default function DashboardPage() {
                 ? "When someone books a meeting with you, it'll appear here."
                 : filter === 'cancelled'
                 ? 'Your cancelled bookings will appear here.'
+                : filter === 'declined'
+                ? 'Bookings you have declined will appear here.'
                 : 'Your past bookings will appear here.'}
             </p>
             <Link href="/dashboard/event-types">

@@ -6,7 +6,9 @@ export type NotificationType =
   | 'BOOKING_REJECTED'
   | 'BOOKING_CANCELLED'
   | 'BOOKING_RESCHEDULED'
-  | 'BOOKING_REMINDER';
+  | 'BOOKING_REMINDER'
+  | 'TEAM_MEMBER_ADDED'
+  | 'TEAM_INVITATION_RECEIVED';
 
 interface CreateNotificationParams {
   userId: string;
@@ -66,6 +68,29 @@ export function buildBookingNotification(
       return {
         title: 'Upcoming meeting',
         message: `"${data.eventTitle}" with ${data.inviteeName} starts at ${data.startTime}`,
+      };
+    default:
+      return {
+        title: 'Notification',
+        message: '',
+      };
+  }
+}
+
+export function buildTeamNotification(
+  type: 'TEAM_MEMBER_ADDED' | 'TEAM_INVITATION_RECEIVED',
+  data: { teamName: string; actorName: string; role?: string }
+): { title: string; message: string } {
+  switch (type) {
+    case 'TEAM_MEMBER_ADDED':
+      return {
+        title: 'Added to team',
+        message: `You were added to "${data.teamName}" by ${data.actorName}${data.role ? ` as ${data.role}` : ''}`,
+      };
+    case 'TEAM_INVITATION_RECEIVED':
+      return {
+        title: 'Team invitation',
+        message: `${data.actorName} invited you to join "${data.teamName}"${data.role ? ` as ${data.role}` : ''}`,
       };
   }
 }

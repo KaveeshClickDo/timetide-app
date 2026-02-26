@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logTeamAction } from '@/lib/team-audit'
 
 interface RouteParams {
   params: { id: string }
@@ -122,6 +123,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         ...(logo !== undefined && { logo }),
       },
     })
+
+    logTeamAction({
+      teamId: params.id,
+      userId: session.user.id,
+      action: 'team.updated',
+      targetType: 'Team',
+      targetId: params.id,
+      changes: { name, slug, logo },
+    }).catch(() => {})
 
     return NextResponse.json({ team })
   } catch (error) {

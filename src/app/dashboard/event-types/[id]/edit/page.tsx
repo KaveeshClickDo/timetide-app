@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, addDays } from 'date-fns'
@@ -192,6 +192,7 @@ export default function EditEventTypePage({ params }: PageProps) {
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const isInitializedRef = useRef(false)
 
   // Feature gates
   const customQuestionsGate = useFeatureGate('customQuestions')
@@ -212,6 +213,7 @@ export default function EditEventTypePage({ params }: PageProps) {
   // Initialize form when data loads
   useEffect(() => {
     if (eventTypeData?.eventType) {
+      isInitializedRef.current = false
       const et = eventTypeData.eventType
       setFormData({
         title: et.title,
@@ -253,11 +255,14 @@ export default function EditEventTypePage({ params }: PageProps) {
     }
   }, [eventTypeData])
 
-  // Track changes
+  // Track changes — skip the first trigger caused by initial data population
   useEffect(() => {
-    if (eventTypeData?.eventType) {
-      setHasChanges(true)
+    if (!eventTypeData?.eventType) return
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true
+      return
     }
+    setHasChanges(true)
   }, [formData, questions])
 
   // Update mutation
@@ -773,6 +778,27 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardContent>
         </Card>
 
+        {/* Booking Confirmation */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="font-medium text-gray-900">Require Confirmation</p>
+                <p className="text-sm text-gray-500">
+                  Bookings will be held as pending until you manually confirm or decline them.
+                </p>
+              </div>
+              <Switch
+                id="requiresConfirmation"
+                checked={formData.requiresConfirmation}
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, requiresConfirmation: checked })
+                }
+              />
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Custom Questions */}
         <Card>
           <CardHeader>
@@ -957,7 +983,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                   Advanced Settings
                   <ProBadge feature="bufferTimes" />
                 </CardTitle>
-                <CardDescription>Buffer times, booking limits, and more.</CardDescription>
+                <CardDescription>Buffer times, minimum notice, and booking limits.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
                 {showAdvanced ? 'Hide' : 'Show'}
@@ -1039,18 +1065,6 @@ export default function EditEventTypePage({ params }: PageProps) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 pt-2">
-                <Switch
-                  id="requiresConfirmation"
-                  checked={formData.requiresConfirmation}
-                  onCheckedChange={(checked) =>
-                    setFormData({ ...formData, requiresConfirmation: checked })
-                  }
-                />
-                <Label htmlFor="requiresConfirmation" className="font-normal">
-                  Require confirmation before booking is confirmed
-                </Label>
-              </div>
             </CardContent>
           )}
         </Card>

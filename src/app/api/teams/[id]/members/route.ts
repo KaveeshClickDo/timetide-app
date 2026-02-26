@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { addTeamMemberSchema } from '@/lib/validation/schemas'
+import { createNotification, buildTeamNotification } from '@/lib/notifications'
+import { queueTeamMemberAddedEmail } from '@/lib/queue/email-queue'
+import { logTeamAction } from '@/lib/team-audit'
 
 interface RouteParams {
   params: { id: string }
@@ -152,6 +155,51 @@ export async function POST(request: Request, { params }: RouteParams) {
         },
       },
     })
+
+    logTeamAction({
+      teamId: params.id,
+      userId: session.user.id,
+      action: 'member.added',
+      targetType: 'TeamMember',
+      targetId: newMember.id,
+      changes: { email: userToAdd.email, role: role || 'MEMBER' },
+    }).catch(() => {})
+
+    // Send notification and email (fire-and-forget)
+    try {
+      const team = await prisma.team.findUnique({
+        where: { id: params.id },
+        select: { name: true, slug: true },
+      })
+      if (team) {
+        const actorName = session.user.name || session.user.email || 'Someone'
+        const roleName = (role || 'MEMBER').charAt(0) + (role || 'MEMBER').slice(1).toLowerCase()
+
+        // In-app notification
+        const notif = buildTeamNotification('TEAM_MEMBER_ADDED', {
+          teamName: team.name,
+          actorName,
+          role: roleName,
+        })
+        await createNotification({
+          userId: userToAdd.id,
+          type: 'TEAM_MEMBER_ADDED',
+          title: notif.title,
+          message: notif.message,
+        })
+
+        // Email
+        await queueTeamMemberAddedEmail(userToAdd.email!, {
+          memberName: userToAdd.name || 'there',
+          teamName: team.name,
+          actorName,
+          role: roleName,
+          teamUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/teams/${params.id}`,
+        })
+      }
+    } catch (err) {
+      console.error('Failed to send team member notification:', err)
+    }
 
     return NextResponse.json({ member: newMember }, { status: 201 })
   } catch (error) {

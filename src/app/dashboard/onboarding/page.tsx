@@ -277,10 +277,10 @@ function OnboardingContent() {
         const error = await res.json()
         throw new Error(error.error || 'Failed to update')
       }
-      return res.json()
-    },
-    onSuccess: (data) => {
-      updateSession({ ...session, user: data.user })
+      const result = await res.json()
+      // Await session update so the JWT token is refreshed before any navigation
+      await updateSession({ ...session, user: result.user })
+      return result
     },
     onError: (error) => {
       toast({

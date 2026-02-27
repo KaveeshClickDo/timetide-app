@@ -492,6 +492,89 @@ export function generateBookingConfirmedByHostEmail(
   `;
 }
 
+export function generateBulkConfirmedByHostEmail(
+  data: RecurringBookingEmailData
+): string {
+  const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/bookings/${data.bookingUid}`;
+  const addToCalendarUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/${data.bookingUid}/calendar`;
+
+  const dateRows = data.recurringDates
+    .map((d, i) => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px;">${i + 1}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 500;">${esc(d.startTime)}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #64748b;">${esc(d.endTime)}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px; color: #10b981;">
+          Your Recurring Booking is Confirmed!
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          ${esc(data.hostName)} has confirmed all ${data.totalOccurrences} sessions
+        </p>
+
+        <div class="card" style="border-left: 4px solid #10b981;">
+          <h3 style="margin: 0 0 4px 0;">${esc(data.eventTitle)}</h3>
+          <p style="margin: 0 0 16px 0; color: #10b981; font-size: 14px;">
+            ${data.totalOccurrences} sessions confirmed
+          </p>
+
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;">#</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;">Date & Start</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;">End</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dateRows}
+            </tbody>
+          </table>
+
+          <div class="divider"></div>
+
+          <div class="detail-row">
+            <span class="detail-label">🌍 Timezone</span>
+            <span class="detail-value">${esc(data.timezone)}</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">👤 Host</span>
+            <span class="detail-value">${esc(data.hostName)}</span>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${manageUrl}" class="btn" style="color: #ffffff;">View Booking</a>
+          <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+          <p style="font-size: 12px;">
+            Need to make changes?
+            <a href="${manageUrl}" style="color: #0ea5e9;">Reschedule or cancel</a>
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 export function generateBookingRejectedEmail(
   data: BookingEmailData,
   reason?: string
@@ -611,6 +694,128 @@ export function generateReminderEmail(
   `;
 }
 
+export interface RecurringBookingEmailData extends BookingEmailData {
+  recurringDates: Array<{ startTime: string; endTime: string }>;
+  totalOccurrences: number;
+  frequencyLabel?: string; // e.g. "every week", "every 2 weeks", "every month"
+}
+
+export function generateRecurringBookingConfirmedEmail(
+  data: RecurringBookingEmailData,
+  isHost: boolean
+): string {
+  const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${isHost ? 'dashboard' : 'bookings/' + data.bookingUid}`;
+
+  const dateRows = data.recurringDates
+    .map((d, i) => `
+      <tr>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px;">${i + 1}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; font-weight: 500;">${esc(d.startTime)}</td>
+        <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; color: #64748b;">${esc(d.endTime)}</td>
+      </tr>
+    `)
+    .join('');
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
+        </div>
+
+        <h2 style="text-align: center; margin-bottom: 8px;">
+          ${isHost ? 'New Recurring Booking' : 'Your Recurring Booking is Confirmed!'}
+        </h2>
+        <p style="text-align: center; color: #64748b;">
+          ${isHost
+            ? `${esc(data.inviteeName)} has booked a recurring series with you`
+            : `Your recurring meeting with ${esc(data.hostName)} is scheduled`}
+        </p>
+
+        <div class="card">
+          <h3 style="margin: 0 0 4px 0;">${esc(data.eventTitle)}</h3>
+          <p style="margin: 0 0 16px 0; color: #0ea5e9; font-size: 14px;">
+            ${data.totalOccurrences} ${data.frequencyLabel || 'weekly'} occurrences
+          </p>
+          ${data.eventDescription ? `<p style="color: #64748b; margin: 0 0 16px 0;">${esc(data.eventDescription)}</p>` : ''}
+
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+            <thead>
+              <tr style="background: #f1f5f9;">
+                <th style="padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;">#</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;">Date & Start</th>
+                <th style="padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;">End</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dateRows}
+            </tbody>
+          </table>
+
+          <div class="divider"></div>
+
+          <div class="detail-row">
+            <span class="detail-label">🌍 Timezone</span>
+            <span class="detail-value">${esc(data.timezone)}</span>
+          </div>
+
+          ${data.location ? `
+          <div class="detail-row">
+            <span class="detail-label">📍 Where</span>
+            <span class="detail-value">${esc(data.location)}</span>
+          </div>
+          ` : ''}
+
+          ${data.meetingUrl ? `
+          <div class="detail-row">
+            <span class="detail-label">🔗 Link</span>
+            <span class="detail-value">
+              <a href="${esc(data.meetingUrl)}" style="color: #0ea5e9;">${esc(data.meetingUrl)}</a>
+            </span>
+          </div>
+          ` : ''}
+
+          <div class="divider"></div>
+
+          <div class="detail-row">
+            <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
+            <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
+          </div>
+
+          <div class="detail-row">
+            <span class="detail-label">✉️ Email</span>
+            <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
+          </div>
+
+          ${data.notes ? `
+          <div class="divider"></div>
+          <div>
+            <span class="detail-label">📝 Notes</span>
+            <p style="margin: 8px 0 0 0; color: #475569;">${esc(data.notes)}</p>
+          </div>
+          ` : ''}
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${manageUrl}" class="btn" style="color: #ffffff;">Manage Bookings</a>
+        </div>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+          <p style="font-size: 12px;">
+            Need to make changes?
+            <a href="${manageUrl}" style="color: #0ea5e9;">Manage your bookings</a>
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
 // ============================================================================
 // SEND BOOKING EMAILS
 // ============================================================================
@@ -719,6 +924,26 @@ export async function sendBookingRejectedEmail(
     subject: `Declined: ${data.eventTitle} with ${data.hostName}`,
     html: generateBookingRejectedEmail(data, reason),
     replyTo: data.hostEmail,
+  });
+}
+
+export async function sendRecurringBookingConfirmationEmails(
+  data: RecurringBookingEmailData
+): Promise<void> {
+  // Send to invitee
+  await sendEmail({
+    to: data.inviteeEmail,
+    subject: `Confirmed: ${data.totalOccurrences} ${data.frequencyLabel || 'weekly'} ${data.eventTitle} with ${data.hostName}`,
+    html: generateRecurringBookingConfirmedEmail(data, false),
+    replyTo: data.hostEmail,
+  });
+
+  // Send to host
+  await sendEmail({
+    to: data.hostEmail,
+    subject: `New Recurring Booking: ${data.eventTitle} with ${data.inviteeName} (${data.totalOccurrences} sessions)`,
+    html: generateRecurringBookingConfirmedEmail(data, true),
+    replyTo: data.inviteeEmail,
   });
 }
 

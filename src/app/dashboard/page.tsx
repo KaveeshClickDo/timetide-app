@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,11 +33,14 @@ interface Booking {
   startTime: string
   endTime: string
   timezone: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'REJECTED'
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'REJECTED' | 'SKIPPED'
   meetingUrl?: string
   location?: string
   inviteeName: string
   inviteeEmail: string
+  recurringGroupId?: string | null
+  recurringIndex?: number | null
+  recurringCount?: number | null
   eventType: {
     id: string
     title: string
@@ -70,6 +74,11 @@ const statusConfig = {
     label: 'Completed',
     icon: CheckCircle2,
     className: 'bg-gray-100 text-gray-700',
+  },
+  SKIPPED: {
+    label: 'Skipped',
+    icon: Clock,
+    className: 'bg-slate-100 text-slate-600',
   },
 }
 
@@ -310,6 +319,16 @@ export default function DashboardPage() {
                               <div>
                                 <h3 className="font-medium text-gray-900 truncate">
                                   {booking.eventType.title}
+                                  {booking.recurringGroupId && booking.recurringCount && (
+                                    <Link
+                                      href={`/dashboard/bookings/series/${booking.recurringGroupId}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-ocean-100 text-ocean-700 hover:bg-ocean-200 transition-colors"
+                                    >
+                                      <RefreshCw className="h-3 w-3" />
+                                      {(booking.recurringIndex ?? 0) + 1}/{booking.recurringCount}
+                                    </Link>
+                                  )}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-1">
                                   <Avatar className="h-5 w-5">

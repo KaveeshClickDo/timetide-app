@@ -6,9 +6,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { addMinutes, parseISO, startOfDay } from 'date-fns';
+import { addMinutes, addDays, parseISO, startOfDay } from 'date-fns';
+import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/recurring/utils';
 import { formatInTimeZone } from 'date-fns-tz';
+import { nanoid } from 'nanoid';
 import prisma from '@/lib/prisma';
+import { type Prisma, BookingStatus } from '@/generated/prisma/client';
 import { authOptions } from '@/lib/auth';
 import { createBookingSchema } from '@/lib/validation/schemas';
 import { isSlotAvailable, mergeBusyTimes } from '@/lib/slots/calculator';
@@ -24,10 +27,11 @@ import {
   createZoomMeeting,
   hasZoomConnected,
 } from '@/lib/zoom';
-import { BookingEmailData } from '@/lib/email/client';
+import { BookingEmailData, RecurringBookingEmailData } from '@/lib/email/client';
 import {
   checkBookingRateLimit,
   queueBookingConfirmationEmails,
+  queueRecurringBookingConfirmationEmails,
   queueBookingPendingEmails,
   scheduleBookingReminders,
   triggerBookingCreatedWebhook,
@@ -49,16 +53,12 @@ export async function GET(request: NextRequest) {
     const upcoming = searchParams.get('upcoming') === 'true';
     const past = searchParams.get('past') === 'true';
 
-    const where: {
-      hostId: string;
-      status?: string | { in: string[] } | { notIn: string[] };
-      startTime?: { gte: Date } | { lt: Date };
-    } = {
+    const where: Prisma.BookingWhereInput = {
       hostId: session.user.id,
     };
 
     if (status) {
-      where.status = status;
+      where.status = status as BookingStatus;
     }
 
     if (upcoming) {
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
     if (past) {
       where.startTime = { lt: new Date() };
-      where.status = { notIn: ['CANCELLED', 'REJECTED'] }; // Exclude cancelled and rejected from past
+      where.status = { notIn: ['CANCELLED', 'REJECTED', 'SKIPPED'] }; // Exclude cancelled, rejected, and skipped from past
     }
 
     const bookings = await prisma.booking.findMany({
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { eventTypeId, startTime, timezone, name, email, phone, notes, responses } =
+    const { eventTypeId, startTime, timezone, name, email, phone, notes, responses, recurring } =
       validated.data;
 
     // Fetch event type with team member assignments
@@ -185,6 +185,50 @@ export async function POST(request: NextRequest) {
         { error: 'Event type not found or is not active' },
         { status: 404 }
       );
+    }
+
+    // Validate recurring request
+    if (recurring && !eventType.allowsRecurring) {
+      return NextResponse.json(
+        { error: 'This event type does not allow recurring bookings' },
+        { status: 400 }
+      );
+    }
+
+    // Validate recurring sessions against event type max
+    if (recurring && eventType.recurringMaxWeeks && recurring.weeks > eventType.recurringMaxWeeks) {
+      return NextResponse.json(
+        { error: `This event type allows a maximum of ${eventType.recurringMaxWeeks} sessions` },
+        { status: 400 }
+      );
+    }
+
+    // Compute actual recurring dates to validate booking window
+    const recurringFrequency = (recurring?.frequency || eventType.recurringFrequency || 'weekly') as RecurringFrequency;
+    const recurringInterval = recurring?.interval || eventType.recurringInterval || undefined;
+
+    // Validate recurring occurrences fit within the booking window
+    if (recurring && recurring.weeks > 1) {
+      const recurringDates = generateRecurringDates(parseISO(startTime), {
+        frequency: recurringFrequency,
+        count: recurring.weeks,
+        interval: recurringInterval,
+      });
+      const lastOccurrence = recurringDates[recurringDates.length - 1];
+      let windowEnd: Date | null = null;
+
+      if (eventType.periodType === 'ROLLING' && eventType.periodDays) {
+        windowEnd = addDays(new Date(), eventType.periodDays);
+      } else if (eventType.periodType === 'RANGE' && eventType.periodEndDate) {
+        windowEnd = new Date(eventType.periodEndDate);
+      }
+
+      if (windowEnd && lastOccurrence > windowEnd) {
+        return NextResponse.json(
+          { error: `The last occurrence falls outside the booking window. Please reduce the number of sessions.` },
+          { status: 400 }
+        );
+      }
     }
 
     const startDate = parseISO(startTime);
@@ -458,6 +502,89 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ========================================================================
+    // RECURRING: Validate additional slots if recurring booking
+    // ========================================================================
+    const occurrenceCount = recurring ? recurring.weeks : 1;
+    const recurringGroupId = recurring ? nanoid() : undefined;
+
+    // Generate all occurrence dates using the frequency-aware utility
+    const allOccurrenceDates = recurring && occurrenceCount > 1
+      ? generateRecurringDates(startDate, {
+          frequency: recurringFrequency,
+          count: occurrenceCount,
+          interval: recurringInterval,
+        })
+      : [startDate];
+
+    // For recurring bookings, validate all future occurrence slots
+    if (recurring && occurrenceCount > 1) {
+      for (let i = 1; i < occurrenceCount; i++) {
+        const occStart = allOccurrenceDates[i];
+        const occEnd = addMinutes(occStart, eventType.length);
+
+        // Check availability for each recurring occurrence
+        const occBusyTimes = await getAllBusyTimes(
+          selectedHost.id,
+          addMinutes(occStart, -60),
+          addMinutes(occEnd, 60)
+        );
+
+        const occBookings = await prisma.booking.findMany({
+          where: {
+            hostId: selectedHost.id,
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            startTime: { lt: occEnd },
+            endTime: { gt: occStart },
+          },
+        });
+
+        const occBookingBusy = occBookings
+          .filter((b) => !isGroupEvent || b.eventTypeId !== eventTypeId)
+          .map((b) => ({ start: b.startTime, end: b.endTime }));
+
+        const occAllBusy = mergeBusyTimes([...occBusyTimes, ...occBookingBusy]);
+        const occAvailable = isSlotAvailable(
+          { start: occStart, end: occEnd },
+          occAllBusy,
+          eventType.bufferTimeBefore,
+          eventType.bufferTimeAfter
+        );
+
+        if (!occAvailable) {
+          return NextResponse.json(
+            {
+              error: `The time slot on ${formatInTimeZone(occStart, timezone, 'EEEE, MMMM d, yyyy')} (week ${i + 1}) is not available. Please choose a different time.`,
+              conflictWeek: i + 1,
+            },
+            { status: 409 }
+          );
+        }
+
+        // Check daily booking limit for recurring slot
+        if (eventType.maxBookingsPerDay) {
+          const occDayStart = startOfDay(occStart);
+          const occDayEnd = addMinutes(occDayStart, 24 * 60);
+          const occDayBookings = await prisma.booking.count({
+            where: {
+              eventTypeId,
+              status: { in: ['PENDING', 'CONFIRMED'] },
+              startTime: { gte: occDayStart, lt: occDayEnd },
+            },
+          });
+          if (occDayBookings >= eventType.maxBookingsPerDay) {
+            return NextResponse.json(
+              {
+                error: `No more bookings available on ${formatInTimeZone(occStart, timezone, 'EEEE, MMMM d, yyyy')} (week ${i + 1}).`,
+                conflictWeek: i + 1,
+              },
+              { status: 409 }
+            );
+          }
+        }
+      }
+    }
+
     // Determine location
     let location: string | undefined;
     let meetingUrl: string | undefined;
@@ -465,15 +592,12 @@ export async function POST(request: NextRequest) {
     switch (eventType.locationType) {
       case 'GOOGLE_MEET':
         location = 'Google Meet';
-        // Will be set after calendar event creation
         break;
       case 'TEAMS':
         location = 'Microsoft Teams';
-        // Will be set after calendar event creation (via Outlook)
         break;
       case 'ZOOM':
         location = 'Zoom';
-        // Will be set after Zoom meeting creation
         break;
       case 'IN_PERSON':
         location = eventType.locationValue ?? 'In Person';
@@ -486,29 +610,59 @@ export async function POST(request: NextRequest) {
         break;
     }
 
-    // Create the booking
-    const booking = await prisma.booking.create({
-      data: {
-        eventTypeId,
-        hostId: selectedHost.id,
-        assignedUserId: assignedUserId, // For team round-robin assignments
-        startTime: startDate,
-        endTime: endDate,
-        timezone,
-        inviteeName: name,
-        inviteeEmail: email,
-        inviteePhone: phone,
-        inviteeNotes: notes,
-        responses: responses ?? undefined,
-        status: eventType.requiresConfirmation ? 'PENDING' : 'CONFIRMED',
-        location,
-        source: 'web',
-      },
-    });
+    // ========================================================================
+    // CREATE BOOKINGS (single or recurring)
+    // ========================================================================
+    const bookingStatus = eventType.requiresConfirmation ? 'PENDING' : 'CONFIRMED';
+    const createdBookings: Array<{
+      id: string;
+      uid: string;
+      status: string;
+      startTime: Date;
+      endTime: Date;
+      meetingUrl: string | null;
+    }> = [];
 
-    // Update round-robin state for team events
+    for (let i = 0; i < occurrenceCount; i++) {
+      const occStart = allOccurrenceDates[i];
+      const occEnd = addMinutes(occStart, eventType.length);
+
+      const booking = await prisma.booking.create({
+        data: {
+          eventTypeId,
+          hostId: selectedHost.id,
+          assignedUserId: assignedUserId,
+          startTime: occStart,
+          endTime: occEnd,
+          timezone,
+          inviteeName: name,
+          inviteeEmail: email,
+          inviteePhone: phone,
+          inviteeNotes: notes,
+          responses: responses ?? undefined,
+          status: bookingStatus,
+          location,
+          source: 'web',
+          recurringGroupId,
+          recurringIndex: recurring ? i : undefined,
+          recurringCount: recurring ? occurrenceCount : undefined,
+          recurringFrequency: recurring ? recurringFrequency : undefined,
+          recurringInterval: recurring ? recurringInterval : undefined,
+        },
+      });
+
+      createdBookings.push({
+        id: booking.id,
+        uid: booking.uid,
+        status: booking.status,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        meetingUrl: null,
+      });
+    }
+
+    // Update round-robin state for team events (once)
     if (shouldUpdateRoundRobinState && assignedUserId && eventType.teamId) {
-      // Find the team member ID for the assigned user
       const assignedMemberRecord = eventType.teamMemberAssignments.find(
         a => a.teamMember.user.id === assignedUserId
       );
@@ -520,11 +674,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create calendar event
-    // Determine the correct calendar based on location type:
-    // - Google Meet requires Google Calendar (to generate Meet link)
-    // - Microsoft Teams requires Outlook Calendar (to generate Teams link)
-    // - Other types use the primary calendar without conference data
+    // ========================================================================
+    // CALENDAR EVENTS — create one per booking
+    // ========================================================================
     let calendarForEvent = await prisma.calendar.findFirst({
       where: {
         userId: selectedHost.id,
@@ -536,7 +688,6 @@ export async function POST(request: NextRequest) {
     let needsConferenceData = false;
 
     if (eventType.locationType === 'GOOGLE_MEET') {
-      // Must use Google Calendar for Meet link generation
       const googleCalendar = await prisma.calendar.findFirst({
         where: { userId: selectedHost.id, provider: 'GOOGLE', isEnabled: true },
       });
@@ -545,7 +696,6 @@ export async function POST(request: NextRequest) {
         needsConferenceData = true;
       }
     } else if (eventType.locationType === 'TEAMS') {
-      // Must use Outlook Calendar for Teams link generation
       const outlookCalendar = await prisma.calendar.findFirst({
         where: { userId: selectedHost.id, provider: 'OUTLOOK', isEnabled: true },
       });
@@ -555,85 +705,81 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (calendarForEvent) {
-      const eventParams: CreateCalendarEventParams = {
-        calendarId: calendarForEvent.id,
-        summary: `${eventType.title} with ${name}`,
-        description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}`,
-        startTime: startDate,
-        endTime: endDate,
-        attendees: [
-          { email, name },
-          { email: selectedHost.email!, name: selectedHost.name ?? undefined },
-        ],
-        location,
-        conferenceData: needsConferenceData,
-      };
-
-      let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
-
-      if (calendarForEvent.provider === 'GOOGLE') {
-        result = await createGoogleCalendarEvent(eventParams);
-      } else if (calendarForEvent.provider === 'OUTLOOK') {
-        result = await createOutlookCalendarEvent(eventParams);
-      }
-
-      if (result.eventId) {
-        // Update booking with calendar event ID and meeting link
-        const updatedBooking = await prisma.booking.update({
-          where: { id: booking.id },
-          data: {
-            calendarEventId: result.eventId,
-            meetingUrl: result.meetLink || meetingUrl,
-          },
-        });
-
-        // Update meetingUrl for email
-        meetingUrl = updatedBooking.meetingUrl || meetingUrl;
-      }
-    }
-
-    // Create Zoom meeting if event type is ZOOM
-    if (eventType.locationType === 'ZOOM') {
-      const hasZoom = await hasZoomConnected(selectedHost.id);
-
-      if (hasZoom) {
+    // Create calendar events for each booking
+    for (const booking of createdBookings) {
+      if (calendarForEvent) {
         try {
-          const zoomMeeting = await createZoomMeeting({
-            userId: selectedHost.id,
-            topic: `${eventType.title} with ${name}`,
-            startTime: startDate,
-            duration: eventType.length,
-            timezone,
-            agenda: notes || `Booked via TimeTide with ${name} (${email})`,
-          });
+          const occSuffix = recurring ? ` (${createdBookings.indexOf(booking) + 1}/${occurrenceCount})` : '';
+          const eventParams: CreateCalendarEventParams = {
+            calendarId: calendarForEvent.id,
+            summary: `${eventType.title} with ${name}${occSuffix}`,
+            description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}${recurring ? `\nRecurring: Week ${createdBookings.indexOf(booking) + 1} of ${occurrenceCount}` : ''}`,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+            attendees: [
+              { email, name },
+              { email: selectedHost.email!, name: selectedHost.name ?? undefined },
+            ],
+            location,
+            conferenceData: needsConferenceData,
+          };
 
-          // Update booking with Zoom meeting URL
-          const updatedBooking = await prisma.booking.update({
-            where: { id: booking.id },
-            data: {
-              meetingUrl: zoomMeeting.joinUrl,
-            },
-          });
+          let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
 
-          // Update meetingUrl for email
-          meetingUrl = updatedBooking.meetingUrl || meetingUrl;
+          if (calendarForEvent.provider === 'GOOGLE') {
+            result = await createGoogleCalendarEvent(eventParams);
+          } else if (calendarForEvent.provider === 'OUTLOOK') {
+            result = await createOutlookCalendarEvent(eventParams);
+          }
 
-          console.log('Created Zoom meeting for booking:', {
-            bookingId: booking.id,
-            meetingId: zoomMeeting.meetingId,
-            joinUrl: zoomMeeting.joinUrl,
-          });
+          if (result.eventId) {
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: {
+                calendarEventId: result.eventId,
+                meetingUrl: result.meetLink || undefined,
+              },
+            });
+            booking.meetingUrl = result.meetLink || null;
+          }
         } catch (error) {
-          console.error('Failed to create Zoom meeting:', error);
-          // Continue with booking even if Zoom creation fails
+          console.error(`Failed to create calendar event for booking ${booking.id}:`, error);
         }
-      } else {
-        console.warn(`Zoom not connected for user ${selectedHost.id}, skipping Zoom meeting creation`);
+      }
+
+      // Create Zoom meeting if needed
+      if (eventType.locationType === 'ZOOM') {
+        try {
+          const hasZoom = await hasZoomConnected(selectedHost.id);
+          if (hasZoom) {
+            const zoomMeeting = await createZoomMeeting({
+              userId: selectedHost.id,
+              topic: `${eventType.title} with ${name}`,
+              startTime: booking.startTime,
+              duration: eventType.length,
+              timezone,
+              agenda: notes || `Booked via TimeTide with ${name} (${email})`,
+            });
+
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: { meetingUrl: zoomMeeting.joinUrl },
+            });
+            booking.meetingUrl = zoomMeeting.joinUrl;
+          }
+        } catch (error) {
+          console.error(`Failed to create Zoom meeting for booking ${booking.id}:`, error);
+        }
       }
     }
 
-    // Send confirmation emails
+    // Use first booking as the "primary" for emails/notifications
+    const primaryBooking = createdBookings[0];
+    meetingUrl = primaryBooking.meetingUrl || undefined;
+
+    // ========================================================================
+    // EMAILS & NOTIFICATIONS
+    // ========================================================================
     const emailData: BookingEmailData = {
       hostName: selectedHost.name ?? 'Host',
       hostEmail: selectedHost.email!,
@@ -644,27 +790,43 @@ export async function POST(request: NextRequest) {
       eventSlug: eventType.slug,
       eventDescription: eventType.description ?? undefined,
       startTime: formatInTimeZone(startDate, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-      endTime: formatInTimeZone(endDate, timezone, 'h:mm a'),
+      endTime: formatInTimeZone(createdBookings[0].endTime, timezone, 'h:mm a'),
       timezone,
       location,
       meetingUrl: meetingUrl ?? undefined,
-      bookingUid: booking.uid,
+      bookingUid: primaryBooking.uid,
       notes,
     };
 
-    // Queue emails (with retry support) based on confirmation requirement
     if (eventType.requiresConfirmation) {
-      // Queue pending confirmation emails (different template)
       queueBookingPendingEmails(emailData).catch(console.error);
+    } else if (recurring && occurrenceCount > 1) {
+      // Send recurring-specific confirmation email with all dates
+      const recurringEmailData: RecurringBookingEmailData = {
+        ...emailData,
+        totalOccurrences: occurrenceCount,
+        frequencyLabel: FREQUENCY_LABELS[recurringFrequency]?.toLowerCase() || 'recurring',
+        recurringDates: createdBookings.map(b => ({
+          startTime: formatInTimeZone(b.startTime, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
+          endTime: formatInTimeZone(b.endTime, timezone, 'h:mm a'),
+        })),
+      };
+      queueRecurringBookingConfirmationEmails(recurringEmailData).catch(console.error);
+
+      // Schedule reminders for each booking
+      for (const booking of createdBookings) {
+        scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
+      }
     } else {
-      // Queue immediate confirmation emails
       queueBookingConfirmationEmails(emailData).catch(console.error);
 
-      // Schedule reminder emails for confirmed bookings
-      scheduleBookingReminders(booking.id, booking.uid, startDate).catch(console.error);
+      // Schedule reminders for each booking
+      for (const booking of createdBookings) {
+        scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
+      }
     }
 
-    // Update analytics
+    // Update analytics (count all occurrences)
     prisma.bookingAnalytics.upsert({
       where: {
         eventTypeId_date: {
@@ -675,18 +837,18 @@ export async function POST(request: NextRequest) {
       create: {
         eventTypeId,
         date: startOfDay(new Date()),
-        bookings: 1,
+        bookings: occurrenceCount,
       },
       update: {
-        bookings: { increment: 1 },
+        bookings: { increment: occurrenceCount },
       },
     }).catch((err) => { console.warn('Analytics update failed:', err); });
 
-    // Trigger webhook for booking.created
+    // Trigger webhook once
     triggerBookingCreatedWebhook(selectedHost.id, {
-      id: booking.id,
-      uid: booking.uid,
-      status: booking.status,
+      id: primaryBooking.id,
+      uid: primaryBooking.uid,
+      status: primaryBooking.status,
       startTime: startDate,
       endTime: endDate,
       timezone,
@@ -714,24 +876,32 @@ export async function POST(request: NextRequest) {
     const notifData = buildBookingNotification('BOOKING_CREATED', {
       inviteeName: name,
       eventTitle: eventType.title,
-      startTime: formatInTimeZone(startDate, selectedHost.timezone || 'UTC', 'MMM d, h:mm a'),
+      startTime: recurring
+        ? `${occurrenceCount} ${FREQUENCY_LABELS[recurringFrequency] || 'recurring'} sessions starting ${formatInTimeZone(startDate, selectedHost.timezone || 'UTC', 'MMM d, h:mm a')}`
+        : formatInTimeZone(startDate, selectedHost.timezone || 'UTC', 'MMM d, h:mm a'),
     });
     createNotification({
       userId: selectedHost.id,
       type: 'BOOKING_CREATED',
       ...notifData,
-      bookingId: booking.id,
+      bookingId: primaryBooking.id,
     }).catch(console.error);
 
     return NextResponse.json({
       success: true,
       booking: {
-        uid: booking.uid,
-        status: booking.status,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        meetingUrl: booking.meetingUrl,
+        uid: primaryBooking.uid,
+        status: primaryBooking.status,
+        startTime: primaryBooking.startTime,
+        endTime: primaryBooking.endTime,
+        meetingUrl: primaryBooking.meetingUrl,
       },
+      isRecurring: !!recurring,
+      recurringBookings: recurring ? createdBookings.map(b => ({
+        uid: b.uid,
+        startTime: b.startTime,
+        endTime: b.endTime,
+      })) : undefined,
     }, { status: 201 });
   } catch (error) {
     console.error('POST booking error:', error);

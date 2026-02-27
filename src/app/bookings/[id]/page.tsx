@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import {
   Calendar,
+  Clock,
   Video,
   MapPin,
   Phone,
@@ -45,7 +46,7 @@ interface BookingDetails {
   startTime: string
   endTime: string
   timezone: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED'
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED' | 'SKIPPED'
   inviteeName: string
   inviteeEmail: string
   inviteePhone?: string
@@ -95,6 +96,11 @@ const statusConfig = {
     label: 'Completed',
     icon: CheckCircle2,
     className: 'bg-gray-100 text-gray-700 border-gray-200',
+  },
+  SKIPPED: {
+    label: 'Skipped',
+    icon: Clock,
+    className: 'bg-slate-100 text-slate-600 border-slate-200',
   },
 }
 
@@ -376,6 +382,22 @@ export default function PublicBookingManagementPage() {
                           Cancelled on {formatInTimeZone(new Date(booking.cancelledAt), booking.timezone, 'MMMM d, yyyy h:mm a')}
                         </p>
                       )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {booking.status === 'SKIPPED' && (
+              <Card className="border-slate-200 bg-slate-50">
+                <CardContent className="py-6">
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-slate-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-slate-900">This occurrence has been skipped</p>
+                      <p className="text-slate-600 mt-1">
+                        The host has skipped this session. Your remaining sessions in the series are unaffected.
+                      </p>
                     </div>
                   </div>
                 </CardContent>

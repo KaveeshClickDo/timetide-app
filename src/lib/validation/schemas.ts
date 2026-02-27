@@ -138,6 +138,10 @@ export const createEventTypeSchema = z.object({
   // Customization
   requiresConfirmation: z.boolean().default(false),
   hideNotes: z.boolean().default(false),
+  allowsRecurring: z.boolean().default(false),
+  recurringMaxWeeks: z.number().int().min(2).max(24).optional(),
+  recurringFrequency: z.enum(['weekly', 'biweekly', 'monthly', 'custom']).optional(),
+  recurringInterval: z.number().int().min(1).max(90).optional(),
   successRedirectUrl: z.string().url().optional(),
   
   // Team settings
@@ -212,15 +216,30 @@ export const createBookingSchema = z.object({
     z.boolean(),
     z.array(z.string()),
   ])).optional(),
+
+  // Recurring booking (optional)
+  recurring: z.object({
+    weeks: z.number().int().min(2, 'Minimum 2 sessions').max(24, 'Maximum 24 sessions'),
+    frequency: z.enum(['weekly', 'biweekly', 'monthly', 'custom']).default('weekly'),
+    interval: z.number().int().min(1).max(90).optional(),
+  }).optional(),
 });
 
 export const cancelBookingSchema = z.object({
   reason: z.string().max(500).optional(),
+  cancelAllFuture: z.boolean().optional().default(false),
+});
+
+export const confirmRejectBookingSchema = z.object({
+  action: z.enum(['confirm', 'reject', 'skip', 'unskip']),
+  reason: z.string().max(500).optional(),
+  scope: z.enum(['this', 'all_pending']).default('this'),
 });
 
 export const rescheduleBookingSchema = z.object({
   newStartTime: z.string().datetime(),
   reason: z.string().max(500).optional(),
+  scope: z.enum(['this', 'this_and_future']).default('this'),
 });
 
 // ============================================================================

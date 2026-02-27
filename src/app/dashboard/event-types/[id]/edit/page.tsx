@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Check,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -186,6 +187,11 @@ export default function EditEventTypePage({ params }: PageProps) {
     // Group booking settings
     isGroupBooking: false,
     seatsPerSlot: 1,
+    // Recurring
+    allowsRecurring: false,
+    recurringMaxWeeks: 12,
+    recurringFrequency: 'weekly' as string,
+    recurringInterval: 7,
   })
 
   const [questions, setQuestions] = useState<Question[]>([])
@@ -199,6 +205,7 @@ export default function EditEventTypePage({ params }: PageProps) {
   const groupBookingGate = useFeatureGate('groupBooking')
   const bufferGate = useFeatureGate('bufferTimes')
   const bookingLimitGate = useFeatureGate('bookingLimits')
+  const recurringGate = useFeatureGate('recurringBooking')
 
   // Fetch event type
   const { data: eventTypeData, isLoading } = useQuery({
@@ -239,6 +246,11 @@ export default function EditEventTypePage({ params }: PageProps) {
         // Group booking settings
         isGroupBooking: (et.seatsPerSlot || 1) > 1,
         seatsPerSlot: et.seatsPerSlot || 1,
+        // Recurring
+        allowsRecurring: et.allowsRecurring || false,
+        recurringMaxWeeks: et.recurringMaxWeeks || 12,
+        recurringFrequency: et.recurringFrequency || 'weekly',
+        recurringInterval: et.recurringInterval || 7,
       })
 
       if (et.questions && et.questions.length > 0) {
@@ -308,6 +320,22 @@ export default function EditEventTypePage({ params }: PageProps) {
         payload.seatsPerSlot = formData.seatsPerSlot
       } else {
         payload.seatsPerSlot = 1
+      }
+
+      // Recurring setting
+      payload.allowsRecurring = formData.allowsRecurring
+      if (formData.allowsRecurring) {
+        payload.recurringMaxWeeks = formData.recurringMaxWeeks || 12
+        payload.recurringFrequency = formData.recurringFrequency || 'weekly'
+        if (formData.recurringFrequency === 'custom') {
+          payload.recurringInterval = formData.recurringInterval || 7
+        } else {
+          payload.recurringInterval = null
+        }
+      } else {
+        payload.recurringMaxWeeks = null
+        payload.recurringFrequency = null
+        payload.recurringInterval = null
       }
 
       if (questions.length > 0) {
@@ -964,6 +992,90 @@ export default function EditEventTypePage({ params }: PageProps) {
                   <p className="text-sm text-blue-800">
                     <strong>Use cases:</strong> Group classes, webinars, office hours, workshops, or any event where multiple guests can attend the same session.
                   </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recurring Bookings */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Recurring Bookings
+              <ProBadge feature="recurringBooking" />
+            </CardTitle>
+            <CardDescription>
+              Allow invitees to book recurring sessions.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-4 rounded-lg border">
+              <div className="space-y-1">
+                <p className="font-medium text-gray-900">Enable Recurring Bookings</p>
+                <p className="text-sm text-gray-500">
+                  Invitees can book this event as a recurring series
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={!recurringGate.canAccess}
+                onClick={() => recurringGate.canAccess && setFormData({ ...formData, allowsRecurring: !formData.allowsRecurring })}
+                className={cn(
+                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  !recurringGate.canAccess ? 'bg-gray-100 cursor-not-allowed' :
+                  formData.allowsRecurring ? 'bg-ocean-500' : 'bg-gray-200'
+                )}
+              >
+                <span
+                  className={cn(
+                    'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                    formData.allowsRecurring ? 'translate-x-6' : 'translate-x-1'
+                  )}
+                />
+              </button>
+            </div>
+            {formData.allowsRecurring && (
+              <div className="p-4 rounded-lg border space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Frequency</label>
+                  <select
+                    value={formData.recurringFrequency || 'weekly'}
+                    onChange={(e) => setFormData({ ...formData, recurringFrequency: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-ocean-500 focus:ring-ocean-500"
+                  >
+                    <option value="weekly">Every week</option>
+                    <option value="biweekly">Every 2 weeks</option>
+                    <option value="monthly">Every month</option>
+                    <option value="custom">Custom interval</option>
+                  </select>
+                </div>
+                {formData.recurringFrequency === 'custom' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Repeat every (days)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={formData.recurringInterval || 7}
+                      onChange={(e) => setFormData({ ...formData, recurringInterval: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-ocean-500 focus:ring-ocean-500"
+                    />
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Maximum sessions per series</label>
+                  <select
+                    value={formData.recurringMaxWeeks || 12}
+                    onChange={(e) => setFormData({ ...formData, recurringMaxWeeks: Number(e.target.value) })}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-ocean-500 focus:ring-ocean-500"
+                  >
+                    {Array.from({ length: 23 }, (_, i) => i + 2).map((w) => (
+                      <option key={w} value={w}>{w} sessions</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500">Invitees can book up to this many occurrences (2-24)</p>
                 </div>
               </div>
             )}

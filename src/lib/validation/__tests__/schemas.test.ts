@@ -7,6 +7,8 @@ import {
   slugSchema,
   timeStringSchema,
   createBookingSchema,
+  cancelBookingSchema,
+  confirmRejectBookingSchema,
   createEventTypeSchema,
   availabilitySlotSchema,
   dateOverrideSchema,
@@ -358,6 +360,41 @@ describe('rescheduleBookingSchema', () => {
       }).success
     ).toBe(true);
   });
+
+  it('accepts scope: this', () => {
+    const result = rescheduleBookingSchema.safeParse({
+      newStartTime: '2026-03-20T14:00:00.000Z',
+      scope: 'this',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.scope).toBe('this');
+  });
+
+  it('accepts scope: this_and_future', () => {
+    const result = rescheduleBookingSchema.safeParse({
+      newStartTime: '2026-03-20T14:00:00.000Z',
+      reason: 'Shifting the whole series',
+      scope: 'this_and_future',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.scope).toBe('this_and_future');
+  });
+
+  it('rejects invalid scope', () => {
+    const result = rescheduleBookingSchema.safeParse({
+      newStartTime: '2026-03-20T14:00:00.000Z',
+      scope: 'all',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('defaults scope to this when omitted', () => {
+    const result = rescheduleBookingSchema.safeParse({
+      newStartTime: '2026-03-20T14:00:00.000Z',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.scope).toBe('this');
+  });
 });
 
 // ============================================================================
@@ -390,5 +427,346 @@ describe('bulkMemberActionSchema', () => {
         memberIds: ['id1', 'id2'],
       }).success
     ).toBe(true);
+  });
+});
+
+// ============================================================================
+// RECURRING BOOKING FIELDS
+// ============================================================================
+describe('createBookingSchema — recurring', () => {
+  const validBooking = {
+    eventTypeId: 'clxxxxxxxxxxxxxxxxxxxxxxxxx',
+    startTime: '2026-03-15T10:00:00.000Z',
+    timezone: 'America/New_York',
+    name: 'Jane Doe',
+    email: 'jane@example.com',
+  };
+
+  it('accepts booking with valid recurring option', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 4 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurring?.weeks).toBe(4);
+    }
+  });
+
+  it('accepts booking without recurring (optional)', () => {
+    const result = createBookingSchema.safeParse(validBooking);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurring).toBeUndefined();
+    }
+  });
+
+  it('accepts minimum weeks (2)', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 2 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts maximum weeks (24)', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 24 },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects weeks below minimum (1)', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 1 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects weeks above maximum (25)', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 25 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-integer weeks', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 3.5 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('defaults frequency to weekly when omitted', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 4 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurring?.frequency).toBe('weekly');
+    }
+  });
+
+  it('accepts biweekly frequency', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 4, frequency: 'biweekly' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurring?.frequency).toBe('biweekly');
+    }
+  });
+
+  it('accepts monthly frequency', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 6, frequency: 'monthly' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurring?.frequency).toBe('monthly');
+    }
+  });
+
+  it('accepts custom frequency with interval', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 3, frequency: 'custom', interval: 10 },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurring?.frequency).toBe('custom');
+      expect(result.data.recurring?.interval).toBe(10);
+    }
+  });
+
+  it('rejects invalid frequency', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 4, frequency: 'daily' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects interval above 90 days', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 3, frequency: 'custom', interval: 91 },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects interval below 1 day', () => {
+    const result = createBookingSchema.safeParse({
+      ...validBooking,
+      recurring: { weeks: 3, frequency: 'custom', interval: 0 },
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================================
+// CANCEL BOOKING SCHEMA
+// ============================================================================
+describe('cancelBookingSchema', () => {
+  it('accepts cancel with reason only', () => {
+    const result = cancelBookingSchema.safeParse({ reason: 'Schedule conflict' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cancelAllFuture).toBe(false);
+    }
+  });
+
+  it('accepts cancel with cancelAllFuture true', () => {
+    const result = cancelBookingSchema.safeParse({ cancelAllFuture: true });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cancelAllFuture).toBe(true);
+    }
+  });
+
+  it('defaults cancelAllFuture to false', () => {
+    const result = cancelBookingSchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cancelAllFuture).toBe(false);
+    }
+  });
+});
+
+// ============================================================================
+// CONFIRM/REJECT BOOKING SCHEMA
+// ============================================================================
+describe('confirmRejectBookingSchema', () => {
+  it('accepts confirm action with default scope', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'confirm' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe('this');
+    }
+  });
+
+  it('accepts reject action with reason', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'reject', reason: 'Not available' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.action).toBe('reject');
+      expect(result.data.reason).toBe('Not available');
+    }
+  });
+
+  it('accepts all_pending scope', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'confirm', scope: 'all_pending' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe('all_pending');
+    }
+  });
+
+  it('rejects invalid action', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'delete' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects invalid scope', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'confirm', scope: 'all' });
+    expect(result.success).toBe(false);
+  });
+
+  it('defaults scope to this when omitted', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'reject' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.scope).toBe('this');
+    }
+  });
+
+  it('accepts skip action', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'skip' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.action).toBe('skip');
+    }
+  });
+
+  it('accepts unskip action', () => {
+    const result = confirmRejectBookingSchema.safeParse({ action: 'unskip' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.action).toBe('unskip');
+    }
+  });
+});
+
+// ============================================================================
+// CREATE EVENT TYPE SCHEMA — allowsRecurring
+// ============================================================================
+describe('createEventTypeSchema — allowsRecurring', () => {
+  const validEvent = {
+    title: 'Quick Chat',
+    slug: 'quick-chat',
+    length: 30,
+  };
+
+  it('defaults allowsRecurring to false', () => {
+    const result = createEventTypeSchema.safeParse(validEvent);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.allowsRecurring).toBe(false);
+    }
+  });
+
+  it('accepts allowsRecurring true', () => {
+    const result = createEventTypeSchema.safeParse({ ...validEvent, allowsRecurring: true });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.allowsRecurring).toBe(true);
+    }
+  });
+
+  it('accepts recurringFrequency', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      allowsRecurring: true,
+      recurringFrequency: 'biweekly',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurringFrequency).toBe('biweekly');
+    }
+  });
+
+  it('accepts all valid frequency values', () => {
+    for (const freq of ['weekly', 'biweekly', 'monthly', 'custom'] as const) {
+      const result = createEventTypeSchema.safeParse({
+        ...validEvent,
+        allowsRecurring: true,
+        recurringFrequency: freq,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects invalid recurringFrequency', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      recurringFrequency: 'daily',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts recurringInterval for custom frequency', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      allowsRecurring: true,
+      recurringFrequency: 'custom',
+      recurringInterval: 10,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurringInterval).toBe(10);
+    }
+  });
+
+  it('rejects recurringInterval above 90', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      recurringInterval: 91,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects recurringInterval below 1', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      recurringInterval: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts recurringMaxWeeks up to 24', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      allowsRecurring: true,
+      recurringMaxWeeks: 24,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.recurringMaxWeeks).toBe(24);
+    }
+  });
+
+  it('rejects recurringMaxWeeks above 24', () => {
+    const result = createEventTypeSchema.safeParse({
+      ...validEvent,
+      recurringMaxWeeks: 25,
+    });
+    expect(result.success).toBe(false);
   });
 });

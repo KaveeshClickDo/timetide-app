@@ -103,6 +103,12 @@ export function checkEventTypeFeatures(
     if (denied) return denied
   }
 
+  // Recurring booking
+  if (body.allowsRecurring === true) {
+    const denied = checkFeatureAccess(plan, 'recurringBooking')
+    if (denied) return denied
+  }
+
   return null
 }
 
@@ -127,6 +133,7 @@ const FEATURE_LABELS: Record<BooleanFeatureKey, string> = {
   customQuestions: 'Custom questions',
   groupBooking: 'Group booking',
   bookingLimits: 'Booking limits',
+  recurringBooking: 'Recurring bookings',
   teams: 'Team scheduling',
   analytics: 'Analytics',
 }

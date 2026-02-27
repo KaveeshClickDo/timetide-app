@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay } from 'date-fns'
+import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/recurring/utils'
 import { formatInTimeZone } from 'date-fns-tz'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -21,6 +22,7 @@ import {
   Users,
   Mail,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -57,6 +59,10 @@ interface BookingWidgetProps {
     length: number
     locationType: string
     seatsPerSlot?: number
+    allowsRecurring?: boolean
+    recurringMaxWeeks?: number
+    recurringFrequency?: string
+    recurringInterval?: number
     questions: Array<{
       id: string
       type: string
@@ -103,6 +109,8 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
     responses: {} as Record<string, string>,
   })
   const [bookingResult, setBookingResult] = useState<any>(null)
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurringWeeks, setRecurringWeeks] = useState(Math.min(4, eventType.recurringMaxWeeks || 12))
 
   // Detect user's timezone
   useEffect(() => {
@@ -112,6 +120,28 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
 
   // Track booking window info from API
   const [bookingWindow, setBookingWindow] = useState<BookingWindow | null>(null)
+
+  const frequency: RecurringFrequency = (eventType.recurringFrequency || 'weekly') as RecurringFrequency
+
+  // Compute effective recurring sessions capped by booking window
+  const maxRecurringWeeks = (() => {
+    const hostMax = eventType.recurringMaxWeeks || 12
+    if (selectedDate && bookingWindow?.end) {
+      const windowEnd = new Date(bookingWindow.end)
+      let maxFit = 1
+      for (let n = 2; n <= hostMax; n++) {
+        const dates = generateRecurringDates(selectedDate, { frequency, count: n, interval: eventType.recurringInterval })
+        if (dates[dates.length - 1] <= windowEnd) {
+          maxFit = n
+        } else {
+          break
+        }
+      }
+      return Math.max(2, maxFit)
+    }
+    return hostMax
+  })()
+  const effectiveRecurringWeeks = Math.min(recurringWeeks, maxRecurringWeeks)
 
   // Fetch available slots for selected month only (lazy loading per month)
   const { data: slotsData, isLoading: slotsLoading, error: slotsError } = useQuery({
@@ -191,6 +221,15 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
           responses: Object.keys(formData.responses).length > 0
             ? formData.responses
             : undefined,
+          ...(isRecurring && eventType.allowsRecurring && {
+            recurring: {
+              weeks: effectiveRecurringWeeks,
+              frequency: eventType.recurringFrequency || 'weekly',
+              ...(eventType.recurringFrequency === 'custom' && eventType.recurringInterval && {
+                interval: eventType.recurringInterval,
+              }),
+            },
+          }),
         }),
       })
       if (!res.ok) {
@@ -200,7 +239,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
       return res.json()
     },
     onSuccess: (data) => {
-      setBookingResult(data.booking)
+      setBookingResult(data)
       setStep('confirmation')
     },
   })
@@ -279,9 +318,10 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
   }
 
   // Confirmation step
-  const isPending = bookingResult?.status === 'PENDING'
+  const bookingData = bookingResult?.booking
+  const isPending = bookingData?.status === 'PENDING'
 
-  if (step === 'confirmation' && bookingResult) {
+  if (step === 'confirmation' && bookingData) {
     return (
       <div className="max-w-lg mx-auto py-12 px-4">
         <Card>
@@ -316,26 +356,51 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                   <p className="text-sm text-gray-500">with {user.name}</p>
                 </div>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Calendar className="h-4 w-4" />
-                  {formatInTimeZone(new Date(bookingResult.startTime), inviteeTimezone, 'EEEE, MMMM d, yyyy')}
+
+              {/* Recurring bookings: show all dates */}
+              {bookingResult.isRecurring && bookingResult.recurringBookings ? (
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-gray-700 font-medium mb-1">
+                    <RefreshCw className="h-4 w-4" />
+                    {bookingResult.recurringBookings.length} {FREQUENCY_LABELS[frequency]?.toLowerCase() || 'recurring'} sessions
+                  </div>
+                  <div className="space-y-1.5 ml-6">
+                    {bookingResult.recurringBookings.map((rb: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 text-gray-600">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {formatInTimeZone(new Date(rb.startTime), inviteeTimezone, 'EEE, MMM d, yyyy')}
+                        {' at '}
+                        {formatInTimeZone(new Date(rb.startTime), inviteeTimezone, 'h:mm a')}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600 mt-2">
+                    <LocationIcon className="h-4 w-4" />
+                    {locationLabels[eventType.locationType as keyof typeof locationLabels] || eventType.locationType}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock className="h-4 w-4" />
-                  {formatInTimeZone(new Date(bookingResult.startTime), inviteeTimezone, 'h:mm a')} ({inviteeTimezone})
+              ) : (
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Calendar className="h-4 w-4" />
+                    {formatInTimeZone(new Date(bookingData.startTime), inviteeTimezone, 'EEEE, MMMM d, yyyy')}
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Clock className="h-4 w-4" />
+                    {formatInTimeZone(new Date(bookingData.startTime), inviteeTimezone, 'h:mm a')} ({inviteeTimezone})
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <LocationIcon className="h-4 w-4" />
+                    {locationLabels[eventType.locationType as keyof typeof locationLabels] || eventType.locationType}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-gray-600">
-                  <LocationIcon className="h-4 w-4" />
-                  {locationLabels[eventType.locationType as keyof typeof locationLabels] || eventType.locationType}
-                </div>
-              </div>
+              )}
             </div>
 
             <div className="space-y-3">
-              {bookingResult.meetingUrl && (
+              {bookingData.meetingUrl && (
                 <a
-                  href={bookingResult.meetingUrl}
+                  href={bookingData.meetingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -346,7 +411,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 </a>
               )}
 
-              <Link href={`/bookings/${bookingResult.uid}`}>
+              <Link href={`/bookings/${bookingData.uid}`}>
                 <Button variant="outline" className="w-full">
                   <Calendar className="h-4 w-4 mr-2" />
                   Manage Booking
@@ -362,6 +427,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                   setSelectedSlot(null)
                   setFormData({ name: '', email: '', notes: '', responses: {} })
                   setBookingResult(null)
+                  setIsRecurring(false)
                 }}
               >
                 <ChevronLeft className="h-4 w-4 mr-2" />
@@ -707,6 +773,60 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                     />
                   </div>
 
+                  {/* Recurring booking option */}
+                  {eventType.allowsRecurring && (
+                    <div className="p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <p className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Make this recurring
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Book this time slot {FREQUENCY_LABELS[frequency]?.toLowerCase() || 'recurring'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsRecurring(!isRecurring)}
+                          className={cn(
+                            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                            isRecurring ? 'bg-ocean-500' : 'bg-gray-200'
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                              isRecurring ? 'translate-x-6' : 'translate-x-1'
+                            )}
+                          />
+                        </button>
+                      </div>
+                      {isRecurring && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-gray-700">Number of sessions</label>
+                          <select
+                            className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                            value={effectiveRecurringWeeks}
+                            onChange={(e) => setRecurringWeeks(parseInt(e.target.value))}
+                          >
+                            {Array.from({ length: maxRecurringWeeks - 1 }, (_, i) => i + 2).map(n => (
+                              <option key={n} value={n}>{n} sessions</option>
+                            ))}
+                          </select>
+                          <p className="text-xs text-gray-500">
+                            This will book {effectiveRecurringWeeks} sessions ({FREQUENCY_LABELS[frequency]?.toLowerCase() || 'recurring'})
+                          </p>
+                          {maxRecurringWeeks < (eventType.recurringMaxWeeks || 12) && (
+                            <p className="text-xs text-amber-600">
+                              Limited to {maxRecurringWeeks} sessions based on the available booking window
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {bookMutation.error && (
                     <div className="p-3 rounded-lg bg-red-50 border border-red-200">
                       <p className="text-red-600 text-sm">
@@ -725,10 +845,10 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                     {bookMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Booking...
+                        {isRecurring ? `Booking ${effectiveRecurringWeeks} sessions...` : 'Booking...'}
                       </>
                     ) : (
-                      'Confirm Booking'
+                      isRecurring ? `Confirm ${effectiveRecurringWeeks} Bookings` : 'Confirm Booking'
                     )}
                   </Button>
                 </form>

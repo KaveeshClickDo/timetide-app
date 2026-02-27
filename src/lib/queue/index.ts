@@ -30,6 +30,8 @@ export {
   queueBookingRejectedEmail,
   queueReminderEmail,
   queueBookingRescheduledEmails,
+  queueRecurringBookingConfirmationEmails,
+  queueBulkConfirmedByHostEmail,
   type EmailJobData,
   type EmailJobType,
 } from './email-queue';

@@ -29,6 +29,10 @@ interface EventType {
   length: number
   locationType: string
   seatsPerSlot?: number
+  allowsRecurring?: boolean
+  recurringMaxWeeks?: number
+  recurringFrequency?: string
+  recurringInterval?: number
   questions?: Question[]
 }
 
@@ -118,6 +122,10 @@ export default function BookingPage() {
           length: eventType.length,
           locationType: eventType.locationType,
           seatsPerSlot: eventType.seatsPerSlot,
+          allowsRecurring: eventType.allowsRecurring,
+          recurringMaxWeeks: eventType.recurringMaxWeeks,
+          recurringFrequency: eventType.recurringFrequency ?? undefined,
+          recurringInterval: eventType.recurringInterval ?? undefined,
           questions: eventType.questions?.map((q) => ({
             id: q.id,
             type: q.type as unknown as string,

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const { newStartTime, reason } = validated.data;
+    const { newStartTime, reason, scope } = validated.data;
     const newStart = new Date(newStartTime);
 
     // Find the booking
@@ -99,6 +99,167 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Calculate new end time based on event duration
     const newEnd = addMinutes(newStart, booking.eventType.length);
+    const deltaMs = newStart.getTime() - booking.startTime.getTime();
+
+    // ── Bulk scope: reschedule this and all future occurrences ──
+    if (scope === 'this_and_future' && booking.recurringGroupId) {
+      // Find all future bookings in the series (including this one)
+      const futureBookings = await prisma.booking.findMany({
+        where: {
+          recurringGroupId: booking.recurringGroupId,
+          startTime: { gte: booking.startTime },
+          status: { in: ['PENDING', 'CONFIRMED'] },
+        },
+        orderBy: { startTime: 'asc' },
+      });
+
+      // Validate ALL shifted times for conflicts first (all-or-nothing)
+      for (const fb of futureBookings) {
+        const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
+        const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
+
+        const conflict = await prisma.booking.findFirst({
+          where: {
+            hostId: booking.hostId,
+            id: { notIn: futureBookings.map(b => b.id) },
+            status: { in: ['PENDING', 'CONFIRMED'] },
+            startTime: { lt: shiftedEnd },
+            endTime: { gt: shiftedStart },
+          },
+        });
+
+        if (conflict) {
+          return NextResponse.json(
+            {
+              error: `Conflict on ${formatInTimeZone(shiftedStart, fb.timezone, 'EEEE, MMMM d')}. Cannot reschedule all future occurrences.`,
+              conflictDate: shiftedStart,
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      // Find calendar for updates
+      const calendar = await prisma.calendar.findFirst({
+        where: { userId: booking.hostId, isEnabled: true },
+        orderBy: { isPrimary: 'desc' },
+      });
+
+      // Apply shifts to all future bookings
+      for (const fb of futureBookings) {
+        const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
+        const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
+
+        await prisma.booking.update({
+          where: { id: fb.id },
+          data: {
+            startTime: shiftedStart,
+            endTime: shiftedEnd,
+            rescheduleReason: reason || null,
+            lastRescheduledAt: new Date(),
+          },
+        });
+
+        // Update calendar event
+        if (fb.calendarEventId && calendar) {
+          try {
+            if (calendar.provider === 'GOOGLE') {
+              await updateGoogleCalendarEvent(calendar.id, fb.calendarEventId, { startTime: shiftedStart, endTime: shiftedEnd });
+            } else if (calendar.provider === 'OUTLOOK') {
+              await updateOutlookCalendarEvent(calendar.id, fb.calendarEventId, { startTime: shiftedStart, endTime: shiftedEnd });
+            }
+          } catch (calendarError) {
+            console.warn('Failed to update calendar event for occurrence:', calendarError);
+          }
+        }
+
+        // Reschedule reminders
+        rescheduleBookingReminders(fb.id, fb.uid, shiftedStart).catch(console.error);
+      }
+
+      // Send one summary email for the first occurrence
+      const emailData: BookingEmailData = {
+        hostName: booking.host.name ?? 'Host',
+        hostEmail: booking.host.email!,
+        inviteeName: booking.inviteeName,
+        inviteeEmail: booking.inviteeEmail,
+        eventTitle: booking.eventType.title,
+        eventDescription: booking.eventType.description ?? undefined,
+        startTime: `${futureBookings.length} sessions rescheduled`,
+        endTime: '',
+        timezone: booking.timezone,
+        bookingUid: booking.uid,
+      };
+
+      queueBookingRescheduledEmails(
+        emailData,
+        {
+          start: formatInTimeZone(booking.startTime, booking.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
+          end: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
+        },
+        {
+          start: formatInTimeZone(booking.startTime, booking.host.timezone || booking.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
+          end: formatInTimeZone(booking.endTime, booking.host.timezone || booking.timezone, 'h:mm a'),
+        },
+        isHost,
+        reason || undefined
+      ).catch(console.error);
+
+      // Webhook
+      triggerBookingRescheduledWebhook(
+        booking.hostId,
+        {
+          id: booking.id,
+          uid: booking.uid,
+          status: booking.status,
+          startTime: newStart,
+          endTime: newEnd,
+          timezone: booking.timezone,
+          location: booking.location,
+          meetingUrl: booking.meetingUrl,
+          inviteeName: booking.inviteeName,
+          inviteeEmail: booking.inviteeEmail,
+          inviteePhone: booking.inviteePhone,
+          inviteeNotes: booking.inviteeNotes,
+          responses: booking.responses as Record<string, unknown> | null,
+          eventType: {
+            id: booking.eventType.id,
+            title: booking.eventType.title,
+            slug: booking.eventType.slug,
+            length: booking.eventType.length,
+          },
+          host: {
+            id: booking.host.id,
+            name: booking.host.name,
+            email: booking.host.email!,
+          },
+        },
+        booking.startTime,
+        booking.endTime
+      ).catch(console.error);
+
+      if (!isHost) {
+        const reschedNotif = buildBookingNotification('BOOKING_RESCHEDULED', {
+          inviteeName: booking.inviteeName,
+          eventTitle: booking.eventType.title,
+          startTime: `${futureBookings.length} sessions rescheduled`,
+        });
+        createNotification({
+          userId: booking.hostId,
+          type: 'BOOKING_RESCHEDULED',
+          ...reschedNotif,
+          bookingId: booking.id,
+        }).catch(console.error);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `${futureBookings.length} booking(s) rescheduled successfully`,
+        updatedCount: futureBookings.length,
+      });
+    }
+
+    // ── Single scope (default): reschedule just this booking ──
 
     // Check for conflicting bookings at the new time (exclude this booking)
     const conflict = await prisma.booking.findFirst({

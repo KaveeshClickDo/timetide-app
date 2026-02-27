@@ -101,6 +101,7 @@ export interface PlanLimits {
   customQuestions: boolean
   groupBooking: boolean
   bookingLimits: boolean
+  recurringBooking: boolean
   teams: boolean
   analytics: boolean
 }
@@ -115,6 +116,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     customQuestions: true,
     groupBooking: true,
     bookingLimits: true,
+    recurringBooking: true,
     teams: true,
     analytics: true,
   },
@@ -126,6 +128,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     customQuestions: true,
     groupBooking: true,
     bookingLimits: true,
+    recurringBooking: true,
     teams: true,
     analytics: true,
   },
@@ -137,6 +140,7 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     customQuestions: true,
     groupBooking: true,
     bookingLimits: true,
+    recurringBooking: true,
     teams: true,
     analytics: true,
   },
@@ -162,6 +166,7 @@ export const FEATURE_LABELS: Record<keyof PlanLimits, string> = {
   customQuestions: 'Custom Questions',
   groupBooking: 'Group Booking',
   bookingLimits: 'Booking Limits',
+  recurringBooking: 'Recurring Bookings',
   teams: 'Team Scheduling',
   analytics: 'Analytics',
 }

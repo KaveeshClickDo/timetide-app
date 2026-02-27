@@ -11,6 +11,7 @@ import {
   sendEmail,
   EmailOptions,
   BookingEmailData,
+  RecurringBookingEmailData,
   TeamEmailData,
   generateBookingConfirmedEmail,
   generateBookingCancelledEmail,
@@ -19,6 +20,8 @@ import {
   generateBookingRejectedEmail,
   generateReminderEmail,
   generateBookingRescheduledEmail,
+  generateRecurringBookingConfirmedEmail,
+  generateBulkConfirmedByHostEmail,
   generateTeamMemberAddedEmail,
   generateTeamInvitationEmail,
 } from '../email/client';
@@ -35,6 +38,8 @@ export type EmailJobType =
   | 'booking_rejected'
   | 'booking_reminder'
   | 'booking_rescheduled'
+  | 'recurring_booking_confirmed'
+  | 'bulk_confirmed_by_host'
   | 'team_member_added'
   | 'team_invitation'
   | 'custom';
@@ -44,6 +49,7 @@ export interface EmailJobData {
   to: string;
   subject: string;
   bookingData?: BookingEmailData;
+  recurringBookingData?: RecurringBookingEmailData;
   teamData?: TeamEmailData & { expiresIn?: string; acceptUrl?: string };
   isHost?: boolean;
   reason?: string;
@@ -184,6 +190,16 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
       if (!bookingData) throw new Error('Missing bookingData for booking_rescheduled');
       if (!job.data.oldTime) throw new Error('Missing oldTime for booking_rescheduled');
       html = generateBookingRescheduledEmail(bookingData, job.data.oldTime, isHost ?? false);
+      break;
+
+    case 'recurring_booking_confirmed':
+      if (!job.data.recurringBookingData) throw new Error('Missing recurringBookingData for recurring_booking_confirmed');
+      html = generateRecurringBookingConfirmedEmail(job.data.recurringBookingData, isHost ?? false);
+      break;
+
+    case 'bulk_confirmed_by_host':
+      if (!job.data.recurringBookingData) throw new Error('Missing recurringBookingData for bulk_confirmed_by_host');
+      html = generateBulkConfirmedByHostEmail(job.data.recurringBookingData);
       break;
 
     case 'team_member_added':
@@ -342,6 +358,19 @@ export async function queueBookingConfirmedByHostEmail(data: BookingEmailData): 
 }
 
 /**
+ * Queue bulk confirmed by host email (to invitee) — all occurrences confirmed at once
+ */
+export async function queueBulkConfirmedByHostEmail(data: RecurringBookingEmailData): Promise<void> {
+  await queueEmail({
+    type: 'bulk_confirmed_by_host',
+    to: data.inviteeEmail,
+    subject: `Confirmed: All ${data.totalOccurrences} sessions of ${data.eventTitle} with ${data.hostName}`,
+    recurringBookingData: data,
+    replyTo: data.hostEmail,
+  });
+}
+
+/**
  * Queue booking rejected email (to invitee)
  */
 export async function queueBookingRejectedEmail(
@@ -412,6 +441,33 @@ export async function queueBookingRescheduledEmails(
       replyTo: data.inviteeEmail,
     });
   }
+}
+
+/**
+ * Queue recurring booking confirmation emails (to both host and invitee)
+ */
+export async function queueRecurringBookingConfirmationEmails(
+  data: RecurringBookingEmailData
+): Promise<void> {
+  // Queue email to invitee
+  await queueEmail({
+    type: 'recurring_booking_confirmed',
+    to: data.inviteeEmail,
+    subject: `Confirmed: ${data.totalOccurrences} ${data.frequencyLabel || 'weekly'} ${data.eventTitle} with ${data.hostName}`,
+    recurringBookingData: data,
+    isHost: false,
+    replyTo: data.hostEmail,
+  });
+
+  // Queue email to host
+  await queueEmail({
+    type: 'recurring_booking_confirmed',
+    to: data.hostEmail,
+    subject: `New Recurring Booking: ${data.eventTitle} with ${data.inviteeName} (${data.totalOccurrences} sessions)`,
+    recurringBookingData: data,
+    isHost: true,
+    replyTo: data.inviteeEmail,
+  });
 }
 
 /**

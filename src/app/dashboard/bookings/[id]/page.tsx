@@ -21,6 +21,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
+  ChevronRight,
   X,
   Users,
   UserPlus,
@@ -62,7 +63,7 @@ interface BookingDetails {
   startTime: string
   endTime: string
   timezone: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED'
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED' | 'SKIPPED'
   inviteeName: string
   inviteeEmail: string
   inviteePhone?: string
@@ -73,6 +74,17 @@ interface BookingDetails {
   cancellationReason?: string
   cancelledAt?: string
   createdAt: string
+  recurringGroupId?: string
+  recurringIndex?: number
+  recurringCount?: number
+  recurringBookings?: Array<{
+    id: string
+    uid: string
+    startTime: string
+    endTime: string
+    status: string
+    recurringIndex: number | null
+  }>
   assignedUserId?: string
   assignedUser?: {
     id: string
@@ -133,6 +145,11 @@ const statusConfig = {
     icon: Calendar,
     className: 'bg-gray-100 text-gray-700 border-gray-200',
   },
+  SKIPPED: {
+    label: 'Skipped',
+    icon: Clock,
+    className: 'bg-slate-100 text-slate-600 border-slate-200',
+  },
 }
 
 const locationIcons = {
@@ -155,6 +172,7 @@ export default function BookingDetailPage() {
   const [showAssignDialog, setShowAssignDialog] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null)
+  const [cancelScope, setCancelScope] = useState<'this' | 'future'>('this')
 
   // Get host's timezone from session (defaults to UTC)
   const hostTimezone = session?.user?.timezone || 'UTC'
@@ -177,6 +195,9 @@ export default function BookingDetailPage() {
       const res = await fetch(`/api/bookings/${params.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cancelAllFuture: cancelScope === 'future',
+        }),
       })
       if (!res.ok) {
         const error = await res.json()
@@ -184,15 +205,17 @@ export default function BookingDetailPage() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
       queryClient.invalidateQueries({ queryKey: ['bookings'] })
       toast({
         title: 'Booking cancelled',
-        description: 'The booking has been cancelled successfully.',
+        description: data.cancelledCount
+          ? `${data.cancelledCount} booking(s) cancelled successfully.`
+          : 'The booking has been cancelled successfully.',
       })
       setShowCancelDialog(false)
-      // Redirect after a short delay
+      setCancelScope('this')
       setTimeout(() => router.push('/dashboard'), 1500)
     },
     onError: (error: Error) => {
@@ -205,11 +228,11 @@ export default function BookingDetailPage() {
   })
 
   const confirmMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (scope: 'this' | 'all_pending' = 'this') => {
       const res = await fetch(`/api/bookings/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'confirm' }),
+        body: JSON.stringify({ action: 'confirm', scope }),
       })
       if (!res.ok) {
         const error = await res.json()
@@ -217,12 +240,12 @@ export default function BookingDetailPage() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
       queryClient.invalidateQueries({ queryKey: ['bookings'] })
       toast({
-        title: 'Booking confirmed',
-        description: 'The booking has been confirmed. The invitee will be notified.',
+        title: data.updatedCount ? `${data.updatedCount} bookings confirmed` : 'Booking confirmed',
+        description: 'The invitee will be notified.',
       })
     },
     onError: (error: Error) => {
@@ -235,11 +258,11 @@ export default function BookingDetailPage() {
   })
 
   const rejectMutation = useMutation({
-    mutationFn: async (reason: string) => {
+    mutationFn: async ({ reason, scope = 'this' }: { reason: string; scope?: 'this' | 'all_pending' }) => {
       const res = await fetch(`/api/bookings/${params.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reject', reason }),
+        body: JSON.stringify({ action: 'reject', reason, scope }),
       })
       if (!res.ok) {
         const error = await res.json()
@@ -247,17 +270,50 @@ export default function BookingDetailPage() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
       queryClient.invalidateQueries({ queryKey: ['bookings'] })
       toast({
-        title: 'Booking declined',
-        description: 'The booking has been declined. The invitee will be notified.',
+        title: data.updatedCount ? `${data.updatedCount} bookings declined` : 'Booking declined',
+        description: 'The invitee will be notified.',
       })
       setShowRejectDialog(false)
       setRejectReason('')
       // Redirect after a short delay
       setTimeout(() => router.push('/dashboard'), 1500)
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
+
+  const skipMutation = useMutation({
+    mutationFn: async (action: 'skip' | 'unskip') => {
+      const res = await fetch(`/api/bookings/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || `Failed to ${action} booking`)
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['booking', params.id] })
+      queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      queryClient.invalidateQueries({ queryKey: ['recurring-series'] })
+      toast({
+        title: data.status === 'SKIPPED' ? 'Occurrence skipped' : 'Occurrence restored',
+        description: data.status === 'SKIPPED'
+          ? 'This occurrence has been skipped. The rest of the series continues.'
+          : 'This occurrence has been restored to confirmed.',
+      })
     },
     onError: (error: Error) => {
       toast({
@@ -377,7 +433,15 @@ export default function BookingDetailPage() {
         {/* Main Event Card */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">{booking.eventType.title}</CardTitle>
+            <CardTitle className="text-2xl flex items-center gap-3">
+              {booking.eventType.title}
+              {booking.recurringGroupId && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-ocean-100 text-ocean-700">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {(booking.recurringIndex ?? 0) + 1} of {booking.recurringCount ?? 0}
+                </span>
+              )}
+            </CardTitle>
             {booking.eventType.description && (
               <p className="text-gray-600 mt-2">{booking.eventType.description}</p>
             )}
@@ -462,6 +526,80 @@ export default function BookingDetailPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Recurring Series */}
+        {booking.recurringGroupId && booking.recurringBookings && booking.recurringBookings.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-ocean-600" />
+                Recurring Series ({booking.recurringBookings.length} occurrences)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {booking.recurringBookings
+                  .sort((a, b) => (a.recurringIndex ?? 0) - (b.recurringIndex ?? 0))
+                  .map((occ) => {
+                    const isCurrent = occ.id === booking.id
+                    const occStatus = statusConfig[occ.status as keyof typeof statusConfig]
+                    const OccStatusIcon = occStatus?.icon || Calendar
+
+                    return (
+                      <div
+                        key={occ.id}
+                        className={cn(
+                          'flex items-center justify-between p-3 rounded-lg border transition-colors',
+                          isCurrent ? 'bg-ocean-50 border-ocean-200' : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-medium text-gray-400 w-6 text-center">
+                            {(occ.recurringIndex ?? 0) + 1}
+                          </span>
+                          <div>
+                            <p className={cn('text-sm font-medium', isCurrent ? 'text-ocean-700' : 'text-gray-900')}>
+                              {formatInTimeZone(new Date(occ.startTime), hostTimezone, 'EEE, MMM d, yyyy')}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {formatInTimeZone(new Date(occ.startTime), hostTimezone, 'h:mm a')} - {formatInTimeZone(new Date(occ.endTime), hostTimezone, 'h:mm a')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={cn(
+                            'flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium',
+                            occStatus?.className || 'bg-gray-100 text-gray-600'
+                          )}>
+                            <OccStatusIcon className="h-3 w-3" />
+                            {occStatus?.label || occ.status}
+                          </span>
+                          {!isCurrent && (
+                            <Link href={`/dashboard/bookings/${occ.uid}`}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          )}
+                          {isCurrent && (
+                            <span className="text-[10px] font-medium text-ocean-600 px-1.5">Current</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+              <div className="mt-4 pt-4 border-t">
+                <Link href={`/dashboard/bookings/series/${booking.recurringGroupId}`}>
+                  <Button variant="outline" size="sm" className="w-full">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    View Full Series
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Invitee Information */}
         <Card>
@@ -585,48 +723,69 @@ export default function BookingDetailPage() {
         )}
 
         {/* Pending Confirmation Actions */}
-        {booking.status === 'PENDING' && (
-          <Card className="border-yellow-200 bg-yellow-50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-yellow-800">
-                <AlertCircle className="h-5 w-5" />
-                Action Required
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-yellow-700 mb-4">
-                This booking request is awaiting your confirmation. Please confirm or decline this meeting.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  onClick={() => confirmMutation.mutate()}
-                  disabled={confirmMutation.isPending || rejectMutation.isPending}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  {confirmMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                  )}
-                  Confirm Booking
-                </Button>
+        {booking.status === 'PENDING' && (() => {
+          const pendingCount = booking.recurringBookings?.filter(rb => rb.status === 'PENDING').length ?? 0
+          const isRecurringSeries = booking.recurringGroupId && pendingCount > 1
+          return (
+            <Card className="border-yellow-200 bg-yellow-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-yellow-800">
+                  <AlertCircle className="h-5 w-5" />
+                  Action Required
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-yellow-700 mb-4">
+                  {isRecurringSeries
+                    ? `This recurring series has ${pendingCount} pending bookings awaiting your confirmation.`
+                    : 'This booking request is awaiting your confirmation. Please confirm or decline this meeting.'}
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    onClick={() => confirmMutation.mutate('this')}
+                    disabled={confirmMutation.isPending || rejectMutation.isPending}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {confirmMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    Confirm This Booking
+                  </Button>
 
-                <Button
-                  variant="destructive"
-                  onClick={() => setShowRejectDialog(true)}
-                  disabled={confirmMutation.isPending || rejectMutation.isPending}
-                >
-                  {rejectMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <X className="h-4 w-4 mr-2" />
+                  {isRecurringSeries && (
+                    <Button
+                      onClick={() => confirmMutation.mutate('all_pending')}
+                      disabled={confirmMutation.isPending || rejectMutation.isPending}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {confirmMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                      )}
+                      Confirm All Pending ({pendingCount})
+                    </Button>
                   )}
-                  Decline Booking
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowRejectDialog(true)}
+                    disabled={confirmMutation.isPending || rejectMutation.isPending}
+                  >
+                    {rejectMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <X className="h-4 w-4 mr-2" />
+                    )}
+                    Decline
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })()}
 
         {/* Actions for confirmed bookings */}
         {booking.status === 'CONFIRMED' && (
@@ -647,6 +806,21 @@ export default function BookingDetailPage() {
                 </Button>
               </Link>
 
+              {booking.recurringGroupId && (
+                <Button
+                  variant="outline"
+                  onClick={() => skipMutation.mutate('skip')}
+                  disabled={skipMutation.isPending}
+                >
+                  {skipMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Clock className="h-4 w-4 mr-2" />
+                  )}
+                  Skip This Occurrence
+                </Button>
+              )}
+
               <Button
                 variant="destructive"
                 onClick={() => setShowCancelDialog(true)}
@@ -662,10 +836,41 @@ export default function BookingDetailPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Skipped occurrence — Restore action */}
+        {booking.status === 'SKIPPED' && (
+          <Card className="border-slate-200 bg-slate-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-slate-700">
+                <Clock className="h-5 w-5" />
+                Occurrence Skipped
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-slate-600 mb-4">
+                This occurrence was skipped. The rest of the recurring series continues as normal.
+              </p>
+              <Button
+                onClick={() => skipMutation.mutate('unskip')}
+                disabled={skipMutation.isPending}
+              >
+                {skipMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                )}
+                Restore This Occurrence
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Cancel Confirmation Dialog */}
-      <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+      <AlertDialog open={showCancelDialog} onOpenChange={(open) => {
+        setShowCancelDialog(open)
+        if (!open) setCancelScope('this')
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
@@ -674,13 +879,52 @@ export default function BookingDetailPage() {
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {booking.recurringGroupId && (
+            <div className="py-2 space-y-2">
+              <p className="text-sm font-medium text-gray-700">Cancellation scope:</p>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="cancelScope"
+                  value="this"
+                  checked={cancelScope === 'this'}
+                  onChange={() => setCancelScope('this')}
+                  className="text-ocean-600"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Cancel this occurrence only</p>
+                  <p className="text-xs text-gray-500">
+                    Only occurrence {(booking.recurringIndex ?? 0) + 1} of {booking.recurringCount} will be cancelled
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="cancelScope"
+                  value="future"
+                  checked={cancelScope === 'future'}
+                  onChange={() => setCancelScope('future')}
+                  className="text-ocean-600"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Cancel this and all future occurrences</p>
+                  <p className="text-xs text-gray-500">
+                    All remaining occurrences from this date onward will be cancelled
+                  </p>
+                </div>
+              </label>
+            </div>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Booking</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => cancelMutation.mutate()}
               className="bg-red-600 hover:bg-red-700"
             >
-              Cancel Booking
+              {cancelScope === 'future' ? 'Cancel All Future' : 'Cancel Booking'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -711,11 +955,19 @@ export default function BookingDetailPage() {
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setRejectReason('')}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => rejectMutation.mutate(rejectReason)}
+              onClick={() => rejectMutation.mutate({ reason: rejectReason, scope: 'this' })}
               className="bg-red-600 hover:bg-red-700"
             >
-              Decline Booking
+              Decline This Booking
             </AlertDialogAction>
+            {booking.recurringGroupId && (booking.recurringBookings?.filter(rb => rb.status === 'PENDING').length ?? 0) > 1 && (
+              <AlertDialogAction
+                onClick={() => rejectMutation.mutate({ reason: rejectReason, scope: 'all_pending' })}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Decline All Pending
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

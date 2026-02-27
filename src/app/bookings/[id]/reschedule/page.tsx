@@ -69,6 +69,7 @@ export default function ReschedulePage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [reason, setReason] = useState('')
+  const [rescheduleScope, setRescheduleScope] = useState<'this' | 'this_and_future'>('this')
   const [inviteeTimezone, setInviteeTimezone] = useState<string>('UTC')
   const [step, setStep] = useState<'calendar' | 'time' | 'confirm' | 'success'>('calendar')
 
@@ -142,6 +143,7 @@ export default function ReschedulePage() {
         body: JSON.stringify({
           newStartTime: selectedSlot,
           reason: reason || undefined,
+          scope: booking?.recurringGroupId ? rescheduleScope : 'this',
         }),
       })
       if (!res.ok) {
@@ -246,10 +248,14 @@ export default function ReschedulePage() {
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
               <h1 className="text-2xl font-heading font-bold text-gray-900 mb-2">
-                Booking Rescheduled!
+                {rescheduleScope === 'this_and_future' && booking.recurringGroupId
+                  ? 'Series Rescheduled!'
+                  : 'Booking Rescheduled!'}
               </h1>
               <p className="text-gray-600 mb-6">
-                Your meeting has been moved. A confirmation email has been sent to both parties.
+                {rescheduleScope === 'this_and_future' && booking.recurringGroupId
+                  ? 'This and all future occurrences have been moved. A confirmation email has been sent to both parties.'
+                  : 'Your meeting has been moved. A confirmation email has been sent to both parties.'}
               </p>
 
               <div className="bg-gray-50 rounded-xl p-4 text-left mb-6">
@@ -338,6 +344,19 @@ export default function ReschedulePage() {
                   {inviteeTimezone}
                 </div>
               </div>
+
+              {/* Recurring series banner */}
+              {booking.recurringGroupId && booking.recurringCount && (
+                <div className="mt-6 p-3 bg-ocean-50 rounded-lg border border-ocean-200">
+                  <div className="flex items-center gap-2 text-ocean-700 text-sm font-medium mb-1">
+                    <RefreshCw className="h-4 w-4" />
+                    Recurring Series
+                  </div>
+                  <p className="text-xs text-ocean-600">
+                    Occurrence {(booking.recurringIndex ?? 0) + 1} of {booking.recurringCount}
+                  </p>
+                </div>
+              )}
 
               {/* Current booking time */}
               <div className="mt-6 pt-6 border-t border-gray-200">
@@ -536,6 +555,47 @@ export default function ReschedulePage() {
                     </div>
                   </div>
 
+                  {/* Scope selector for recurring bookings */}
+                  {booking.recurringGroupId && booking.recurringCount && booking.recurringCount > 1 && (
+                    <div className="mb-6 space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Reschedule scope</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="rescheduleScope"
+                            value="this"
+                            checked={rescheduleScope === 'this'}
+                            onChange={() => setRescheduleScope('this')}
+                            className="text-ocean-600"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">This occurrence only</p>
+                            <p className="text-xs text-gray-500">
+                              Only occurrence {(booking.recurringIndex ?? 0) + 1} will be rescheduled
+                            </p>
+                          </div>
+                        </label>
+                        <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors">
+                          <input
+                            type="radio"
+                            name="rescheduleScope"
+                            value="this_and_future"
+                            checked={rescheduleScope === 'this_and_future'}
+                            onChange={() => setRescheduleScope('this_and_future')}
+                            className="text-ocean-600"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">This and all future occurrences</p>
+                            <p className="text-xs text-gray-500">
+                              All remaining occurrences from this one onward will shift by the same time difference
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Reason */}
                   <div className="mb-6 space-y-2">
                     <label className="text-sm font-medium text-gray-700">
@@ -574,7 +634,9 @@ export default function ReschedulePage() {
                     ) : (
                       <>
                         <RefreshCw className="h-4 w-4 mr-2" />
-                        Confirm Reschedule
+                        {rescheduleScope === 'this_and_future' && booking.recurringGroupId
+                          ? 'Reschedule All Future'
+                          : 'Confirm Reschedule'}
                       </>
                     )}
                   </Button>

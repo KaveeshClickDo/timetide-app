@@ -108,10 +108,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Whitelist allowed fields to prevent mass assignment
     const allowedFields = [
       'title', 'description', 'length', 'locationType', 'locationValue',
-      'isActive', 'requiresConfirmation', 'minimumNotice', 'bufferTimeBefore',
-      'bufferTimeAfter', 'maxBookingsPerDay', 'scheduleId', 'color',
-      'periodType', 'periodDays', 'periodStartDate', 'periodEndDate',
-      'seatsPerSlot',
+      'isActive', 'requiresConfirmation', 'allowsRecurring', 'recurringMaxWeeks', 'recurringFrequency', 'recurringInterval',
+      'minimumNotice', 'bufferTimeBefore', 'bufferTimeAfter', 'maxBookingsPerDay',
+      'scheduleId', 'color', 'periodType', 'periodDays', 'periodStartDate',
+      'periodEndDate', 'seatsPerSlot',
     ] as const
     const updateData: Record<string, unknown> = {}
     for (const field of allowedFields) {

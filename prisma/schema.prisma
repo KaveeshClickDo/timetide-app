@@ -240,6 +240,10 @@ model EventType {
   // Customization
   requiresConfirmation Boolean @default(false)
   hideNotes           Boolean @default(false)
+  allowsRecurring     Boolean @default(false) // Allow invitees to book recurring series
+  recurringMaxWeeks   Int?    // Max occurrences an invitee can pick (2-24, null = use global max)
+  recurringFrequency  String? // 'weekly' | 'biweekly' | 'monthly' | 'custom' (null = weekly)
+  recurringInterval   Int?    // Custom interval in days (only used when frequency = 'custom')
   successRedirectUrl  String?
 
   // Team Settings
@@ -413,7 +417,14 @@ model Booking {
   rescheduleReason  String?
   lastRescheduledAt DateTime?
   rescheduledFromId String?   @unique
-  
+
+  // Recurring
+  recurringGroupId    String?   // Shared ID linking all occurrences in a series
+  recurringIndex      Int?      // 0-based index of this occurrence (0 = first week)
+  recurringCount      Int?      // Total number of occurrences in the series
+  recurringFrequency  String?   // Frequency at time of booking (denormalized for history)
+  recurringInterval   Int?      // Custom interval in days at time of booking
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -428,6 +439,7 @@ model Booking {
   @@index([inviteeEmail])
   @@index([startTime])
   @@index([status])
+  @@index([recurringGroupId])
 }
 
 model BookingAttendee {
@@ -448,6 +460,7 @@ enum BookingStatus {
   CANCELLED
   REJECTED
   COMPLETED
+  SKIPPED     // Intentionally skipped occurrence; series continues
 }
 
 // ============================================================================

@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
       allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
-          prompt: 'consent',
+          prompt: 'select_account',
           access_type: 'offline',
           response_type: 'code',
         },
@@ -94,18 +94,10 @@ export const authOptions: NextAuthOptions = {
         return !!existingUser?.password;
       }
 
-      // For OAuth: redirect new users (not yet onboarded) to onboarding
-      // Existing users linking a new OAuth provider should go to dashboard
-      if (user.id) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { onboardingCompleted: true },
-        });
-        if (dbUser && !dbUser.onboardingCompleted) {
-          return '/dashboard/onboarding';
-        }
-      }
-
+      // For OAuth: always allow sign-in. Onboarding redirect is handled
+      // by middleware after the JWT session is created.
+      // NOTE: Do NOT return a URL string here — it short-circuits JWT
+      // creation in NextAuth v4, causing a redirect loop.
       return true;
     },
 
@@ -125,7 +117,7 @@ export const authOptions: NextAuthOptions = {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, emailVerified: true, password: true },
+          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, emailVerified: true, password: true, onboardingCompleted: true },
         });
 
         token.username = dbUser?.username ?? undefined;
@@ -133,6 +125,7 @@ export const authOptions: NextAuthOptions = {
         token.timezoneAutoDetect = dbUser?.timezoneAutoDetect ?? true;
         token.bio = dbUser?.bio ?? undefined;
         token.plan = dbUser?.plan ?? 'FREE';
+        token.onboardingCompleted = dbUser?.onboardingCompleted ?? false;
         // Only require email verification for credential users (have password)
         token.emailVerified = !!dbUser?.emailVerified || !dbUser?.password;
         token.lastVerified = Date.now();
@@ -145,7 +138,7 @@ export const authOptions: NextAuthOptions = {
       if (token.id && Date.now() - lastVerified > VERIFY_INTERVAL) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { id: true, plan: true, emailVerified: true, password: true },
+          select: { id: true, plan: true, emailVerified: true, password: true, onboardingCompleted: true },
         });
 
         if (!dbUser) {
@@ -153,8 +146,9 @@ export const authOptions: NextAuthOptions = {
           return {} as typeof token;
         }
 
-        // Sync plan and emailVerified in case they changed
+        // Sync fields in case they changed
         token.plan = dbUser.plan ?? 'FREE';
+        token.onboardingCompleted = dbUser.onboardingCompleted ?? false;
         token.emailVerified = !!dbUser.emailVerified || !dbUser.password;
         token.lastVerified = Date.now();
       }
@@ -295,6 +289,7 @@ declare module 'next-auth/jwt' {
     timezoneAutoDetect: boolean;
     bio?: string;
     plan: string;
+    onboardingCompleted: boolean;
     emailVerified: boolean;
     lastVerified?: number;
     accessToken?: string;

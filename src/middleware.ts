@@ -18,6 +18,19 @@ export default withAuth(
       )
     }
 
+    // If user is authenticated but hasn't completed onboarding, redirect to onboarding
+    // (except if they're already on the onboarding page)
+    if (
+      token?.id &&
+      token.onboardingCompleted === false &&
+      path.startsWith('/dashboard') &&
+      !path.startsWith('/dashboard/onboarding')
+    ) {
+      return NextResponse.redirect(
+        new URL('/dashboard/onboarding', req.url)
+      )
+    }
+
     return NextResponse.next()
   },
   {

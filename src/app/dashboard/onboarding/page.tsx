@@ -407,8 +407,9 @@ function OnboardingContent() {
       setCurrentStep(5)
     } else {
       // Complete onboarding - mark as completed and redirect
+      // Use hard navigation so the browser sends the updated JWT cookie
       await saveUserMutation.mutateAsync({ onboardingCompleted: true })
-      router.push('/dashboard')
+      window.location.href = '/dashboard'
     }
   }
 
@@ -420,8 +421,9 @@ function OnboardingContent() {
 
   const handleSkip = async () => {
     // Mark onboarding as completed even when skipping
+    // Use hard navigation so the browser sends the updated JWT cookie
     await saveUserMutation.mutateAsync({ onboardingCompleted: true })
-    router.push('/dashboard')
+    window.location.href = '/dashboard'
   }
 
   const copyLink = () => {

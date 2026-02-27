@@ -268,9 +268,9 @@ export default function AvailabilityPage() {
               const isActive = daySlots.length > 0
 
               return (
-                <div key={day.value} className="flex items-start gap-4">
+                <div key={day.value} className="flex flex-wrap items-start gap-2">
                   {/* Day label */}
-                  <div className="w-28 flex-shrink-0 pt-2">
+                  <div className="w-24 sm:w-28 flex-shrink-0 pt-2">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() =>
@@ -305,13 +305,13 @@ export default function AvailabilityPage() {
                     ) : (
                       <div className="space-y-2">
                         {daySlots.map((slot, index) => (
-                          <div key={index} className="flex items-center gap-2">
+                          <div key={index} className="flex items-center gap-1.5 flex-wrap min-w-0">
                             <select
                               value={slot.startTime}
                               onChange={(e) =>
                                 updateSlot(day.value, index, 'startTime', e.target.value)
                               }
-                              className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                              className="h-10 rounded-lg border border-input bg-background px-2 text-sm w-[120px] min-w-0"
                             >
                               {TIME_OPTIONS.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
@@ -325,7 +325,7 @@ export default function AvailabilityPage() {
                               onChange={(e) =>
                                 updateSlot(day.value, index, 'endTime', e.target.value)
                               }
-                              className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                              className="h-10 rounded-lg border border-input bg-background px-2 text-sm w-[120px] min-w-0"
                             >
                               {TIME_OPTIONS.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
@@ -353,7 +353,7 @@ export default function AvailabilityPage() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 ml-auto">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button className="p-2 hover:bg-gray-100 rounded-lg">

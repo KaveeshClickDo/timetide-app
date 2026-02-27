@@ -934,7 +934,7 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0 mr-4">
                 <p className="font-medium text-gray-900">Enable Group Booking</p>
                 <p className="text-sm text-gray-500">
                   Multiple attendees can book the same slot (e.g., workshops, webinars, office hours)
@@ -949,7 +949,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                   seatsPerSlot: !formData.isGroupBooking ? 10 : 1
                 })}
                 className={cn(
-                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  'relative inline-flex flex-shrink-0 h-6 w-11 items-center rounded-full transition-colors',
                   !groupBookingGate.canAccess ? 'bg-gray-100 cursor-not-allowed' :
                   formData.isGroupBooking ? 'bg-ocean-500' : 'bg-gray-200'
                 )}
@@ -1012,7 +1012,7 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0 mr-4">
                 <p className="font-medium text-gray-900">Enable Recurring Bookings</p>
                 <p className="text-sm text-gray-500">
                   Invitees can book this event as a recurring series
@@ -1023,7 +1023,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                 disabled={!recurringGate.canAccess}
                 onClick={() => recurringGate.canAccess && setFormData({ ...formData, allowsRecurring: !formData.allowsRecurring })}
                 className={cn(
-                  'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                  'relative inline-flex flex-shrink-0 h-6 w-11 items-center rounded-full transition-colors',
                   !recurringGate.canAccess ? 'bg-gray-100 cursor-not-allowed' :
                   formData.allowsRecurring ? 'bg-ocean-500' : 'bg-gray-200'
                 )}

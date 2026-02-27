@@ -156,7 +156,7 @@ export default function DashboardPage() {
   // Completed = explicitly COMPLETED OR confirmed/pending bookings whose end time has passed
   const completedCount = allBookings?.filter(
     (b) => b.status === 'COMPLETED' ||
-    ((b.status === 'PENDING' || b.status === 'CONFIRMED') && isPast(new Date(b.endTime)))
+      ((b.status === 'PENDING' || b.status === 'CONFIRMED') && isPast(new Date(b.endTime)))
   ).length || 0
 
   const cancelledCount = allBookings?.filter((b) => b.status === 'CANCELLED').length || 0
@@ -229,35 +229,48 @@ export default function DashboardPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
-        <Button
-          variant={filter === 'upcoming' ? 'default' : 'ghost'}
-          onClick={() => setFilter('upcoming')}
-          className="flex-shrink-0"
-        >
-          Upcoming
-        </Button>
-        <Button
-          variant={filter === 'past' ? 'default' : 'ghost'}
-          onClick={() => setFilter('past')}
-          className="flex-shrink-0"
-        >
-          Past
-        </Button>
-        <Button
-          variant={filter === 'cancelled' ? 'default' : 'ghost'}
-          onClick={() => setFilter('cancelled')}
-          className="flex-shrink-0"
-        >
-          Cancelled
-        </Button>
-        <Button
-          variant={filter === 'declined' ? 'default' : 'ghost'}
-          onClick={() => setFilter('declined')}
-          className="flex-shrink-0"
-        >
-          Declined
-        </Button>
+      <div className="mb-6">
+        {/* Mobile dropdown */}
+        <div className="sm:hidden">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as typeof filter)}
+            className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
+          >
+            <option value="upcoming">Upcoming</option>
+            <option value="past">Past</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="declined">Declined</option>
+          </select>
+        </div>
+
+        {/* Desktop tabs */}
+        <div className="hidden sm:flex gap-2">
+          <Button
+            variant={filter === 'upcoming' ? 'default' : 'ghost'}
+            onClick={() => setFilter('upcoming')}
+          >
+            Upcoming
+          </Button>
+          <Button
+            variant={filter === 'past' ? 'default' : 'ghost'}
+            onClick={() => setFilter('past')}
+          >
+            Past
+          </Button>
+          <Button
+            variant={filter === 'cancelled' ? 'default' : 'ghost'}
+            onClick={() => setFilter('cancelled')}
+          >
+            Cancelled
+          </Button>
+          <Button
+            variant={filter === 'declined' ? 'default' : 'ghost'}
+            onClick={() => setFilter('declined')}
+          >
+            Declined
+          </Button>
+        </div>
       </div>
 
       {/* Bookings List */}
@@ -276,10 +289,10 @@ export default function DashboardPage() {
               {filter === 'upcoming'
                 ? "When someone books a meeting with you, it'll appear here."
                 : filter === 'cancelled'
-                ? 'Your cancelled bookings will appear here.'
-                : filter === 'declined'
-                ? 'Bookings you have declined will appear here.'
-                : 'Your past bookings will appear here.'}
+                  ? 'Your cancelled bookings will appear here.'
+                  : filter === 'declined'
+                    ? 'Bookings you have declined will appear here.'
+                    : 'Your past bookings will appear here.'}
             </p>
             <Link href="/dashboard/event-types">
               <Button>Share Your Booking Link</Button>

@@ -180,7 +180,7 @@ export default function TermsConditionsPage() {
             <p className="text-gray-600 mb-6">
               You are responsible for maintaining the confidentiality and security of your account credentials.
               You must use a strong password and notify us immediately at{' '}
-              <a href="mailto:support@timetide.app" className="text-ocean-600 hover:underline">support@timetide.app</a>{' '}
+              <a href="mailto:hello@timetide.app" className="text-ocean-600 hover:underline">hello@timetide.app</a>{' '}
               if you suspect any unauthorised access to your account. We are not liable for any loss or damage
               arising from unauthorised use of your account due to your failure to protect your credentials.
             </p>
@@ -383,7 +383,7 @@ export default function TermsConditionsPage() {
               <li>We target 99.9% uptime but do not offer a formal Service Level Agreement (SLA) at this time</li>
               <li>Scheduled maintenance will be communicated in advance when possible</li>
               <li>We are not liable for service interruptions caused by factors beyond our reasonable control</li>
-              <li>Support is available via email at <a href="mailto:support@timetide.app" className="text-ocean-600 hover:underline">support@timetide.app</a></li>
+              <li>Support is available via email at <a href="mailto:hello@timetide.app" className="text-ocean-600 hover:underline">hello@timetide.app</a></li>
               <li>Response times vary by plan: Free (best effort), Pro (within 24 hours), Team (within 4 hours on business days)</li>
             </ul>
 
@@ -461,7 +461,7 @@ export default function TermsConditionsPage() {
             <p className="text-gray-600 mb-6">
               You may terminate your account at any time by deleting your account through the settings page
               or by contacting our support team at{' '}
-              <a href="mailto:support@timetide.app" className="text-ocean-600 hover:underline">support@timetide.app</a>.
+              <a href="mailto:hello@timetide.app" className="text-ocean-600 hover:underline">hello@timetide.app</a>.
               Active subscriptions will remain in effect until the end of the current billing period.
             </p>
 
@@ -623,7 +623,7 @@ export default function TermsConditionsPage() {
               <p className="text-gray-600 mb-3">United Kingdom</p>
               <div className="border-t border-gray-200 pt-3 space-y-1">
                 <p className="text-gray-600">Legal enquiries: <a href="mailto:legal@timetide.app" className="text-ocean-600 hover:underline">legal@timetide.app</a></p>
-                <p className="text-gray-600">General support: <a href="mailto:support@timetide.app" className="text-ocean-600 hover:underline">support@timetide.app</a></p>
+                <p className="text-gray-600">General support: <a href="mailto:hello@timetide.app" className="text-ocean-600 hover:underline">hello@timetide.app</a></p>
               </div>
             </div>
 
@@ -661,6 +661,7 @@ export default function TermsConditionsPage() {
               <h4 className="font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link href="/about-us" className="hover:text-white">About</Link></li>
+                <li><Link href="/contact-us" className="hover:text-white">Contact</Link></li>
                 <li><Link href="#" className="hover:text-white">Blog</Link></li>
                 <li><Link href="#" className="hover:text-white">Careers</Link></li>
               </ul>

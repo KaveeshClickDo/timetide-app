@@ -269,12 +269,12 @@ export default function AboutPage() {
             Have questions? We&apos;d love to hear from you. Reach out to our team
             and we&apos;ll get back to you as soon as possible.
           </p>
-          <a href="mailto:support@timetide.app">
+          <Link href="/contact-us">
             <Button size="lg">
               Contact Us
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
-          </a>
+          </Link>
         </div>
       </section>
 
@@ -323,6 +323,7 @@ export default function AboutPage() {
               <h4 className="font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link href="/about-us" className="hover:text-white">About</Link></li>
+                <li><Link href="/contact-us" className="hover:text-white">Contact</Link></li>
                 <li><Link href="#" className="hover:text-white">Blog</Link></li>
                 <li><Link href="#" className="hover:text-white">Careers</Link></li>
               </ul>

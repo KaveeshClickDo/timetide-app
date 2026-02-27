@@ -499,7 +499,7 @@ export default function PrivacyPolicyPage() {
                 <p className="text-gray-600">Privacy enquiries: <a href="mailto:privacy@timetide.app" className="text-ocean-600 hover:underline">privacy@timetide.app</a></p>
                 <p className="text-gray-600">Legal enquiries: <a href="mailto:legal@timetide.app" className="text-ocean-600 hover:underline">legal@timetide.app</a></p>
                 <p className="text-gray-600">Security issues: <a href="mailto:security@timetide.app" className="text-ocean-600 hover:underline">security@timetide.app</a></p>
-                <p className="text-gray-600">General support: <a href="mailto:support@timetide.app" className="text-ocean-600 hover:underline">support@timetide.app</a></p>
+                <p className="text-gray-600">General support: <a href="mailto:hello@timetide.app" className="text-ocean-600 hover:underline">hello@timetide.app</a></p>
               </div>
             </div>
 
@@ -537,6 +537,7 @@ export default function PrivacyPolicyPage() {
               <h4 className="font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link href="/about-us" className="hover:text-white">About</Link></li>
+                <li><Link href="/contact-us" className="hover:text-white">Contact</Link></li>
                 <li><Link href="#" className="hover:text-white">Blog</Link></li>
                 <li><Link href="#" className="hover:text-white">Careers</Link></li>
               </ul>

@@ -264,7 +264,7 @@ export default function EventTypesPage() {
                     <div className="w-1.5 h-14 rounded-full bg-ocean-500 flex-shrink-0" />
 
                     <div className="flex-1 min-w-0">
-                      {/* Title row with dropdown menu */}
+                      {/* Title row with actions and dropdown */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -283,68 +283,100 @@ export default function EventTypesPage() {
                             </p>
                           )}
                         </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="flex-shrink-0 -mt-1">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/dashboard/event-types/${eventType.id}/edit`}
-                              >
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link
-                                href={`/${username}/${eventType.slug}`}
-                                target="_blank"
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Preview
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() =>
-                                toggleMutation.mutate({
-                                  id: eventType.id,
-                                  isActive: !eventType.isActive,
-                                })
-                              }
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {/* Action buttons - desktop only (inline) */}
+                          <div className="hidden sm:flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => copyLink(eventType.slug, eventType.id)}
                             >
-                              {eventType.isActive ? (
+                              {copiedId === eventType.id ? (
                                 <>
-                                  <span className="h-4 w-4 mr-2 rounded-full border-2 border-gray-400 inline-block" />
-                                  Disable
+                                  <CheckCircle2 className="h-4 w-4 mr-1 text-green-500" />
+                                  Copied!
                                 </>
                               ) : (
                                 <>
-                                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
-                                  Enable
+                                  <Copy className="h-4 w-4 mr-1" />
+                                  Copy Link
                                 </>
                               )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600"
-                              onClick={() => {
-                                if (
-                                  confirm(
-                                    'Are you sure you want to delete this event type?'
-                                  )
-                                ) {
-                                  deleteMutation.mutate(eventType.id)
+                            </Button>
+
+                            {username && (
+                              <EmbedCodeGenerator
+                                username={username}
+                                eventSlug={eventType.slug}
+                                eventTitle={eventType.title}
+                              />
+                            )}
+                          </div>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="flex-shrink-0 -mt-1">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/dashboard/event-types/${eventType.id}/edit`}
+                                >
+                                  <Pencil className="h-4 w-4 mr-2" />
+                                  Edit
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  href={`/${username}/${eventType.slug}`}
+                                  target="_blank"
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  Preview
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  toggleMutation.mutate({
+                                    id: eventType.id,
+                                    isActive: !eventType.isActive,
+                                  })
                                 }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              >
+                                {eventType.isActive ? (
+                                  <>
+                                    <span className="h-4 w-4 mr-2 rounded-full border-2 border-gray-400 inline-block" />
+                                    Disable
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
+                                    Enable
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-red-600"
+                                onClick={() => {
+                                  if (
+                                    confirm(
+                                      'Are you sure you want to delete this event type?'
+                                    )
+                                  ) {
+                                    deleteMutation.mutate(eventType.id)
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
 
                       {/* Meta info */}
@@ -363,8 +395,8 @@ export default function EventTypesPage() {
                         </div>
                       </div>
 
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 mt-3">
+                      {/* Action buttons - mobile only (below) */}
+                      <div className="flex items-center gap-2 mt-3 sm:hidden">
                         <Button
                           variant="outline"
                           size="sm"

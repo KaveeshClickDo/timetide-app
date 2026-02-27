@@ -438,6 +438,7 @@ export default async function HomePage() {
               <h4 className="font-semibold text-white mb-4">Company</h4>
               <ul className="space-y-2 text-sm">
                 <li><Link href="/about-us" className="hover:text-white">About</Link></li>
+                <li><Link href="/contact-us" className="hover:text-white">Contact</Link></li>
                 <li><Link href="#" className="hover:text-white">Blog</Link></li>
                 <li><Link href="#" className="hover:text-white">Careers</Link></li>
               </ul>

@@ -72,6 +72,7 @@ interface BookingWidgetProps {
       options?: string[]
     }>
   }
+  isEmbed?: boolean
 }
 
 const locationIcons = {
@@ -94,7 +95,7 @@ const locationLabels = {
 
 type BookingStep = 'calendar' | 'time' | 'details' | 'confirmation'
 
-export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
+export default function BookingWidget({ user, eventType, isEmbed }: BookingWidgetProps) {
   const [step, setStep] = useState<BookingStep>('calendar')
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -323,7 +324,7 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
 
   if (step === 'confirmation' && bookingData) {
     return (
-      <div className="max-w-lg mx-auto py-12 px-4">
+      <div className={isEmbed ? 'max-w-lg mx-auto py-6 px-4' : 'max-w-lg mx-auto py-12 px-4'}>
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
             <div className={cn(
@@ -411,12 +412,21 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
                 </a>
               )}
 
-              <Link href={`/bookings/${bookingData.uid}`}>
-                <Button variant="outline" className="w-full">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Manage Booking
-                </Button>
-              </Link>
+              {isEmbed ? (
+                <a href={`/bookings/${bookingData.uid}`} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" className="w-full">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Manage Booking
+                  </Button>
+                </a>
+              ) : (
+                <Link href={`/bookings/${bookingData.uid}`}>
+                  <Button variant="outline" className="w-full">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Manage Booking
+                  </Button>
+                </Link>
+              )}
 
               <Button
                 variant="ghost"
@@ -437,24 +447,26 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
           </CardContent>
         </Card>
 
-        <div className="text-center mt-6">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
-            <Image
-              src="/logo.svg"
-              alt="TimeTide"
-              width={20}
-              height={20}
-            />
-            TimeTide Powered by SeekaHost Technologies Ltd.
-          </Link>
-        </div>
+        {!isEmbed && (
+          <div className="text-center mt-6">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
+              <Image
+                src="/logo.svg"
+                alt="TimeTide"
+                width={20}
+                height={20}
+              />
+              TimeTide Powered by SeekaHost Technologies Ltd.
+            </Link>
+          </div>
+        )}
       </div>
     )
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <Card className="overflow-hidden">
+    <div className={isEmbed ? 'max-w-4xl mx-auto px-2 py-2' : 'max-w-4xl mx-auto py-8 px-4'}>
+      <Card className={cn('overflow-hidden', isEmbed && 'border-0 shadow-none')}>
         <div className="md:flex">
           {/* Left sidebar - Event info */}
           <div className="md:w-80 p-6 bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200">
@@ -858,17 +870,19 @@ export default function BookingWidget({ user, eventType }: BookingWidgetProps) {
         </div>
       </Card>
 
-      <div className="text-center mt-6">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
-          <Image
-            src="/logo.svg"
-            alt="TimeTide"
-            width={20}
-            height={20}
-          />
-          TimeTide Powered by SeekaHost Technologies Ltd.
-        </Link>
-      </div>
+      {!isEmbed && (
+        <div className="text-center mt-6">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700">
+            <Image
+              src="/logo.svg"
+              alt="TimeTide"
+              width={20}
+              height={20}
+            />
+            TimeTide Powered by SeekaHost Technologies Ltd.
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

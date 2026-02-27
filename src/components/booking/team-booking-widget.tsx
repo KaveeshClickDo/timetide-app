@@ -85,6 +85,7 @@ interface TeamBookingWidgetProps {
   };
   members: TeamMember[];
   defaultTimezone: string;
+  isEmbed?: boolean;
 }
 
 const locationIcons = {
@@ -118,6 +119,7 @@ export default function TeamBookingWidget({
   eventType,
   members,
   defaultTimezone,
+  isEmbed,
 }: TeamBookingWidgetProps) {
   const [step, setStep] = useState<BookingStep>('calendar');
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -306,7 +308,7 @@ export default function TeamBookingWidget({
   // Confirmation step
   if (step === 'confirmation' && bookingResult) {
     return (
-      <div className="max-w-lg mx-auto py-12 px-4">
+      <div className={isEmbed ? 'max-w-lg mx-auto py-6 px-4' : 'max-w-lg mx-auto py-12 px-4'}>
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
             <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
@@ -368,22 +370,24 @@ export default function TeamBookingWidget({
           </CardContent>
         </Card>
 
-        <div className="text-center mt-6">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
-          >
-            <Image src="/logo.svg" alt="TimeTide" width={20} height={20} />
-            TimeTide Powered by SeekaHost Technologies Ltd.
-          </Link>
-        </div>
+        {!isEmbed && (
+          <div className="text-center mt-6">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+            >
+              <Image src="/logo.svg" alt="TimeTide" width={20} height={20} />
+              TimeTide Powered by SeekaHost Technologies Ltd.
+            </Link>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <Card className="overflow-hidden">
+    <div className={isEmbed ? 'max-w-4xl mx-auto px-2 py-2' : 'max-w-4xl mx-auto py-8 px-4'}>
+      <Card className={cn('overflow-hidden', isEmbed && 'border-0 shadow-none')}>
         <div className="md:flex">
           {/* Left sidebar - Team/Event info */}
           <div className="md:w-80 p-6 bg-gray-50 border-b md:border-b-0 md:border-r border-gray-200">
@@ -755,15 +759,17 @@ export default function TeamBookingWidget({
         </div>
       </Card>
 
-      <div className="text-center mt-6">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
-        >
-          <Image src="/logo.svg" alt="TimeTide" width={20} height={20} />
-          TimeTide Powered by SeekaHost Technologies Ltd.
-        </Link>
-      </div>
+      {!isEmbed && (
+        <div className="text-center mt-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+          >
+            <Image src="/logo.svg" alt="TimeTide" width={20} height={20} />
+            TimeTide Powered by SeekaHost Technologies Ltd.
+          </Link>
+        </div>
+      )}
     </div>
   );
 }

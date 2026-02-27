@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import BookingWidget from '@/components/booking/booking-widget'
 import Link from 'next/link'
@@ -38,8 +38,10 @@ interface EventType {
 
 export default function BookingPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const username = params?.username as string
   const slug = params?.slug as string
+  const isEmbed = searchParams.get('embed') === 'true'
 
   // Fetch event type and user data
   const { data, isLoading, error } = useQuery<{ user: User; eventType: EventType }>({
@@ -57,7 +59,7 @@ export default function BookingPage() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center">
+      <div className={isEmbed ? 'flex items-center justify-center h-full' : 'min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center'}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ocean-500 mx-auto mb-4"></div>
           <p className="text-gray-500">Loading event details...</p>
@@ -69,13 +71,15 @@ export default function BookingPage() {
   // Error state
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center">
+      <div className={isEmbed ? 'flex items-center justify-center h-full' : 'min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center'}>
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Event Not Found</h1>
           <p className="text-gray-500 mb-4">The event you're looking for doesn't exist or is no longer available.</p>
-          <Link href={`/${username}`} className="text-ocean-600 hover:text-ocean-700">
-            Back to profile
-          </Link>
+          {!isEmbed && (
+            <Link href={`/${username}`} className="text-ocean-600 hover:text-ocean-700">
+              Back to profile
+            </Link>
+          )}
         </div>
       </div>
     )
@@ -103,11 +107,13 @@ export default function BookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50">
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(eventJsonLd) }}
-      />
+    <div className={isEmbed ? '' : 'min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50'}>
+      {!isEmbed && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(eventJsonLd) }}
+        />
+      )}
       <BookingWidget
         user={{
           name: user.name || 'User',
@@ -135,6 +141,7 @@ export default function BookingPage() {
             options: (q.options as string[] | null) ?? undefined,
           })) ?? [],
         }}
+        isEmbed={isEmbed}
       />
     </div>
   )

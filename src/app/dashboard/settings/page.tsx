@@ -373,10 +373,10 @@ export default function SettingsPage() {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+        <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">
           Settings
         </h1>
-        <p className="text-gray-600">Manage your account and preferences.</p>
+        <p className="text-sm sm:text-base text-gray-600">Manage your account and preferences.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -452,7 +452,7 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm sm:text-base">
                   timetide.app/
                 </span>
                 <Input
@@ -464,7 +464,7 @@ export default function SettingsPage() {
                       username: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
                     })
                   }
-                  className="pl-28"
+                  className="pl-[6.5rem] sm:pl-28"
                   placeholder="username"
                 />
                 {checkingUsername && (
@@ -575,9 +575,9 @@ export default function SettingsPage() {
           <CardContent>
             <div className="space-y-4">
               {/* Google Calendar */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
                     <Calendar className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
@@ -594,7 +594,7 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-shrink-0">
                   {googleCalendar ? (
                     <>
                       <Button
@@ -642,9 +642,9 @@ export default function SettingsPage() {
               </div>
 
               {/* Microsoft Outlook */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
                     <Calendar className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
@@ -725,9 +725,9 @@ export default function SettingsPage() {
           <CardContent>
             <div className="space-y-4">
               {/* Zoom */}
-              <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
                     <Video className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
@@ -775,9 +775,9 @@ export default function SettingsPage() {
               </div>
 
               {/* Google Meet - Already handled by Google Calendar */}
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-green-50">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg bg-green-50">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
                     <Video className="h-5 w-5 text-green-600" />
                   </div>
                   <div>

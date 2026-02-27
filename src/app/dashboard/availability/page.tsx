@@ -219,16 +219,16 @@ export default function AvailabilityPage() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">
             Availability
           </h1>
-          <p className="text-gray-600">
+          <p className="text-sm sm:text-base text-gray-600">
             Set when you&apos;re available for bookings.
           </p>
         </div>
-        <Button onClick={handleSave} disabled={!hasChanges || saveMutation.isPending}>
+        <Button onClick={handleSave} disabled={!hasChanges || saveMutation.isPending} className="w-full sm:w-auto flex-shrink-0">
           {saveMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (

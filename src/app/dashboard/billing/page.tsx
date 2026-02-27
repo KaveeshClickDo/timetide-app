@@ -109,10 +109,10 @@ function BillingContent() {
     <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+        <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">
           Billing & Plans
         </h1>
-        <p className="text-gray-600">
+        <p className="text-sm sm:text-base text-gray-600">
           Manage your subscription and view available plans.
         </p>
       </div>
@@ -176,7 +176,7 @@ function BillingContent() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               {(['FREE', 'PRO', 'TEAM'] as PlanTier[]).map((plan) => (
                 <button
                   key={plan}

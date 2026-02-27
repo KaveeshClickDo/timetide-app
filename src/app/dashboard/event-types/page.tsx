@@ -62,12 +62,12 @@ function EventTypesHeader({ eventTypeCount, onUpgradeNeeded }: { eventTypeCount:
   const isAtLimit = !canAccess
 
   return (
-    <div className="flex items-center justify-between mb-8">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
       <div>
-        <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+        <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">
           Event Types
         </h1>
-        <p className="text-gray-600">
+        <p className="text-sm sm:text-base text-gray-600">
           Create and manage the types of meetings people can book with you.
           {limit !== Infinity && (
             <span className={cn('ml-2 text-sm font-medium', isAtLimit ? 'text-amber-600' : 'text-gray-500')}>
@@ -77,13 +77,13 @@ function EventTypesHeader({ eventTypeCount, onUpgradeNeeded }: { eventTypeCount:
         </p>
       </div>
       {isAtLimit ? (
-        <Button onClick={onUpgradeNeeded}>
+        <Button onClick={onUpgradeNeeded} className="flex-shrink-0 w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           New Event Type
         </Button>
       ) : (
-        <Link href="/dashboard/event-types/new">
-          <Button>
+        <Link href="/dashboard/event-types/new" className="flex-shrink-0">
+          <Button className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             New Event Type
           </Button>
@@ -178,21 +178,21 @@ export default function EventTypesPage() {
       {username && (
         <Card className="mb-6 bg-ocean-50 border-ocean-200">
           <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-ocean-100 flex items-center justify-center">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-lg bg-ocean-100 flex items-center justify-center flex-shrink-0">
                   <LinkIcon className="h-5 w-5 text-ocean-600" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-ocean-900">
                     Your public booking page
                   </p>
-                  <p className="text-sm text-ocean-700">
+                  <p className="text-sm text-ocean-700 truncate">
                     {window.location.origin}/{username}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
@@ -258,136 +258,139 @@ export default function EventTypesPage() {
                   !eventType.isActive && 'opacity-60'
                 )}
               >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    {/* Left section */}
-                    <div className="flex items-start gap-4">
-                      {/* Color indicator */}
-                      <div className="w-1.5 h-14 rounded-full bg-ocean-500 flex-shrink-0" />
+                <CardContent className="p-4 sm:p-5">
+                  <div className="flex items-start gap-3 sm:gap-4">
+                    {/* Color indicator */}
+                    <div className="w-1.5 h-14 rounded-full bg-ocean-500 flex-shrink-0" />
 
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-gray-900">
-                            {eventType.title}
-                          </h3>
-                          {!eventType.isActive && (
-                            <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">
-                              Inactive
-                            </span>
+                    <div className="flex-1 min-w-0">
+                      {/* Title row with dropdown menu */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-gray-900 truncate">
+                              {eventType.title}
+                            </h3>
+                            {!eventType.isActive && (
+                              <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">
+                                Inactive
+                              </span>
+                            )}
+                          </div>
+                          {eventType.description && (
+                            <p className="text-sm text-gray-500 mt-1 line-clamp-1">
+                              {eventType.description}
+                            </p>
                           )}
                         </div>
-                        {eventType.description && (
-                          <p className="text-sm text-gray-500 mt-1 line-clamp-1">
-                            {eventType.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            {formatDuration(eventType.length)}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <LocationIcon className="h-4 w-4" />
-                            {locationConfig.label}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <CheckCircle2 className="h-4 w-4" />
-                            {eventType._count.bookings} bookings
-                          </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="flex-shrink-0 -mt-1">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link
+                                href={`/dashboard/event-types/${eventType.id}/edit`}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <Link
+                                href={`/${username}/${eventType.slug}`}
+                                target="_blank"
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Preview
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                toggleMutation.mutate({
+                                  id: eventType.id,
+                                  isActive: !eventType.isActive,
+                                })
+                              }
+                            >
+                              {eventType.isActive ? (
+                                <>
+                                  <span className="h-4 w-4 mr-2 rounded-full border-2 border-gray-400 inline-block" />
+                                  Disable
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
+                                  Enable
+                                </>
+                              )}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => {
+                                if (
+                                  confirm(
+                                    'Are you sure you want to delete this event type?'
+                                  )
+                                ) {
+                                  deleteMutation.mutate(eventType.id)
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      {/* Meta info */}
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-gray-500">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          {formatDuration(eventType.length)}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <LocationIcon className="h-4 w-4" />
+                          {locationConfig.label}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <CheckCircle2 className="h-4 w-4" />
+                          {eventType._count.bookings} bookings
                         </div>
                       </div>
-                    </div>
 
-                    {/* Right section - Actions */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyLink(eventType.slug, eventType.id)}
-                      >
-                        {copiedId === eventType.id ? (
-                          <>
-                            <CheckCircle2 className="h-4 w-4 mr-1 text-green-500" />
-                            Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-4 w-4 mr-1" />
-                            Copy Link
-                          </>
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 mt-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyLink(eventType.slug, eventType.id)}
+                        >
+                          {copiedId === eventType.id ? (
+                            <>
+                              <CheckCircle2 className="h-4 w-4 mr-1 text-green-500" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-4 w-4 mr-1" />
+                              Copy Link
+                            </>
+                          )}
+                        </Button>
+
+                        {username && (
+                          <EmbedCodeGenerator
+                            username={username}
+                            eventSlug={eventType.slug}
+                            eventTitle={eventType.title}
+                          />
                         )}
-                      </Button>
-
-                      {username && (
-                        <EmbedCodeGenerator
-                          username={username}
-                          eventSlug={eventType.slug}
-                          eventTitle={eventType.title}
-                        />
-                      )}
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={`/dashboard/event-types/${eventType.id}/edit`}
-                            >
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Edit
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link
-                              href={`/${username}/${eventType.slug}`}
-                              target="_blank"
-                            >
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              Preview
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              toggleMutation.mutate({
-                                id: eventType.id,
-                                isActive: !eventType.isActive,
-                              })
-                            }
-                          >
-                            {eventType.isActive ? (
-                              <>
-                                <span className="h-4 w-4 mr-2 rounded-full border-2 border-gray-400 inline-block" />
-                                Disable
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
-                                Enable
-                              </>
-                            )}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  'Are you sure you want to delete this event type?'
-                                )
-                              ) {
-                                deleteMutation.mutate(eventType.id)
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

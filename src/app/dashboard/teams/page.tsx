@@ -201,16 +201,16 @@ export default function TeamsPage() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">Teams</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">Teams</h1>
+          <p className="text-sm sm:text-base text-gray-600">
             Create teams to enable round-robin and collective scheduling.
           </p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto flex-shrink-0">
               <Plus className="h-4 w-4 mr-2" />
               Create Team
             </Button>
@@ -367,7 +367,7 @@ export default function TeamsPage() {
                   </DropdownMenu>
                 </div>
 
-                <div className="flex items-center gap-6 mt-6">
+                <div className="flex flex-wrap items-center gap-4 sm:gap-6 mt-6">
                   {/* Members */}
                   <div className="flex items-center gap-2">
                     <div className="flex -space-x-2">
@@ -401,7 +401,7 @@ export default function TeamsPage() {
                 </div>
 
                 {/* Quick Actions */}
-                <div className="flex gap-2 mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
                   <Button
                     variant="outline"
                     size="sm"

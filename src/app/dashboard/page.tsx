@@ -166,7 +166,7 @@ export default function DashboardPage() {
     <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+        <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">
           Bookings
         </h1>
         <p className="text-gray-600">
@@ -229,28 +229,32 @@ export default function DashboardPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
         <Button
           variant={filter === 'upcoming' ? 'default' : 'ghost'}
           onClick={() => setFilter('upcoming')}
+          className="flex-shrink-0"
         >
           Upcoming
         </Button>
         <Button
           variant={filter === 'past' ? 'default' : 'ghost'}
           onClick={() => setFilter('past')}
+          className="flex-shrink-0"
         >
           Past
         </Button>
         <Button
           variant={filter === 'cancelled' ? 'default' : 'ghost'}
           onClick={() => setFilter('cancelled')}
+          className="flex-shrink-0"
         >
           Cancelled
         </Button>
         <Button
           variant={filter === 'declined' ? 'default' : 'ghost'}
           onClick={() => setFilter('declined')}
+          className="flex-shrink-0"
         >
           Declined
         </Button>

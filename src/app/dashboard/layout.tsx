@@ -261,19 +261,19 @@ export default function DashboardLayout({
 
             <div className="flex-1 lg:flex-none" />
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Quick actions */}
               {canCreateEvent ? (
                 <Link href="/dashboard/event-types/new">
                   <Button size="sm">
-                    <Plus className="h-4 w-4 mr-1" />
-                    New Event Type
+                    <Plus className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">New Event Type</span>
                   </Button>
                 </Link>
               ) : (
                 <Button size="sm" onClick={() => setShowUpgradeModal(true)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  New Event Type
+                  <Plus className="h-4 w-4 sm:mr-1" />
+                  <span className="hidden sm:inline">New Event Type</span>
                 </Button>
               )}
 

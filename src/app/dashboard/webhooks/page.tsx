@@ -425,16 +425,16 @@ export default function WebhooksPage() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">Webhooks</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">Webhooks</h1>
+          <p className="text-sm sm:text-base text-gray-600">
             Receive real-time notifications when events happen in your account.
           </p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto flex-shrink-0">
               <Plus className="h-4 w-4 mr-2" />
               Add Webhook
             </Button>
@@ -548,10 +548,10 @@ export default function WebhooksPage() {
               !webhook.isActive && 'opacity-60'
             )}>
               <CardContent className="p-6">
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900 truncate">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 truncate">
                         {webhook.name || 'Unnamed Webhook'}
                       </h3>
                       {!webhook.isActive && (
@@ -638,10 +638,10 @@ export default function WebhooksPage() {
                 </div>
 
                 {/* Stats Row */}
-                <div className="flex items-center gap-6 pt-4 border-t text-sm">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-4 border-t text-sm">
                   <div className="flex items-center gap-2 text-gray-500">
-                    <Clock className="h-4 w-4" />
-                    <span>Last triggered: {formatRelativeTime(webhook.lastTriggeredAt)}</span>
+                    <Clock className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">Last triggered: {formatRelativeTime(webhook.lastTriggeredAt)}</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1.5 text-green-600">

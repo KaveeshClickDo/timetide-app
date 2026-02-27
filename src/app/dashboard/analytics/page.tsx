@@ -168,10 +168,10 @@ export default function AnalyticsPage() {
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between">
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">Analytics</h1>
-          <p className="text-gray-600">Track your booking performance and trends.</p>
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-2">Analytics</h1>
+          <p className="text-sm sm:text-base text-gray-600">Track your booking performance and trends.</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

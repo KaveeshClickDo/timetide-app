@@ -310,6 +310,7 @@ export default function EventTypesPage() {
                                 username={username}
                                 eventSlug={eventType.slug}
                                 eventTitle={eventType.title}
+                                userImage={session?.user?.image}
                               />
                             )}
                           </div>
@@ -420,6 +421,7 @@ export default function EventTypesPage() {
                             username={username}
                             eventSlug={eventType.slug}
                             eventTitle={eventType.title}
+                            userImage={session?.user?.image}
                           />
                         )}
                       </div>

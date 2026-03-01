@@ -799,8 +799,8 @@ export default function BookingDetailPage() {
                 variant="outline"
               />
 
-              <Link href={`/bookings/${booking.uid}/reschedule`}>
-                <Button variant="outline">
+              <Link href={`/bookings/${booking.uid}/reschedule`} className="w-full sm:w-auto">
+                <Button variant="outline" className="w-full sm:w-auto">
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Reschedule
                 </Button>

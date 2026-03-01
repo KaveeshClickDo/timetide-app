@@ -600,9 +600,9 @@ function OnboardingContent() {
                     const isActive = daySlots.length > 0
 
                     return (
-                      <div key={day.value} className="flex items-start gap-3">
+                      <div key={day.value} className="flex items-start gap-2 sm:gap-3">
                         {/* Day toggle */}
-                        <div className="w-24 flex-shrink-0 pt-2">
+                        <div className="w-14 sm:w-28 flex-shrink-0 pt-2">
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -622,25 +622,26 @@ function OnboardingContent() {
                                 isActive ? 'text-gray-900' : 'text-gray-400'
                               )}
                             >
-                              {day.short}
+                              <span className="sm:hidden">{day.short}</span>
+                              <span className="hidden sm:inline">{day.label}</span>
                             </span>
                           </div>
                         </div>
 
                         {/* Time slots */}
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           {!isActive ? (
                             <p className="text-gray-400 text-sm pt-2">Unavailable</p>
                           ) : (
                             <div className="space-y-2">
                               {daySlots.map((slot, index) => (
-                                <div key={index} className="flex items-center gap-2">
+                                <div key={index} className="flex items-center gap-1 sm:gap-1.5 min-w-0">
                                   <select
                                     value={slot.startTime}
                                     onChange={(e) =>
                                       updateSlot(day.value, index, 'startTime', e.target.value)
                                     }
-                                    className="h-9 rounded-lg border border-input bg-background px-2 text-sm"
+                                    className="flex-1 sm:flex-none sm:w-[120px] min-w-0 h-9 sm:h-10 rounded-lg border border-input bg-background px-1 sm:px-2 text-sm"
                                   >
                                     {TIME_OPTIONS.map((opt) => (
                                       <option key={opt.value} value={opt.value}>
@@ -648,13 +649,13 @@ function OnboardingContent() {
                                       </option>
                                     ))}
                                   </select>
-                                  <span className="text-gray-400">-</span>
+                                  <span className="text-gray-400 flex-shrink-0">–</span>
                                   <select
                                     value={slot.endTime}
                                     onChange={(e) =>
                                       updateSlot(day.value, index, 'endTime', e.target.value)
                                     }
-                                    className="h-9 rounded-lg border border-input bg-background px-2 text-sm"
+                                    className="flex-1 sm:flex-none sm:w-[120px] min-w-0 h-9 sm:h-10 rounded-lg border border-input bg-background px-1 sm:px-2 text-sm"
                                   >
                                     {TIME_OPTIONS.map((opt) => (
                                       <option key={opt.value} value={opt.value}>
@@ -665,7 +666,7 @@ function OnboardingContent() {
                                   <button
                                     type="button"
                                     onClick={() => removeSlot(day.value, index)}
-                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500"
+                                    className="flex-shrink-0 p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500 transition-colors"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
@@ -674,9 +675,9 @@ function OnboardingContent() {
                               <button
                                 type="button"
                                 onClick={() => addSlot(day.value)}
-                                className="flex items-center gap-1 text-xs text-ocean-600 hover:text-ocean-700"
+                                className="flex items-center gap-1 text-xs sm:text-sm text-ocean-600 hover:text-ocean-700"
                               >
-                                <Plus className="h-3 w-3" />
+                                <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                                 Add time
                               </button>
                             </div>

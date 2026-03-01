@@ -439,7 +439,7 @@ export default function WebhooksPage() {
               Add Webhook
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg w-[calc(100vw-2rem)] overflow-y-auto max-h-[90vh]">
             <form onSubmit={handleCreateWebhook}>
               <DialogHeader>
                 <DialogTitle>Create Webhook</DialogTitle>
@@ -496,7 +496,7 @@ export default function WebhooksPage() {
                   </div>
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -719,7 +719,7 @@ export default function WebhooksPage() {
         setIsEditDialogOpen(open);
         if (!open) setEditingWebhook(null);
       }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg w-[calc(100vw-2rem)] overflow-y-auto max-h-[90vh]">
           <form onSubmit={handleUpdateWebhook}>
             <DialogHeader>
               <DialogTitle>Edit Webhook</DialogTitle>
@@ -778,7 +778,7 @@ export default function WebhooksPage() {
                 </div>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -806,7 +806,7 @@ export default function WebhooksPage() {
         setIsDeliveryDialogOpen(open);
         if (!open) setDeliveryWebhookId(null);
       }}>
-        <DialogContent className="max-w-2xl max-h-[80vh]">
+        <DialogContent className="sm:max-w-2xl w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Delivery History</DialogTitle>
             <DialogDescription>
@@ -820,7 +820,7 @@ export default function WebhooksPage() {
           ) : deliveryData?.webhook ? (
             <div className="space-y-4">
               {/* Stats Summary */}
-              <div className="flex gap-4 text-sm">
+              <div className="flex flex-wrap gap-4 text-sm">
                 <div className="flex items-center gap-1.5 text-green-600">
                   <CheckCircle2 className="h-4 w-4" />
                   <span>{deliveryData.webhook.stats.success} success</span>
@@ -836,7 +836,7 @@ export default function WebhooksPage() {
               </div>
 
               {/* Deliveries List */}
-              <div className="overflow-y-auto max-h-[50vh] space-y-2">
+              <div className="space-y-2">
                 {deliveryData.webhook.deliveries.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     No deliveries yet.
@@ -847,8 +847,8 @@ export default function WebhooksPage() {
                       key={delivery.id}
                       className="border rounded-lg p-3 space-y-2"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge className={cn('text-xs', getStatusColor(delivery.status))}>
                             {delivery.status}
                           </Badge>
@@ -856,7 +856,7 @@ export default function WebhooksPage() {
                             {delivery.eventType}
                           </Badge>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           {delivery.responseTimeMs && (
                             <span className="text-xs text-gray-500">
                               {delivery.responseTimeMs}ms

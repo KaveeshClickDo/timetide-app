@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
+import PublicNavbar from '@/components/public-navbar'
+import PublicFooter from '@/components/public-footer'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -54,46 +55,7 @@ export default function ContactPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-ocean-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <Link href="/">
-                <Image src="/header-logo.svg" alt="TimeTide" width={150} height={40} />
-              </Link>
-            </div>
-            <div className="hidden md:flex items-center gap-8">
-              <Link
-                href="/#features"
-                className="text-gray-600 hover:text-ocean-600 transition-colors"
-              >
-                Features
-              </Link>
-              <Link
-                href="/#how-it-works"
-                className="text-gray-600 hover:text-ocean-600 transition-colors"
-              >
-                How It Works
-              </Link>
-              <Link
-                href="/#pricing"
-                className="text-gray-600 hover:text-ocean-600 transition-colors"
-              >
-                Pricing
-              </Link>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link href="/auth/signin">
-                <Button variant="ghost">Sign In</Button>
-              </Link>
-              <Link href="/auth/signup">
-                <Button>Get Started</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <PublicNavbar />
 
       {/* Hero Section */}
       <section className="relative pt-32 pb-20 overflow-hidden">
@@ -319,49 +281,7 @@ export default function ContactPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-12 bg-gray-900 text-gray-400">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center mb-4">
-                <Image src="/footer-logo.svg" alt="TimeTide" width={120} height={32} />
-              </div>
-              <p className="text-sm">
-                Modern scheduling that flows with your time.
-              </p>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Product</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/#features" className="hover:text-white">Features</Link></li>
-                <li><Link href="/#pricing" className="hover:text-white">Pricing</Link></li>
-                <li><Link href="#" className="hover:text-white">Integrations</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Company</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/about-us" className="hover:text-white">About</Link></li>
-                <li><Link href="/contact-us" className="hover:text-white">Contact</Link></li>
-                <li><Link href="#" className="hover:text-white">Blog</Link></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-white mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/privacy-policy" className="hover:text-white">Privacy</Link></li>
-                <li><Link href="/terms-conditions" className="hover:text-white">Terms</Link></li>
-              </ul>
-            </div>
-          </div>
-          <div className="border-t border-gray-800 pt-8 text-sm text-center">
-            &copy; {new Date().getFullYear()} TimeTide by SeekaHost Technologies Ltd. All Rights Reserved.
-            <br />
-            Company Number: 16026964. VAT Number: 485829729.
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

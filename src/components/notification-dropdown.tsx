@@ -82,7 +82,11 @@ export function NotificationDropdown() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0">
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-[calc(100vw-2rem)] sm:w-96 p-0"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h3 className="font-semibold text-sm">Notifications</h3>
@@ -90,7 +94,7 @@ export function NotificationDropdown() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs text-ocean-600 hover:text-ocean-700 h-auto py-1 px-2"
+              className="text-xs text-ocean-600 hover:text-ocean-700 h-auto py-1 px-2 shrink-0"
               onClick={handleMarkAllRead}
             >
               Mark all as read
@@ -99,7 +103,7 @@ export function NotificationDropdown() {
         </div>
 
         {/* Notification list */}
-        <ScrollArea className="max-h-[400px]">
+        <ScrollArea className="max-h-[min(400px,60vh)]">
           {isLoading ? (
             <div className="py-8 text-center text-sm text-gray-500">
               Loading...
@@ -149,7 +153,7 @@ export function NotificationDropdown() {
                           <span className="w-2 h-2 rounded-full bg-ocean-500 shrink-0" />
                         )}
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 break-words">
                         {notification.message}
                       </p>
                       <p className="text-[11px] text-gray-400 mt-1">

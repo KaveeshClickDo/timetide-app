@@ -14,9 +14,7 @@ import {
   Check,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -80,10 +78,9 @@ export default function AvailabilityPage() {
     },
   })
 
-  // Initialize default schedule when data loads
   useEffect(() => {
-    if (schedules && (schedules as Schedule[]).length > 0 && !selectedSchedule) {
-      const defaultSchedule = (schedules as Schedule[]).find((s) => s.isDefault) || (schedules as Schedule[])[0]
+    if (schedules && schedules.length > 0 && !selectedSchedule) {
+      const defaultSchedule = schedules.find((s) => s.isDefault) || schedules[0]
       setSelectedSchedule(defaultSchedule.id)
       initializeSlots(defaultSchedule)
     }
@@ -102,17 +99,10 @@ export default function AvailabilityPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability-schedules'] })
       setHasChanges(false)
-      toast({
-        title: 'Availability saved',
-        description: 'Your availability has been updated.',
-      })
+      toast({ title: 'Availability saved', description: 'Your availability has been updated.' })
     },
     onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to save availability.',
-        variant: 'destructive',
-      })
+      toast({ title: 'Error', description: 'Failed to save availability.', variant: 'destructive' })
     },
   })
 
@@ -126,10 +116,8 @@ export default function AvailabilityPage() {
     setEditedSlots(slotsByDay)
   }
 
-  const currentSchedule = schedules?.find((s: Schedule) => s.id === selectedSchedule)
-
   const handleScheduleChange = (scheduleId: string) => {
-    const schedule = schedules?.find((s: Schedule) => s.id === scheduleId)
+    const schedule = schedules?.find((s) => s.id === scheduleId)
     if (schedule) {
       setSelectedSchedule(scheduleId)
       initializeSlots(schedule)
@@ -143,22 +131,16 @@ export default function AvailabilityPage() {
     const newSlot: AvailabilitySlot = {
       dayOfWeek,
       startTime: lastSlot ? lastSlot.endTime : '09:00',
-      endTime: lastSlot ? '17:00' : '17:00',
+      endTime: '17:00',
     }
-    setEditedSlots({
-      ...editedSlots,
-      [dayOfWeek]: [...daySlots, newSlot],
-    })
+    setEditedSlots({ ...editedSlots, [dayOfWeek]: [...daySlots, newSlot] })
     setHasChanges(true)
   }
 
   const removeSlot = (dayOfWeek: number, index: number) => {
     const daySlots = [...(editedSlots[dayOfWeek] || [])]
     daySlots.splice(index, 1)
-    setEditedSlots({
-      ...editedSlots,
-      [dayOfWeek]: daySlots,
-    })
+    setEditedSlots({ ...editedSlots, [dayOfWeek]: daySlots })
     setHasChanges(true)
   }
 
@@ -170,17 +152,13 @@ export default function AvailabilityPage() {
   ) => {
     const daySlots = [...(editedSlots[dayOfWeek] || [])]
     daySlots[index] = { ...daySlots[index], [field]: value }
-    setEditedSlots({
-      ...editedSlots,
-      [dayOfWeek]: daySlots,
-    })
+    setEditedSlots({ ...editedSlots, [dayOfWeek]: daySlots })
     setHasChanges(true)
   }
 
   const copyToAllDays = (sourceDayOfWeek: number) => {
     const sourceSlots = editedSlots[sourceDayOfWeek] || []
     const newSlots: Record<number, AvailabilitySlot[]> = {}
-
     DAYS.forEach((day) => {
       newSlots[day.value] = sourceSlots.map((slot) => ({
         ...slot,
@@ -188,7 +166,6 @@ export default function AvailabilityPage() {
         id: undefined,
       }))
     })
-
     setEditedSlots(newSlots)
     setHasChanges(true)
     toast({ title: 'Copied to all days' })
@@ -228,7 +205,11 @@ export default function AvailabilityPage() {
             Set when you&apos;re available for bookings.
           </p>
         </div>
-        <Button onClick={handleSave} disabled={!hasChanges || saveMutation.isPending} className="w-full sm:w-auto flex-shrink-0">
+        <Button
+          onClick={handleSave}
+          disabled={!hasChanges || saveMutation.isPending}
+          className="w-full sm:w-auto flex-shrink-0"
+        >
           {saveMutation.isPending ? (
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
           ) : (
@@ -239,30 +220,26 @@ export default function AvailabilityPage() {
       </div>
 
       {/* Schedule selector */}
-      {schedules && (schedules as Schedule[]).length > 1 && (
-        <div className="mb-6">
-          <Label className="mb-2 block">Schedule</Label>
-          <div className="flex gap-2">
-            {(schedules as Schedule[]).map((schedule: Schedule) => (
-              <Button
-                key={schedule.id}
-                variant={selectedSchedule === schedule.id ? 'default' : 'outline'}
-                onClick={() => handleScheduleChange(schedule.id)}
-              >
-                {schedule.name}
-                {schedule.isDefault && (
-                  <span className="ml-2 text-xs opacity-70">(Default)</span>
-                )}
-              </Button>
-            ))}
-          </div>
+      {schedules && schedules.length > 1 && (
+        <div className="mb-6 flex gap-2 flex-wrap">
+          {schedules.map((schedule) => (
+            <Button
+              key={schedule.id}
+              variant={selectedSchedule === schedule.id ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => handleScheduleChange(schedule.id)}
+            >
+              {schedule.name}
+              {schedule.isDefault && <span className="ml-2 text-xs opacity-70">(Default)</span>}
+            </Button>
+          ))}
         </div>
       )}
 
       {/* Availability grid */}
       <Card>
-        <CardContent className="p-6">
-          <div className="space-y-6">
+        <CardContent className="p-4 sm:p-6">
+          <div className="space-y-4 sm:space-y-6">
             {DAYS.map((day) => {
               const daySlots = editedSlots[day.value] || []
               const isActive = daySlots.length > 0
@@ -270,7 +247,7 @@ export default function AvailabilityPage() {
               return (
                 <div key={day.value} className="flex flex-wrap items-start gap-2">
                   {/* Day label */}
-                  <div className="w-24 sm:w-28 flex-shrink-0 pt-2">
+                  <div className="w-14 sm:w-28 flex-shrink-0 pt-2">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() =>
@@ -289,29 +266,32 @@ export default function AvailabilityPage() {
                       </button>
                       <span
                         className={cn(
-                          'font-medium',
+                          'font-medium text-sm sm:text-base',
                           isActive ? 'text-gray-900' : 'text-gray-400'
                         )}
                       >
-                        {day.label}
+                        {/* Short name on mobile, full name on desktop */}
+                        <span className="sm:hidden">{day.short}</span>
+                        <span className="hidden sm:inline">{day.label}</span>
                       </span>
                     </div>
                   </div>
 
                   {/* Time slots */}
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     {!isActive ? (
                       <p className="text-gray-400 text-sm pt-2">Unavailable</p>
                     ) : (
                       <div className="space-y-2">
                         {daySlots.map((slot, index) => (
-                          <div key={index} className="flex items-center gap-1.5 flex-wrap min-w-0">
+                          <div key={index} className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+                            {/* Mobile: fluid selects — Desktop: fixed-width selects */}
                             <select
                               value={slot.startTime}
                               onChange={(e) =>
                                 updateSlot(day.value, index, 'startTime', e.target.value)
                               }
-                              className="h-10 rounded-lg border border-input bg-background px-2 text-sm w-[120px] min-w-0"
+                              className="flex-1 sm:flex-none sm:w-[120px] min-w-0 h-9 sm:h-10 rounded-lg border border-input bg-background px-1 sm:px-2 text-sm"
                             >
                               {TIME_OPTIONS.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
@@ -319,13 +299,13 @@ export default function AvailabilityPage() {
                                 </option>
                               ))}
                             </select>
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 flex-shrink-0">–</span>
                             <select
                               value={slot.endTime}
                               onChange={(e) =>
                                 updateSlot(day.value, index, 'endTime', e.target.value)
                               }
-                              className="h-10 rounded-lg border border-input bg-background px-2 text-sm w-[120px] min-w-0"
+                              className="flex-1 sm:flex-none sm:w-[120px] min-w-0 h-9 sm:h-10 rounded-lg border border-input bg-background px-1 sm:px-2 text-sm"
                             >
                               {TIME_OPTIONS.map((opt) => (
                                 <option key={opt.value} value={opt.value}>
@@ -335,25 +315,35 @@ export default function AvailabilityPage() {
                             </select>
                             <button
                               onClick={() => removeSlot(day.value, index)}
-                              className="p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500"
+                              className="flex-shrink-0 p-1.5 sm:p-2 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-red-500 transition-colors"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
                         ))}
-                        <button
-                          onClick={() => addSlot(day.value)}
-                          className="flex items-center gap-1 text-sm text-ocean-600 hover:text-ocean-700"
-                        >
-                          <Plus className="h-4 w-4" />
-                          Add time
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => addSlot(day.value)}
+                            className="flex items-center gap-1 text-xs sm:text-sm text-ocean-600 hover:text-ocean-700"
+                          >
+                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                            Add time
+                          </button>
+                          {/* Copy to all — inline on mobile only */}
+                          <button
+                            onClick={() => copyToAllDays(day.value)}
+                            className="sm:hidden flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            <Copy className="h-3 w-3" />
+                            Copy to all
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex-shrink-0 ml-auto">
+                  {/* Desktop actions dropdown */}
+                  <div className="hidden sm:block flex-shrink-0 ml-auto">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button className="p-2 hover:bg-gray-100 rounded-lg">
@@ -376,11 +366,12 @@ export default function AvailabilityPage() {
       </Card>
 
       {/* Timezone info */}
-      <div className="mt-6 flex items-center gap-2 text-sm text-gray-500">
-        <Clock className="h-4 w-4" />
+      <div className="mt-6 flex items-start gap-2 text-sm text-gray-500">
+        <Clock className="h-4 w-4 flex-shrink-0 mt-0.5" />
         <span>
-          Times are shown in {session?.user?.timezone || 'UTC'}
-          {session?.user?.timezoneAutoDetect ? ' (auto-detected)' : ''}. You can change your timezone in{' '}
+          Times are shown in{' '}
+          <span className="font-medium text-gray-700">{session?.user?.timezone || 'UTC'}</span>
+          {session?.user?.timezoneAutoDetect ? ' (auto-detected)' : ''}. Change your timezone in{' '}
           <a href="/dashboard/settings" className="text-ocean-600 hover:underline">
             Settings
           </a>

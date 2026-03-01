@@ -538,7 +538,7 @@ export default function TeamDetailPage() {
       </Button>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 gap-4">
         <div className="flex items-center gap-4">
           {team.logo ? (
             <Avatar className="h-16 w-16">
@@ -560,7 +560,7 @@ export default function TeamDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           <Button variant="outline" onClick={() => window.open(`/team/${team.slug}`, '_blank')}>
             <ExternalLink className="h-4 w-4 mr-2" />
             View Page
@@ -587,12 +587,12 @@ export default function TeamDetailPage() {
 
         <TabsContent value="members" className="mt-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <CardTitle>Team Members</CardTitle>
                 <CardDescription>Manage who has access to this team</CardDescription>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-shrink-0">
                 <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
                   <DialogTrigger asChild>
                     <Button variant="outline">
@@ -600,7 +600,7 @@ export default function TeamDetailPage() {
                       Invite
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleSendInvite}>
                       <DialogHeader>
                         <DialogTitle>Invite to Team</DialogTitle>
@@ -634,7 +634,7 @@ export default function TeamDetailPage() {
                           </Select>
                         </div>
                       </div>
-                      <DialogFooter>
+                      <DialogFooter className="gap-2">
                         <Button type="button" variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
                           Cancel
                         </Button>
@@ -659,7 +659,7 @@ export default function TeamDetailPage() {
                     Add Member
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
                   <form onSubmit={handleAddMember}>
                     <DialogHeader>
                       <DialogTitle>Add Team Member</DialogTitle>
@@ -696,7 +696,7 @@ export default function TeamDetailPage() {
                         </p>
                       </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="gap-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -723,11 +723,11 @@ export default function TeamDetailPage() {
             <CardContent>
               {/* Bulk Action Bar */}
               {selectedMembers.size > 0 && (
-                <div className="flex items-center gap-3 p-3 mb-4 bg-ocean-50 rounded-lg border border-ocean-200">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 mb-4 bg-ocean-50 rounded-lg border border-ocean-200">
                   <span className="text-sm font-medium text-ocean-700">
                     {selectedMembers.size} selected
                   </span>
-                  <div className="flex gap-2 ml-auto">
+                  <div className="flex flex-wrap gap-2 sm:ml-auto">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="outline" size="sm">Change Role</Button>
@@ -809,20 +809,20 @@ export default function TeamDetailPage() {
                     <div
                       key={member.id}
                       className={cn(
-                        "flex items-center justify-between p-4 rounded-lg border",
+                        "flex items-center justify-between p-3 sm:p-4 rounded-lg border",
                         selectedMembers.has(member.id) && "border-ocean-300 bg-ocean-50/50"
                       )}
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                         {isSelectable ? (
                           <input
                             type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
+                            className="h-4 w-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500 flex-shrink-0"
                             checked={selectedMembers.has(member.id)}
                             onChange={() => toggleMemberSelect(member.id)}
                           />
                         ) : (
-                          <div className="w-4" />
+                          <div className="hidden sm:block w-4 flex-shrink-0" />
                         )}
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={member.user.image || undefined} />
@@ -830,11 +830,13 @@ export default function TeamDetailPage() {
                             {getInitials(member.user.name || member.user.email)}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-900">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-gray-900 truncate">
                               {member.user.name || 'Unnamed User'}
                             </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1 mt-0.5">
                             <Badge variant={member.role === 'OWNER' ? 'default' : member.role === 'ADMIN' ? 'secondary' : 'outline'}>
                               <RoleIcon className="h-3 w-3 mr-1" />
                               {roleLabels[member.role]}
@@ -845,7 +847,7 @@ export default function TeamDetailPage() {
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-500">{member.user.email}</p>
+                          <p className="text-sm text-gray-500 truncate">{member.user.email}</p>
                         </div>
                       </div>
                       <DropdownMenu>
@@ -1013,10 +1015,10 @@ export default function TeamDetailPage() {
                 <div className="border-t pt-6">
                   <h4 className="font-medium text-gray-900 mb-2">Public Booking URL</h4>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-gray-100 rounded-lg text-sm">
+                    <code className="flex-1 min-w-0 px-3 py-2 bg-gray-100 rounded-lg text-sm truncate block">
                       {typeof window !== 'undefined' ? window.location.origin : ''}/team/{team.slug}
                     </code>
-                    <Button variant="outline" onClick={copyBookingUrl}>
+                    <Button variant="outline" onClick={copyBookingUrl} className="flex-shrink-0">
                       <Copy className="h-4 w-4" />
                     </Button>
                   </div>
@@ -1117,7 +1119,7 @@ export default function TeamDetailPage() {
 
       {/* Edit Team Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleUpdateTeam}>
             <DialogHeader>
               <DialogTitle>Edit Team</DialogTitle>
@@ -1156,7 +1158,7 @@ export default function TeamDetailPage() {
                 />
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
               <Button
                 type="button"
                 variant="outline"

@@ -298,13 +298,18 @@ export default function DashboardLayout({
 
         {/* Footer */}
         <footer className="mt-auto border-t border-gray-200 bg-white px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-500">
-            <p>
-              © {new Date().getFullYear()} TimeTide by SeekaHost Technologies Ltd. All Rights Reserved.
+          <div className="flex flex-col items-center gap-1.5 sm:flex-row sm:justify-between text-xs text-gray-400">
+            <p className="text-center sm:text-left">
+              © {new Date().getFullYear()}{' '}
+              <span className="font-medium text-gray-500">TimeTide</span>{' '}
+              by SeekaHost Technologies Ltd. All rights reserved.
             </p>
-            <div className="flex items-center gap-4">
-              <p>Company Number: 16026964. VAT Number: 485829729.</p>
-              <span className="text-gray-400">v1.0.0</span>
+            <div className="flex items-center gap-2 flex-wrap justify-center">
+              <span>Co. No: 16026964</span>
+              <span className="text-gray-300">·</span>
+              <span>VAT: 485829729</span>
+              <span className="text-gray-300">·</span>
+              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono tracking-tight">v1.0.0</span>
             </div>
           </div>
         </footer>

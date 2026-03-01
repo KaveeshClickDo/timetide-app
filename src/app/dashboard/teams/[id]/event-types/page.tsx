@@ -293,9 +293,9 @@ export default function TeamEventTypesPage() {
       </Button>
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900">
             Team Event Types
           </h1>
           <p className="text-gray-600 mt-1">
@@ -304,12 +304,12 @@ export default function TeamEventTypesPage() {
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto flex-shrink-0">
               <Plus className="h-4 w-4 mr-2" />
               Create Event Type
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleCreateEventType}>
               <DialogHeader>
                 <DialogTitle>Create Team Event Type</DialogTitle>
@@ -317,7 +317,7 @@ export default function TeamEventTypesPage() {
                   Create a new event type for your team with round-robin or collective scheduling.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label htmlFor="title">Title</Label>
                   <Input
@@ -470,7 +470,7 @@ export default function TeamEventTypesPage() {
                   )}
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -526,7 +526,7 @@ export default function TeamEventTypesPage() {
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
                         <h3 className="text-lg font-semibold text-gray-900">
                           {eventType.title}
                         </h3>
@@ -550,7 +550,7 @@ export default function TeamEventTypesPage() {
                         </p>
                       )}
 
-                      <div className="flex items-center gap-6 text-sm text-gray-500">
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4" />
                           {eventType.length} min

@@ -19,6 +19,7 @@ interface EmbedCodeGeneratorProps {
   username: string
   eventSlug: string
   eventTitle: string
+  userImage?: string | null
 }
 
 type EmbedType = 'inline' | 'popup-widget' | 'popup-text'
@@ -69,8 +70,9 @@ const embedOptions: {
           <div className="h-1 w-14 bg-gray-100 rounded" />
           <div className="h-1 w-12 bg-gray-100 rounded" />
         </div>
-        <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-ocean-500 shadow-lg flex items-center justify-center">
-          <div className="w-3 h-3 border-2 border-white rounded-sm" />
+        <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-ocean-500 rounded-full pl-1 pr-2.5 py-1 shadow-lg">
+          <div className="w-4 h-4 rounded-full bg-white/30 flex-shrink-0" />
+          <div className="h-1.5 w-6 bg-white/80 rounded" />
         </div>
       </div>
     ),
@@ -101,6 +103,7 @@ export function EmbedCodeGenerator({
   username,
   eventSlug,
   eventTitle,
+  userImage,
 }: EmbedCodeGeneratorProps) {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -110,6 +113,8 @@ export function EmbedCodeGenerator({
   const [buttonText, setButtonText] = useState('Schedule a meeting')
   const [linkText, setLinkText] = useState('Schedule a meeting')
   const [buttonColor, setButtonColor] = useState('#0ea5e9')
+  const [buttonTextColor, setButtonTextColor] = useState('#ffffff')
+  const [avatarUrl, setAvatarUrl] = useState(userImage ?? '')
   const [textColor, setTextColor] = useState('#0ea5e9')
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -149,41 +154,68 @@ export function EmbedCodeGenerator({
         return `<!-- TimeTide Popup Widget -->
 <script>
 (function() {
+  var BOOKING_URL = '${bookingUrl}?embed=true';
+  var BTN_BG = '${buttonColor}';
+  var BTN_FG = '${buttonTextColor}';
+  var AVATAR = '${avatarUrl.trim()}';
+  var BTN_TEXT = '${buttonText.replace(/'/g, "\\'")}';
+  var hasAvatar = AVATAR !== '';
+
+  // --- Floating button ---
   var btn = document.createElement('div');
-  btn.id = 'timetide-widget-btn';
-  btn.innerHTML = '${buttonText}';
-  btn.style.cssText = 'position:fixed;bottom:24px;right:24px;background:${buttonColor};color:#fff;padding:14px 24px;border-radius:50px;cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,0.15);z-index:9998;transition:transform 0.2s,box-shadow 0.2s;';
-  btn.onmouseover = function() { btn.style.transform='scale(1.05)'; btn.style.boxShadow='0 6px 20px rgba(0,0,0,0.2)'; };
-  btn.onmouseout = function() { btn.style.transform='scale(1)'; btn.style.boxShadow='0 4px 14px rgba(0,0,0,0.15)'; };
+  btn.style.cssText = 'position:fixed;bottom:24px;right:24px;display:flex;align-items:center;gap:10px;background:'+BTN_BG+';color:'+BTN_FG+';padding:'+(hasAvatar?'8px 20px 8px 8px':'12px 22px')+';border-radius:50px;cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;font-weight:600;box-shadow:0 4px 24px rgba(0,0,0,0.18),0 1px 4px rgba(0,0,0,0.08);z-index:9998;transition:transform 0.2s ease,box-shadow 0.2s ease;user-select:none;';
 
+  if (hasAvatar) {
+    var img = document.createElement('img');
+    img.src = AVATAR; img.alt = '';
+    img.style.cssText = 'width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.3);flex-shrink:0;display:block;';
+    btn.appendChild(img);
+  } else {
+    var ico = document.createElement('span');
+    ico.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
+    ico.style.cssText = 'display:flex;align-items:center;flex-shrink:0;opacity:0.9;';
+    btn.appendChild(ico);
+  }
+  var txt = document.createElement('span');
+  txt.textContent = BTN_TEXT;
+  btn.appendChild(txt);
+
+  // --- Overlay ---
   var overlay = document.createElement('div');
-  overlay.id = 'timetide-widget-overlay';
-  overlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;justify-content:center;align-items:center;';
+  overlay.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;justify-content:center;align-items:center;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
 
+  // --- Popup ---
   var popup = document.createElement('div');
-  popup.style.cssText = 'background:#fff;border-radius:16px;width:90%;max-width:480px;height:85vh;max-height:750px;position:relative;overflow:hidden;box-shadow:0 25px 50px rgba(0,0,0,0.15);animation:timetide-slide-up 0.3s ease;';
+  popup.style.cssText = 'background:#fff;border-radius:20px;width:92%;max-width:480px;height:88vh;max-height:720px;position:relative;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.2);animation:tt-in 0.3s cubic-bezier(0.34,1.56,0.64,1);';
 
   var close = document.createElement('button');
   close.innerHTML = '&times;';
-  close.style.cssText = 'position:absolute;top:12px;right:16px;background:none;border:none;font-size:28px;cursor:pointer;color:#64748b;z-index:1;line-height:1;padding:4px;';
+  close.style.cssText = 'position:absolute;top:12px;right:12px;background:rgba(0,0,0,0.07);border:none;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:20px;color:#555;z-index:1;display:flex;align-items:center;justify-content:center;transition:background 0.15s;';
+  close.onmouseover = function() { close.style.background='rgba(0,0,0,0.13)'; };
+  close.onmouseout = function() { close.style.background='rgba(0,0,0,0.07)'; };
 
   var iframe = document.createElement('iframe');
-  iframe.src = '${bookingUrl}?embed=true';
+  iframe.src = BOOKING_URL;
   iframe.style.cssText = 'width:100%;height:100%;border:none;';
+  iframe.allow = 'payment'; iframe.loading = 'lazy';
 
-  popup.appendChild(close);
-  popup.appendChild(iframe);
+  popup.appendChild(close); popup.appendChild(iframe);
   overlay.appendChild(popup);
-  document.body.appendChild(btn);
-  document.body.appendChild(overlay);
+  document.body.appendChild(btn); document.body.appendChild(overlay);
 
-  var style = document.createElement('style');
-  style.textContent = '@keyframes timetide-slide-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}';
-  document.head.appendChild(style);
+  var s = document.createElement('style');
+  s.textContent = '@keyframes tt-in{from{opacity:0;transform:scale(0.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}';
+  document.head.appendChild(s);
 
-  btn.onclick = function() { overlay.style.display='flex'; };
-  close.onclick = function() { overlay.style.display='none'; };
-  overlay.onclick = function(e) { if(e.target===overlay) overlay.style.display='none'; };
+  function openPopup() { overlay.style.display = 'flex'; }
+  function closePopup() { overlay.style.display = 'none'; }
+
+  btn.onclick = openPopup;
+  close.onclick = closePopup;
+  overlay.onclick = function(e) { if (e.target === overlay) closePopup(); };
+  btn.onmouseover = function() { btn.style.transform='scale(1.05) translateY(-2px)'; btn.style.boxShadow='0 8px 32px rgba(0,0,0,0.22),0 2px 6px rgba(0,0,0,0.1)'; };
+  btn.onmouseout = function() { btn.style.transform=''; btn.style.boxShadow='0 4px 24px rgba(0,0,0,0.18),0 1px 4px rgba(0,0,0,0.08)'; };
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePopup(); });
 })();
 </script>`
 
@@ -346,21 +378,71 @@ export function EmbedCodeGenerator({
                       placeholder="Schedule a meeting"
                     />
                   </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700">Button color</Label>
-                    <div className="flex gap-2 mt-1.5">
-                      <input
-                        type="color"
-                        value={buttonColor}
-                        onChange={(e) => setButtonColor(e.target.value)}
-                        className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"
-                      />
-                      <Input
-                        value={buttonColor}
-                        onChange={(e) => setButtonColor(e.target.value)}
-                        className="flex-1 font-mono text-sm"
-                      />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Button color</Label>
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="color"
+                          value={buttonColor}
+                          onChange={(e) => setButtonColor(e.target.value)}
+                          className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 flex-shrink-0"
+                        />
+                        <Input
+                          value={buttonColor}
+                          onChange={(e) => setButtonColor(e.target.value)}
+                          className="font-mono text-sm"
+                        />
+                      </div>
                     </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Text color</Label>
+                      <div className="flex gap-2 mt-1.5">
+                        <input
+                          type="color"
+                          value={buttonTextColor}
+                          onChange={(e) => setButtonTextColor(e.target.value)}
+                          className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 flex-shrink-0"
+                        />
+                        <Input
+                          value={buttonTextColor}
+                          onChange={(e) => setButtonTextColor(e.target.value)}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">
+                      Profile image <span className="text-gray-400 font-normal">(optional)</span>
+                    </Label>
+                    <div className="flex gap-2 mt-1.5">
+                      {avatarUrl && (
+                        <img
+                          src={avatarUrl}
+                          alt=""
+                          className="w-10 h-10 rounded-full object-cover border border-gray-200 flex-shrink-0"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      )}
+                      <Input
+                        value={avatarUrl}
+                        onChange={(e) => setAvatarUrl(e.target.value)}
+                        placeholder="https://example.com/your-photo.jpg"
+                        className="flex-1"
+                      />
+                      {userImage && avatarUrl !== userImage && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setAvatarUrl(userImage)}
+                          className="flex-shrink-0 text-xs"
+                        >
+                          Use mine
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">Shows a circular photo next to your button text</p>
                   </div>
                 </div>
               )}
@@ -418,7 +500,7 @@ export function EmbedCodeGenerator({
                 </div>
                 <p className="text-xs text-ocean-700 leading-relaxed">
                   {selectedType === 'inline' && 'Paste this code into your HTML where you want the calendar to appear. The widget will fill its container width.'}
-                  {selectedType === 'popup-widget' && 'This adds a floating button in the bottom-right corner of your site. Clicking it opens a booking popup.'}
+                  {selectedType === 'popup-widget' && 'This adds a floating button in the bottom-right of your site. It shows your avatar (if set) next to the button text. Clicking it opens a booking popup.'}
                   {selectedType === 'popup-text' && 'Place the link anywhere in your page content. Clicking it opens a booking popup overlay.'}
                 </p>
               </div>

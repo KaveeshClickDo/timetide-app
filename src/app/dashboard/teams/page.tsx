@@ -215,7 +215,7 @@ export default function TeamsPage() {
               Create Team
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleCreateTeam}>
               <DialogHeader>
                 <DialogTitle>Create Team</DialogTitle>
@@ -262,7 +262,7 @@ export default function TeamsPage() {
                   />
                 </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="gap-2">
                 <Button
                   type="button"
                   variant="outline"

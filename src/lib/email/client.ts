@@ -73,6 +73,7 @@ export interface BookingEmailData {
 }
 
 const baseStyles = `
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #1a1a2e; }
     .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
@@ -82,8 +83,8 @@ const baseStyles = `
     .card { background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; }
     .detail-row { margin: 12px 0; }
     .detail-label { color: #64748b; width: 100px; display: inline-block; vertical-align: top; }
-    .detail-value { font-weight: 500; display: inline-block; vertical-align: top; }
-    .btn { display: inline-block; padding: 12px 24px; background: #0ea5e9; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 500; }
+    .detail-value { font-weight: 500; display: inline-block; vertical-align: top; word-break: break-word; }
+    .btn { display: inline-block; padding: 12px 24px; background: #0ea5e9; color: #ffffff !important; text-decoration: none; border-radius: 8px; font-weight: 500; margin-bottom: 8px; }
     .btn-outline { background: #f0f9ff; border: 1px solid #0ea5e9; color: #0369a1 !important; }
     .footer { text-align: center; margin-top: 40px; color: #94a3b8; font-size: 14px; }
     .divider { border-top: 1px solid #e2e8f0; margin: 24px 0; }
@@ -168,14 +169,14 @@ export function generateBookingConfirmedEmail(
         </div>
         
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${manageUrl}" class="btn" style="color: #ffffff;">Manage Booking</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff; margin-bottom: 8px;">Manage Booking</a>
           <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>
         </div>
-        
+
         <div class="footer">
           <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
           <p style="font-size: 12px;">
-            Need to make changes? 
+            Need to make changes?
             <a href="${manageUrl}" style="color: #0ea5e9;">Reschedule or cancel</a>
           </p>
         </div>
@@ -475,7 +476,7 @@ export function generateBookingConfirmedByHostEmail(
         </div>
 
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${manageUrl}" class="btn" style="color: #ffffff;">View Booking</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff; margin-bottom: 8px;">View Booking</a>
           <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>
         </div>
 
@@ -558,7 +559,7 @@ export function generateBulkConfirmedByHostEmail(
         </div>
 
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${manageUrl}" class="btn" style="color: #ffffff;">View Booking</a>
+          <a href="${manageUrl}" class="btn" style="color: #ffffff; margin-bottom: 8px;">View Booking</a>
           <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>
         </div>
 
@@ -1127,7 +1128,7 @@ export function generateWelcomeEmail(name: string): string {
         </div>
 
         <div style="text-align: center; margin: 32px 0;">
-          <a href="${dashboardUrl}" class="btn" style="color: #ffffff;">Go to Dashboard</a>
+          <a href="${dashboardUrl}" class="btn" style="color: #ffffff; margin-bottom: 8px;">Go to Dashboard</a>
           <a href="${settingsUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Settings</a>
         </div>
 

@@ -180,48 +180,42 @@ export default function DashboardPage() {
       <UpgradeBanner />
 
       {/* Stats Cards */}
-      <div className="grid sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-8">
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-ocean-100 flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-ocean-600" />
+          <CardContent className="p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-ocean-100 flex items-center justify-center flex-shrink-0">
+                <Calendar className="h-4 w-4 sm:h-6 sm:w-6 text-ocean-600" />
               </div>
               <div>
-                <p className="text-2xl font-heading font-bold text-gray-900">
-                  {upcomingCount}
-                </p>
-                <p className="text-sm text-gray-500">Upcoming</p>
+                <p className="text-xl sm:text-2xl font-heading font-bold text-gray-900">{upcomingCount}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Upcoming</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                <CheckCircle2 className="h-6 w-6 text-green-600" />
+          <CardContent className="p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-green-100 flex items-center justify-center flex-shrink-0">
+                <CheckCircle2 className="h-4 w-4 sm:h-6 sm:w-6 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-heading font-bold text-gray-900">
-                  {completedCount}
-                </p>
-                <p className="text-sm text-gray-500">Completed</p>
+                <p className="text-xl sm:text-2xl font-heading font-bold text-gray-900">{completedCount}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Completed</p>
               </div>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
-                <XCircle className="h-6 w-6 text-red-600" />
+          <CardContent className="p-3 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-red-100 flex items-center justify-center flex-shrink-0">
+                <XCircle className="h-4 w-4 sm:h-6 sm:w-6 text-red-600" />
               </div>
               <div>
-                <p className="text-2xl font-heading font-bold text-gray-900">
-                  {cancelledCount}
-                </p>
-                <p className="text-sm text-gray-500">Cancelled</p>
+                <p className="text-xl sm:text-2xl font-heading font-bold text-gray-900">{cancelledCount}</p>
+                <p className="text-xs sm:text-sm text-gray-500">Cancelled</p>
               </div>
             </div>
           </CardContent>
@@ -230,18 +224,22 @@ export default function DashboardPage() {
 
       {/* Filter tabs */}
       <div className="mb-6">
-        {/* Mobile dropdown */}
-        <div className="sm:hidden">
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value as typeof filter)}
-            className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm focus:border-ocean-500 focus:outline-none focus:ring-1 focus:ring-ocean-500"
-          >
-            <option value="upcoming">Upcoming</option>
-            <option value="past">Past</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="declined">Declined</option>
-          </select>
+        {/* Mobile pill filter */}
+        <div className="sm:hidden flex gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {(['upcoming', 'past', 'cancelled', 'declined'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                'flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize',
+                filter === f
+                  ? 'bg-ocean-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              )}
+            >
+              {f}
+            </button>
+          ))}
         </div>
 
         {/* Desktop tabs */}
@@ -316,10 +314,10 @@ export default function DashboardPage() {
                   return (
                     <Card key={booking.id} className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
-                        <div className="flex items-start gap-4">
+                        <div className="flex items-start gap-3 sm:gap-4">
                           {/* Time column */}
-                          <div className="flex-shrink-0 w-20 text-center">
-                            <p className="text-lg font-semibold text-gray-900">
+                          <div className="flex-shrink-0 w-14 sm:w-20 text-center">
+                            <p className="text-sm sm:text-lg font-semibold text-gray-900">
                               {formatInTimeZone(new Date(booking.startTime), hostTimezone, 'h:mm a')}
                             </p>
                             <p className="text-xs text-gray-500">
@@ -332,9 +330,10 @@ export default function DashboardPage() {
 
                           {/* Main content */}
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-4">
-                              <div>
-                                <h3 className="font-medium text-gray-900 truncate">
+                            <div className="flex items-start justify-between gap-2">
+                              {/* Title + invitee */}
+                              <div className="min-w-0 flex-1">
+                                <h3 className="font-medium text-gray-900 truncate text-sm sm:text-base">
                                   {booking.eventType.title}
                                   {booking.recurringGroupId && booking.recurringCount && (
                                     <Link
@@ -359,15 +358,22 @@ export default function DashboardPage() {
                                 </div>
                               </div>
 
-                              {/* Status badge */}
-                              <div
-                                className={cn(
-                                  'flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
-                                  statusConfig[booking.status].className
-                                )}
-                              >
-                                <StatusIcon className="h-3 w-3" />
-                                {statusConfig[booking.status].label}
+                              {/* Status badge + chevron grouped together so nothing overflows */}
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <div
+                                  className={cn(
+                                    'flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
+                                    statusConfig[booking.status].className
+                                  )}
+                                >
+                                  <StatusIcon className="h-3 w-3" />
+                                  <span className="hidden sm:inline">{statusConfig[booking.status].label}</span>
+                                </div>
+                                <Link href={`/dashboard/bookings/${booking.uid}`}>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-10 sm:w-10">
+                                    <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
+                                  </Button>
+                                </Link>
                               </div>
                             </div>
 
@@ -391,16 +397,6 @@ export default function DashboardPage() {
                               </div>
                             </div>
                           </div>
-
-                          {/* Actions */}
-                          <Link
-                            href={`/dashboard/bookings/${booking.uid}`}
-                            className="flex-shrink-0"
-                          >
-                            <Button variant="ghost" size="icon">
-                              <ChevronRight className="h-5 w-5" />
-                            </Button>
-                          </Link>
                         </div>
                       </CardContent>
                     </Card>

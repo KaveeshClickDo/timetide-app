@@ -9,11 +9,12 @@
 1. [Project Overview](#1-project-overview)
 2. [Tech Stack](#2-tech-stack)
 3. [Architecture & Folder Structure](#3-architecture--folder-structure)
-4. [Features](#4-features)
+4. [Features Status](#4-features-status)
 5. [Authentication & Authorization](#5-authentication--authorization)
 6. [Environment Setup](#6-environment-setup)
-7. [Known Issues & Technical Debt](#7-known-issues--technical-debt)
-8. [Future Improvements & Roadmap](#8-future-improvements--roadmap)
+7. [Key Implementation Details](#7-key-implementation-details)
+8. [Known Issues & Technical Debt](#8-known-issues--technical-debt)
+9. [Future Improvements](#9-future-improvements)
 
 ---
 
@@ -21,40 +22,36 @@
 
 ### What is TimeTide?
 
-TimeTide is a modern, self-hostable scheduling platform that enables users to share their availability and let others book time with them. Inspired by Cal.com and Calendly, TimeTide provides a streamlined booking experience with deep calendar integration, timezone intelligence, and a clean oceanic design aesthetic.
-
-### What Problem Does It Solve?
-
-- **Eliminates back-and-forth scheduling emails** - Instead of exchanging multiple messages to find a meeting time, users share a single booking link
-- **Prevents double-booking** - Real-time integration with Google Calendar and Outlook prevents scheduling conflicts
-- **Handles timezone complexity** - Automatic timezone detection and conversion ensures invitees see slots in their local time
-- **Centralizes booking management** - All appointments, confirmations, and cancellations are managed in one dashboard
+TimeTide is a modern, self-hostable scheduling platform that enables users to share their availability and let others book time with them. It provides individual and team scheduling with deep calendar integration, video conferencing, webhooks, analytics, and a tiered plan system.
 
 ### Who Is It For?
 
 | User Type | Use Case |
 |-----------|----------|
-| **Freelancers & Consultants** | Client consultations, discovery calls, project kick-offs |
-| **Sales Teams** | Demo scheduling, prospect meetings, follow-ups |
-| **Customer Support** | Technical support calls, onboarding sessions |
-| **Educators & Coaches** | Tutoring sessions, mentorship calls, office hours |
+| **Freelancers & Consultants** | Client consultations, discovery calls |
+| **Sales Teams** | Demo scheduling, prospect meetings |
+| **Customer Support** | Support calls, onboarding sessions |
+| **Educators & Coaches** | Tutoring, mentorship, office hours |
 | **Healthcare Providers** | Patient consultations (non-clinical) |
-| **Recruiters** | Interview scheduling, candidate screenings |
+| **Recruiters** | Interview scheduling, screenings |
 
 ### Core Use Cases
 
-1. **Event Type Creation** - Define bookable meeting types (e.g., "30-min Discovery Call", "1-hour Consultation")
-2. **Availability Sharing** - Set weekly working hours and share public booking pages
+1. **Event Type Creation** - Define bookable meeting templates with custom settings
+2. **Availability Sharing** - Set weekly hours and share public booking pages
 3. **Booking Management** - Receive, confirm, reschedule, or cancel appointments
 4. **Calendar Synchronization** - Two-way sync with Google Calendar and Outlook
-5. **Automated Notifications** - Email confirmations and reminders for all parties
+5. **Team Scheduling** - Round-robin, collective, and managed team scheduling
 6. **Video Conferencing** - Auto-generate Zoom, Google Meet, or Teams links
+7. **Recurring Bookings** - Weekly, biweekly, monthly recurring meetings
+8. **Webhooks** - External integrations with signed webhook delivery
+9. **Analytics** - Booking insights with customizable charts
 
 ---
 
 ## 2. Tech Stack
 
-### Frontend Technologies
+### Frontend
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
@@ -62,40 +59,32 @@ TimeTide is a modern, self-hostable scheduling platform that enables users to sh
 | **React** | 18.2.0 | UI component library |
 | **TypeScript** | 5.3.3 | Type-safe JavaScript |
 | **Tailwind CSS** | 3.4.1 | Utility-first CSS framework |
-| **Radix UI** | Various | Accessible UI primitives |
+| **Radix UI** | Various | Accessible UI primitives (Shadcn/UI) |
 | **Lucide React** | 0.344.0 | Icon library |
 | **React Hook Form** | 7.50.1 | Form state management |
 | **React Query** | 5.24.0 | Server state management |
 | **React Day Picker** | 8.10.0 | Calendar component |
 | **Recharts** | 3.6.0 | Analytics charts |
 
-### Backend Technologies
+### Backend
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
 | **Next.js API Routes** | 14.1.0 | REST API endpoints |
-| **NextAuth.js** | 4.24.6 | Authentication |
-| **Prisma** | 5.10.0 | Database ORM |
+| **NextAuth.js** | 4.24.6 | Authentication (JWT + OAuth) |
+| **Prisma** | 7.3.0 | Database ORM |
 | **Zod** | 3.22.4 | Runtime validation |
 | **BullMQ** | 5.4.0 | Background job queue |
 | **date-fns** | 3.3.1 | Date manipulation |
 | **date-fns-tz** | 3.2.0 | Timezone handling |
 | **bcryptjs** | 2.4.3 | Password hashing |
-| **nanoid** | 5.0.5 | Unique ID generation |
 
-### Database
+### Infrastructure
 
 | Technology | Purpose |
 |------------|---------|
 | **PostgreSQL 16** | Primary relational database |
-| **Redis 7** | Job queue and caching (via ioredis 5.3.2) |
-
-### Authentication
-
-| Provider | Method |
-|----------|--------|
-| **Google OAuth** | Social login + Calendar access |
-| **Email/Password** | Credentials-based authentication |
+| **Redis 7** | Job queue and rate limiting (ioredis 5.3.2) |
 
 ### Third-Party Services
 
@@ -106,425 +95,339 @@ TimeTide is a modern, self-hostable scheduling platform that enables users to sh
 | **Microsoft Graph API** | Outlook/Teams integration | Implemented |
 | **Zoom API** | Video meeting creation | Implemented |
 
-### Hosting / Deployment
-
-TimeTide supports multiple deployment options:
-
-- **Vercel** - Recommended for ease of deployment
-- **Self-hosted** - Docker Compose or traditional Node.js deployment
-- **Database**: Supabase, Railway, Neon, or self-hosted PostgreSQL
-- **Redis**: Upstash or self-hosted Redis
-
 ---
 
 ## 3. Architecture & Folder Structure
 
-### Main Folder Structure
-
 ```
 timetide-app/
 ├── prisma/
-│   ├── schema.prisma           # Database schema (all models)
-│   └── migrations/             # Migration history
+│   ├── schema.prisma              # Database schema (700+ lines, 20 models)
+│   └── migrations/                # 12 migration files
 ├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── api/                # API routes
-│   │   │   ├── auth/           # NextAuth endpoints
-│   │   │   ├── availability/   # Availability CRUD
-│   │   │   ├── bookings/       # Booking management
-│   │   │   ├── calendars/      # Calendar OAuth callbacks
-│   │   │   ├── event-types/    # Event type CRUD
-│   │   │   ├── analytics/      # Analytics data
-│   │   │   ├── slots/          # Available slot calculation
-│   │   │   ├── teams/          # Team management
-│   │   │   ├── users/          # User profile
-│   │   │   └── zoom/           # Zoom integration
-│   │   ├── auth/               # Auth pages (signin, signup)
-│   │   ├── dashboard/          # Protected dashboard pages
-│   │   │   ├── analytics/      # Analytics dashboard
-│   │   │   ├── availability/   # Availability management
-│   │   │   ├── bookings/       # Booking list & details
-│   │   │   ├── event-types/    # Event type management
-│   │   │   ├── onboarding/     # New user setup
-│   │   │   ├── settings/       # User settings
-│   │   │   └── teams/          # Team management
-│   │   ├── [username]/         # Public booking pages
-│   │   │   └── [slug]/         # Specific event booking
-│   │   ├── bookings/           # Booking confirmation pages
-│   │   ├── layout.tsx          # Root layout
-│   │   └── page.tsx            # Landing page
+│   ├── app/
+│   │   ├── api/                   # 50+ API route handlers
+│   │   │   ├── auth/              # signup, verify, reset, forgot, check-onboarding
+│   │   │   ├── availability/      # CRUD + [id]
+│   │   │   ├── bookings/          # CRUD + [id] + reschedule + assign + series
+│   │   │   ├── calendars/         # CRUD + google/outlook callbacks + sync + conflicts
+│   │   │   ├── event-types/       # CRUD + [id]
+│   │   │   ├── analytics/         # Aggregated booking analytics
+│   │   │   ├── notifications/     # CRUD + mark-all-read
+│   │   │   ├── slots/             # Available slots (individual + team)
+│   │   │   ├── teams/             # CRUD + members + invitations + event-types + audit
+│   │   │   ├── users/             # Profile + avatar + check-username
+│   │   │   ├── webhooks/          # CRUD + test + retry
+│   │   │   ├── zoom/              # Connect + callback + disconnect + status
+│   │   │   ├── public/            # Public event types + team info
+│   │   │   └── contact/           # Contact form
+│   │   ├── auth/                  # 7 auth pages
+│   │   │   ├── signin/
+│   │   │   ├── signup/
+│   │   │   ├── forgot-password/
+│   │   │   ├── reset-password/[token]/
+│   │   │   ├── verify-email/[token]/
+│   │   │   ├── verify-email-required/
+│   │   │   └── resend-verification/
+│   │   ├── dashboard/             # Protected pages
+│   │   │   ├── page.tsx           # Bookings list (home)
+│   │   │   ├── layout.tsx         # Sidebar + header
+│   │   │   ├── onboarding/       # 5-step setup wizard
+│   │   │   ├── event-types/      # List + new + [id]/edit
+│   │   │   ├── availability/     # Schedule management
+│   │   │   ├── bookings/         # Booking details + series
+│   │   │   ├── teams/            # Team list + [id] + event-types
+│   │   │   ├── webhooks/         # Webhook management
+│   │   │   ├── analytics/        # Charts + metrics
+│   │   │   ├── billing/          # Plans + usage
+│   │   │   └── settings/         # User settings
+│   │   ├── bookings/             # Public booking pages
+│   │   ├── team/                 # Public team pages
+│   │   ├── [username]/           # Public user pages
+│   │   ├── invitations/          # Team invitation acceptance
+│   │   ├── about-us/
+│   │   ├── contact-us/
+│   │   ├── privacy-policy/
+│   │   ├── terms-conditions/
+│   │   ├── layout.tsx            # Root layout
+│   │   └── page.tsx              # Landing page
 │   ├── components/
-│   │   ├── ui/                 # Shadcn/UI components
-│   │   ├── booking/            # Booking flow components
-│   │   ├── dashboard/          # Dashboard components
-│   │   ├── availability/       # Availability editors
-│   │   └── providers.tsx       # Context providers
+│   │   ├── ui/                   # 18 Shadcn/UI components
+│   │   ├── booking/
+│   │   │   ├── booking-widget.tsx     # 4-step individual booking flow
+│   │   │   └── team-booking-widget.tsx # 4-step team booking flow
+│   │   ├── providers.tsx              # SessionProvider + QueryClientProvider
+│   │   ├── pricing-card.tsx           # Reusable pricing tier card
+│   │   ├── upgrade-banner.tsx         # Dismissible upgrade CTA
+│   │   ├── upgrade-modal.tsx          # Feature upgrade dialog
+│   │   ├── pro-badge.tsx              # Inline plan lock badge
+│   │   ├── feature-gate-page.tsx      # Full-page feature lock
+│   │   ├── notification-dropdown.tsx  # Notification bell + list
+│   │   ├── public-navbar.tsx          # Landing page navigation
+│   │   ├── public-footer.tsx          # Landing page footer
+│   │   ├── add-to-calendar.tsx        # Add-to-calendar functionality
+│   │   ├── embed-code-generator.tsx   # Booking widget embed code
+│   │   ├── integration-connect-card.tsx
+│   │   ├── pwa-install-banner.tsx
+│   │   └── service-worker-register.tsx
+│   ├── hooks/
+│   │   ├── use-feature-gate.ts        # Client-side plan checking
+│   │   ├── use-notifications.ts       # Notification hooks
+│   │   └── use-integration-status.ts  # Calendar/Zoom status
 │   ├── lib/
-│   │   ├── auth.ts             # NextAuth configuration
-│   │   ├── prisma.ts           # Prisma client singleton
-│   │   ├── utils.ts            # Utility functions
-│   │   ├── calendar/           # Calendar integrations
-│   │   │   ├── google.ts       # Google Calendar API
-│   │   │   └── outlook.ts      # Microsoft Graph API
-│   │   ├── email/              # Email service
-│   │   │   └── client.ts       # Resend integration
-│   │   ├── slots/              # Slot calculation
-│   │   │   └── calculator.ts   # Core scheduling algorithm
-│   │   ├── zoom/               # Zoom integration
-│   │   │   └── index.ts        # Zoom API wrapper
-│   │   └── validation/         # Input validation
-│   │       └── schemas.ts      # Zod schemas
-│   ├── hooks/                  # React custom hooks
-│   ├── types/                  # TypeScript definitions
-│   └── middleware.ts           # Route protection
-├── public/                     # Static assets
-├── docs/                       # Documentation
-├── docker-compose.yml          # Development containers
-├── Dockerfile                  # Production image
-└── package.json                # Dependencies
+│   │   ├── auth.ts                    # NextAuth (JWT, Google OAuth, Credentials)
+│   │   ├── prisma.ts                  # Prisma singleton
+│   │   ├── pricing.ts                 # PRICING_TIERS, PLAN_LIMITS
+│   │   ├── plan-enforcement.ts        # Server-side feature gates
+│   │   ├── notifications.ts           # Notification creation + messages
+│   │   ├── constants.ts               # Location types, durations, timezones
+│   │   ├── utils.ts                   # cn(), format helpers, slugify
+│   │   ├── team-audit.ts              # Team audit logging
+│   │   ├── oauth-state.ts             # OAuth state encoding
+│   │   ├── calendar/
+│   │   │   ├── google.ts              # Full Google Calendar integration
+│   │   │   └── outlook.ts             # Full Outlook/Graph integration
+│   │   ├── email/
+│   │   │   └── client.ts              # Resend with 9 email template types
+│   │   ├── slots/
+│   │   │   ├── calculator.ts          # Core slot calculation engine
+│   │   │   └── team-calculator.ts     # Team scheduling algorithms
+│   │   ├── queue/
+│   │   │   ├── email-queue.ts         # Email queue (3 retries)
+│   │   │   ├── webhook-queue.ts       # Webhook delivery (HMAC, 5 retries)
+│   │   │   ├── calendar-sync-queue.ts
+│   │   │   ├── reminder-queue.ts
+│   │   │   ├── redis.ts
+│   │   │   ├── rate-limiter.ts
+│   │   │   └── index.ts
+│   │   ├── recurring/
+│   │   │   ├── utils.ts               # Recurring date generation
+│   │   │   └── __tests__/
+│   │   ├── validation/
+│   │   │   ├── schemas.ts             # 23 Zod schemas + types
+│   │   │   └── __tests__/
+│   │   └── zoom/
+│   │       └── index.ts               # Zoom OAuth + meeting CRUD
+│   ├── middleware.ts                   # Route protection
+│   ├── instrumentation.ts             # Worker initialization
+│   ├── env.ts                         # Environment validation
+│   └── globals.css                    # Tailwind + ocean theme
+├── public/                            # Static assets, PWA manifest
+├── scripts/                           # Utility scripts
+├── docs/                              # Documentation
+├── docker-compose.yml                 # PostgreSQL + Redis + App
+├── Dockerfile.dev
+├── vitest.config.ts
+├── tailwind.config.ts
+├── tsconfig.json
+├── next.config.js
+└── package.json
 ```
 
-### App Flow: User Sign-In to Booking
+### User Journey Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         USER JOURNEY                            │
-└─────────────────────────────────────────────────────────────────┘
-
 1. AUTHENTICATION
-   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-   │   Landing    │────▶│   Sign In    │────▶│  Onboarding  │
-   │    Page      │     │ (OAuth/Creds)│     │   (4 steps)  │
-   └──────────────┘     └──────────────┘     └──────────────┘
-                                                    │
-                                                    ▼
-2. SETUP                          ┌─────────────────────────────┐
-   ┌──────────────┐               │   ONBOARDING STEPS:         │
-   │   Dashboard  │◀──────────────│   1. Set timezone           │
-   │    Home      │               │   2. Configure availability │
-   └──────────────┘               │   3. Customize booking URL  │
-         │                        │   4. Review event types     │
-         ▼                        └─────────────────────────────┘
-3. EVENT CREATION
-   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-   │ Event Types  │────▶│  New Event   │────▶│   Settings   │
-   │    List      │     │    Form      │     │ (Calendar/   │
-   └──────────────┘     └──────────────┘     │    Zoom)     │
-                                              └──────────────┘
+   Landing Page → Sign In (OAuth/Credentials) → Email Verification → Onboarding
+
+2. ONBOARDING (5 steps)
+   Set Timezone → Configure Availability → Customize URL → Review Events → Connect Integrations
+
+3. SETUP
+   Dashboard → Create Event Types → Connect Calendars → Connect Zoom → Set Up Team
+
 4. SHARING
-   User shares: https://timetide.app/username/event-slug
-                              │
-                              ▼
-5. BOOKING FLOW (Public)
-   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-   │   User's     │────▶│    Date      │────▶│   Booking    │
-   │ Event Types  │     │   Picker     │     │     Form     │
-   └──────────────┘     └──────────────┘     └──────────────┘
-                              │                     │
-                              │                     ▼
-   ┌──────────────────────────┼──────────────────────────────┐
-   │          SLOT CALCULATION ENGINE                        │
-   │  - Fetch host's availability schedule                   │
-   │  - Apply date overrides (holidays, etc.)                │
-   │  - Fetch calendar busy times (Google/Outlook)           │
-   │  - Exclude existing bookings                            │
-   │  - Apply buffer times                                   │
-   │  - Check minimum notice period                          │
-   │  - Convert to invitee's timezone                        │
-   └─────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-6. CONFIRMATION
-   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-   │   Booking    │────▶│  Calendar    │────▶│    Email     │
-   │   Created    │     │Event Created │     │    Sent      │
-   └──────────────┘     └──────────────┘     └──────────────┘
+   Share: https://timetide.app/username/event-slug
+   Team:  https://timetide.app/team/team-slug/event-slug
+
+5. BOOKING FLOW (Public, 4 steps)
+   Select Date → Select Time → Fill Details → Confirmation
+
+6. POST-BOOKING
+   Calendar Event Created → Email Sent → Webhook Triggered → Notification Created
 ```
-
-### Key Design & Architectural Decisions
-
-#### 1. Slot Calculation Safety
-The slot calculator includes multiple safety mechanisms to prevent infinite loops and memory issues:
-```typescript
-const MAX_SLOTS_PER_DAY = 100;      // Prevents memory explosion
-const MAX_DAYS_TO_PROCESS = 90;     // Limits calculation scope
-const MIN_SLOT_INTERVAL = 5;        // Minimum 5 minutes between slots
-const MIN_SLOT_DURATION = 5;        // Minimum slot length
-```
-
-#### 2. Double-Booking Prevention
-- Slot availability is checked against ALL host bookings (not just one event type)
-- Calendar busy times are fetched in real-time during slot calculation
-- Final validation occurs at booking creation time
-
-#### 3. Timezone Handling
-- Host availability is stored in the host's timezone
-- Slot calculations convert to UTC for comparison
-- Results are converted to invitee's timezone for display
-- All database timestamps are stored in UTC
-
-#### 4. Authentication Strategy
-- JWT-based sessions (30-day expiry) for scalability
-- Prisma adapter for NextAuth persistence
-- OAuth tokens stored in database for calendar access
-
-#### 5. Rate Limiting
-- Public endpoints (slots, bookings) are rate-limited per IP
-- In-memory rate limiting for development, Redis-backed for production
 
 ---
 
-## 4. Features
+## 4. Features Status
 
 ### Legend
+- **Completed** - Fully implemented and production-ready
+- **Partial** - Core works, some aspects missing
 
-| Symbol | Status |
-|--------|--------|
-| **Completed** | Fully implemented and production-ready |
-| **Partially Implemented** | Core functionality works, missing some features |
-| **Missing** | Not implemented, database schema may exist |
-| **Needs Refactor** | Implemented but has issues requiring fixes |
-| **Needs Improvement** | Works but could be enhanced |
+### Authentication & Onboarding
 
----
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Google OAuth | Completed | With offline access for calendar |
+| Email/Password | Completed | bcrypt hashing (12 rounds) |
+| Email Verification | Completed | Token-based, 24h expiry |
+| Password Reset | Completed | Token-based flow |
+| JWT Sessions | Completed | 30-day expiry, periodic user verification |
+| Auto Username | Completed | Generated from email on signup |
+| Default Setup | Completed | Mon-Fri 9-5 schedule + default event type |
+| 5-Step Onboarding | Completed | Timezone, availability, URL, events, integrations |
 
-### Authentication
+### Event Types
 
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Google OAuth | **Completed** | Sign in with Google account | Includes offline access for calendar |
-| Email/Password | **Completed** | Traditional credentials auth | Password hashing with bcrypt |
-| Session Management | **Completed** | JWT-based 30-day sessions | Automatic refresh via NextAuth |
-| Auto-generated Username | **Completed** | Creates username from email on signup | Ensures uniqueness |
-| Default Availability | **Completed** | Creates Mon-Fri 9-5 schedule on signup | Automatic setup |
-
----
-
-### Event Type Management
-
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Create Event Type | **Completed** | Define bookable meeting templates | Auto-generates unique slug |
-| Edit Event Type | **Completed** | Modify all event settings | Full CRUD support |
-| Delete Event Type | **Completed** | Remove event types | Cascades to related data |
-| Duration Settings | **Completed** | Set meeting length (5-1440 minutes) | Validated min/max |
-| Buffer Times | **Completed** | Before/after meeting gaps | Prevents back-to-back meetings |
-| Minimum Notice | **Completed** | Required advance booking time | Up to 30 days |
-| Booking Window | **Completed** | Rolling days, date range, or unlimited | Three period types |
-| Location Types | **Completed** | In-person, phone, video, custom | 6 location options |
-| Custom Questions | **Completed** | Add form fields to booking | 8 question types supported |
-| Max Bookings/Day | **Completed** | Limit daily bookings | Per event type |
-| Requires Confirmation | **Completed** | Host must approve bookings | PENDING → CONFIRMED flow |
-| Success Redirect | **Completed** | Custom post-booking URL | Optional feature |
-
----
+| Feature | Status | Notes |
+|---------|--------|-------|
+| CRUD Operations | Completed | Create, read, update, delete |
+| Duration Settings | Completed | 5-1440 minutes |
+| Buffer Times | Completed | Before/after (PRO feature) |
+| Minimum Notice | Completed | Up to 30 days |
+| Booking Window | Completed | Rolling, range, or unlimited |
+| Location Types | Completed | 6 types (Meet, Teams, Zoom, Phone, In-Person, Custom) |
+| Custom Questions | Completed | 8 question types (PRO feature) |
+| Max Bookings/Day | Completed | Per event type limit |
+| Requires Confirmation | Completed | Host approval workflow |
+| Success Redirect | Completed | Custom post-booking URL |
+| Recurring Settings | Completed | Weekly, biweekly, monthly, custom (PRO feature) |
+| Group Bookings | Completed | Multi-seat with capacity tracking |
 
 ### Availability & Schedules
 
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Weekly Schedule | **Completed** | Set hours for each day | Multiple time slots per day |
-| Multiple Schedules | **Completed** | Named availability schedules | Assign to different event types |
-| Default Schedule | **Completed** | One schedule marked as default | Automatically created on signup |
-| Date Overrides | **Completed** | Custom hours for specific dates | Holidays, special hours |
-| Day Off Override | **Completed** | Mark specific dates unavailable | `isWorking: false` |
-| Timezone Support | **Completed** | Schedule stored in user's timezone | 40+ timezones available |
-| Schedule Assignment | **Completed** | Link schedules to event types | Optional per event type |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Weekly Schedule | Completed | Multiple time slots per day |
+| Multiple Schedules | Completed | Named, assignable to event types |
+| Default Schedule | Completed | Auto-created on signup |
+| Date Overrides | Completed | Custom hours or day off |
+| Timezone Support | Completed | 51 timezones with auto-detect |
 
----
+### Booking Management
 
-### Public Booking Pages
-
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| User Profile Page | **Completed** | Lists all event types | `/username` |
-| Event Booking Page | **Completed** | Calendar + time picker | `/username/slug` |
-| Timezone Detection | **Completed** | Auto-detect invitee timezone | Browser-based detection |
-| Timezone Selection | **Completed** | Manual timezone override | Dropdown selector |
-| Slot Display | **Completed** | Shows available times | Grouped by date |
-| Booking Form | **Completed** | Collect invitee details | Name, email, phone, notes |
-| Custom Responses | **Completed** | Answer custom questions | JSON stored in booking |
-| Confirmation Page | **Completed** | Post-booking details | `/bookings/[id]` |
-
----
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Create Booking | Completed | Public endpoint, rate limited |
+| Booking List | Completed | Upcoming, past, cancelled, declined tabs |
+| Confirm/Reject | Completed | For approval-required events |
+| Cancel Booking | Completed | With reason, triggers notifications |
+| Reschedule | Completed | Self-service reschedule |
+| Recurring Bookings | Completed | Up to 24 occurrences, series management |
+| Group Bookings | Completed | Seat tracking, capacity limits |
+| Status Tracking | Completed | PENDING, CONFIRMED, CANCELLED, REJECTED, COMPLETED, SKIPPED |
 
 ### Calendar Integration
 
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Google Calendar Connect | **Completed** | OAuth flow for Google | Full read/write access |
-| Google Busy Times | **Completed** | Fetch calendar events | Prevents double-booking |
-| Google Event Creation | **Completed** | Create events on booking | Includes all details |
-| Google Meet Auto-Create | **Completed** | Generate Meet links | For GOOGLE_MEET location |
-| Outlook Calendar Connect | **Completed** | OAuth via Microsoft Graph | Requires Azure app |
-| Outlook Busy Times | **Completed** | Fetch Outlook events | Status-aware filtering |
-| Outlook Event Creation | **Completed** | Create Outlook events | Includes attendees |
-| Teams Auto-Create | **Completed** | Generate Teams links | For TEAMS location |
-| Calendar Event Update | **Completed** | Update on reschedule | Syncs changes |
-| Calendar Event Delete | **Completed** | Remove on cancellation | Keeps calendars clean |
-| Token Refresh | **Completed** | Auto-refresh OAuth tokens | 5-minute early refresh |
-
----
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Google Calendar Connect | Completed | Full OAuth flow |
+| Google Busy Times | Completed | Real-time fetching |
+| Google Event Creation | Completed | With Google Meet links |
+| Google Event Update/Delete | Completed | On reschedule/cancel |
+| Outlook Calendar Connect | Completed | Microsoft Graph API |
+| Outlook Busy Times | Completed | Status-aware filtering |
+| Outlook Event Creation | Completed | With Teams links |
+| Outlook Event Update/Delete | Completed | Full lifecycle |
+| Token Auto-Refresh | Completed | 5-min early refresh |
+| Multi-Calendar Support | Completed | Aggregate across all calendars |
 
 ### Video Conferencing
 
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Zoom OAuth | **Completed** | Connect Zoom account | Full OAuth flow |
-| Zoom Meeting Creation | **Completed** | Auto-create meetings | On booking confirmation |
-| Zoom Meeting Update | **Completed** | Update meeting details | On reschedule |
-| Zoom Meeting Delete | **Completed** | Delete on cancellation | Cleanup |
-| Zoom Settings | **Completed** | Configure meeting options | Video, mute, recording |
-| Google Meet | **Completed** | Auto-create via Calendar | No separate auth needed |
-| Microsoft Teams | **Completed** | Auto-create via Graph | Requires Outlook connected |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Zoom OAuth | Completed | Full OAuth flow |
+| Zoom Meeting CRUD | Completed | Create, update, delete |
+| Google Meet | Completed | Via Google Calendar API |
+| Microsoft Teams | Completed | Via Microsoft Graph API |
 
----
+### Team Scheduling
 
-### Notifications & Email
-
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Booking Confirmation | **Completed** | Email to host + invitee | Styled HTML templates |
-| Booking Cancellation | **Completed** | Notify both parties | Includes reason if provided |
-| Booking Pending | **Completed** | For approval-required events | Asks host to confirm |
-| Booking Confirmed | **Completed** | When host approves | Sent to invitee |
-| Booking Rejected | **Completed** | When host declines | Sent to invitee |
-| Reschedule Notice | **Completed** | On booking reschedule | New time details |
-| Reminder Emails | **Partially Implemented** | Pre-meeting reminders | Template exists, needs scheduler |
-| Email Templates | **Completed** | Professional HTML emails | Consistent branding |
-
-**What's needed for Reminders:**
-- Implement scheduled job in BullMQ worker
-- Configure reminder intervals (24h, 1h before)
-- Add user preference for reminder timing
-
----
-
-### Dashboard & User Profile
-
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Bookings Overview | **Completed** | List all bookings | Upcoming, past, cancelled |
-| Booking Filters | **Completed** | Filter by status | Tabs for different views |
-| Booking Details | **Completed** | View full booking info | Custom responses included |
-| Confirm/Reject | **Completed** | Approve pending bookings | PATCH endpoint |
-| Cancel Booking | **Completed** | Cancel with reason | Triggers notifications |
-| Quick Stats | **Completed** | Booking counts | Cards on dashboard |
-| Profile Settings | **Completed** | Edit name, username, bio | With validation |
-| Timezone Settings | **Completed** | Select user timezone | 40+ options |
-| Profile Picture | **Completed** | Display OAuth avatar | From Google |
-| Booking Link Display | **Completed** | Show shareable URL | Copy button |
-
----
-
-### Analytics
-
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Total Bookings | **Completed** | All-time count | API endpoint |
-| Monthly Bookings | **Completed** | This month count | Trend tracking |
-| Hours Booked | **Completed** | Total meeting time | Calculated from bookings |
-| Unique Guests | **Completed** | Distinct invitee emails | Guest tracking |
-| Cancellation Rate | **Completed** | Percentage cancelled | Performance metric |
-| Bookings Over Time | **Completed** | 30-day trend chart | Line chart |
-| Popular Event Types | **Completed** | Most booked events | Bar chart |
-| Booking Times | **Completed** | Hour-of-day distribution | Bar chart |
-| Status Distribution | **Completed** | Pie chart by status | Visual breakdown |
-| Lead Time Analysis | **Completed** | Advance booking distribution | Bar chart |
-| Day of Week | **Completed** | Busiest days | Bar chart |
-| Repeat Guests | **Completed** | Return visitor analysis | Loyalty tracking |
-| Chart Customization | **Completed** | Show/hide charts | Persisted to localStorage |
-
----
-
-### Teams & Collaboration
-
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Team Creation | **Partially Implemented** | Create team with slug | Backend API complete |
-| Team Members | **Partially Implemented** | Add users by email | Backend API complete |
-| Team Roles | **Partially Implemented** | OWNER, ADMIN, MEMBER | Database schema ready |
-| Team Event Types | **Missing** | Shared event types | Schema exists, not wired |
-| Round-Robin Scheduling | **Missing** | Rotate between members | Algorithm exists, not integrated |
-| Collective Scheduling | **Missing** | All-member availability | Algorithm exists, not integrated |
-| Team Dashboard | **Missing** | Shows "Coming Soon" | Placeholder UI only |
-| Team Settings | **Missing** | Configure team options | Not implemented |
-
-**What's needed for Teams:**
-1. Build frontend UI for team creation
-2. Wire team event types to booking flow
-3. Implement round-robin assignment logic in booking creation
-4. Add collective slot calculation to `/api/slots`
-5. Create team booking pages (`/team/[slug]/[eventSlug]`)
-
----
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Team CRUD | Completed | Create, update, delete teams |
+| Team Members | Completed | Add, remove, update roles |
+| Team Roles | Completed | OWNER, ADMIN, MEMBER |
+| Team Invitations | Completed | Email-based with accept/decline |
+| Team Event Types | Completed | With member assignments |
+| Round-Robin | Completed | Rotation tracking via lastAssignedMemberId |
+| Collective Scheduling | Completed | All-member availability check |
+| Managed Scheduling | Completed | Post-booking assignment |
+| Team Booking Pages | Completed | Public at /team/[slug]/[event] |
+| Team Audit Log | Completed | Activity tracking |
+| Team Logo | Completed | Binary storage |
 
 ### Webhooks
 
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Webhook Model | **Missing** | Database schema exists | No implementation |
-| Webhook CRUD | **Missing** | No API endpoints | Schema only |
-| Event Triggers | **Missing** | No trigger logic | Defined in validation schema |
-| Webhook Delivery | **Missing** | No delivery system | Needs implementation |
-| Webhook Secrets | **Missing** | Signature verification | Planned |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Webhook CRUD | Completed | Create, list, update, delete |
+| Event Subscriptions | Completed | 5 event types |
+| HMAC Signatures | Completed | SHA256 in X-Webhook-Signature |
+| Delivery Tracking | Completed | Success/failure with response |
+| Retry Logic | Completed | 5 attempts, exponential backoff |
+| Auto-Disable | Completed | After 50 consecutive failures |
+| Test Endpoint | Completed | Send test payload |
+| Retry Delivery | Completed | Manual retry for failed deliveries |
+| Dashboard UI | Completed | Full management interface |
 
-**What's needed for Webhooks:**
-1. Create `/api/webhooks` CRUD endpoints
-2. Add webhook trigger points in booking flow
-3. Implement webhook delivery with retry logic
-4. Build webhook management UI in dashboard
+### Notifications
 
----
+| Feature | Status | Notes |
+|---------|--------|-------|
+| In-App Notifications | Completed | Bell icon with unread count |
+| Notification Types | Completed | 8 types (booking + team events) |
+| Mark Read | Completed | Individual and bulk |
+| Cursor Pagination | Completed | 20 per page |
+| Email Notifications | Completed | 9 email template types |
 
-### Onboarding
+### Analytics
 
-| Feature | Status | Description | Notes |
-|---------|--------|-------------|-------|
-| Timezone Setup | **Completed** | Step 1: Set timezone | Auto-detection |
-| Availability Setup | **Completed** | Step 2: Configure hours | Visual editor |
-| Booking Link Setup | **Completed** | Step 3: Customize username | Availability check |
-| Event Type Review | **Completed** | Step 4: Review events | Edit link |
-| Skip Option | **Completed** | Skip onboarding | Goes to dashboard |
-| Progress Indicator | **Completed** | Visual step tracker | 4-step progress |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Total Metrics | Completed | Bookings, hours, guests |
+| Bookings Over Time | Completed | 30-day bar chart |
+| Popular Event Types | Completed | Top 5 horizontal bar |
+| Booking Times | Completed | Hour-of-day distribution |
+| Status Distribution | Completed | Pie chart |
+| Lead Time Analysis | Completed | Advance booking breakdown |
+| Day of Week | Completed | Busiest days |
+| Repeat Guests | Completed | Return visitor analysis |
+| Chart Customization | Completed | Toggle + localStorage |
+| Feature Gate | Completed | TEAM plan only |
+
+### Billing & Plans
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Plan Tiers | Completed | FREE, PRO ($12/mo), TEAM ($20/user/mo) |
+| Server-Side Enforcement | Completed | Numeric + boolean limits |
+| Client-Side Gating | Completed | Hook + badge + modal + page components |
+| Usage Dashboard | Completed | Event types, calendars, webhooks bars |
+| Dev Plan Switcher | Completed | Mock endpoint for testing |
+| Stripe Integration | Partial | Stub exists, not wired |
+
+### Other Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| PWA Support | Completed | Service worker + install banner |
+| Mobile Responsive | Completed | Sidebar collapses on mobile |
+| Landing Page | Completed | Hero + features + pricing + CTA |
+| SEO | Completed | Meta tags + JSON-LD structured data |
+| Contact Page | Completed | With API endpoint |
+| Legal Pages | Completed | Privacy policy + terms |
+| About Page | Completed | Company info |
+| Embed Widget | Completed | Code generator for embedding |
+| Public Profiles | Completed | User + team public pages |
 
 ---
 
 ## 5. Authentication & Authorization
 
-### How Authentication Works
+### Auth Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    AUTHENTICATION FLOW                          │
-└─────────────────────────────────────────────────────────────────┘
+OAuth (Google):
+  Click Login → Google Redirect → Callback → Create/Link Account → JWT Cookie
 
-OAuth Flow (Google):
-┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Click   │────▶│ Redirect │────▶│ Provider │────▶│ Callback │
-│  Login   │     │to Provider│     │  Login   │     │  /api/   │
-└──────────┘     └──────────┘     └──────────┘     │ auth/cb  │
-                                                    └────┬─────┘
-                                                         │
-                   ┌─────────────────────────────────────┘
-                   ▼
-           ┌──────────────┐
-           │ Create/Link  │
-           │   Account    │
-           └──────┬───────┘
-                  │
-                  ▼
-           ┌──────────────┐     ┌──────────────┐
-           │  Generate    │────▶│   Session    │
-           │  JWT Token   │     │   Cookie     │
-           └──────────────┘     └──────────────┘
+Credentials:
+  Email + Password → Zod Validate → bcrypt Verify → JWT Cookie
 
-Credentials Flow:
-┌──────────┐     ┌──────────┐     ┌──────────┐     ┌──────────┐
-│  Enter   │────▶│ Validate │────▶│  Verify  │────▶│ Generate │
-│  Email/  │     │  Input   │     │ Password │     │   JWT    │
-│ Password │     │  (Zod)   │     │ (bcrypt) │     │          │
-└──────────┘     └──────────┘     └──────────┘     └──────────┘
+Signup:
+  Validate → Check Existing → Hash Password → Create User →
+  Generate Username → Default Schedule → Default Event → Verify Email
 ```
 
 ### Session Structure
@@ -532,60 +435,42 @@ Credentials Flow:
 ```typescript
 interface Session {
   user: {
-    id: string;          // Database user ID
-    email: string;       // User email
-    name?: string;       // Display name
-    image?: string;      // Avatar URL
-    username?: string;   // Booking URL username
-    timezone: string;    // User's timezone
-    bio?: string;        // Profile bio
+    id: string;
+    email: string;
+    name?: string;
+    image?: string;
+    username?: string;
+    timezone: string;
+    plan: UserPlan;       // FREE | PRO | TEAM
+    onboardingCompleted: boolean;
   }
 }
 ```
 
-### User Roles and Access Control
+### Route Protection (middleware.ts)
 
-| Role | Scope | Permissions |
-|------|-------|-------------|
-| **Authenticated User** | Own resources | Full CRUD on own event types, bookings, schedules |
-| **Team Owner** | Team resources | Manage team, add/remove members, create team events |
-| **Team Admin** | Team resources | Manage team settings, create team events |
-| **Team Member** | Team resources | View team bookings, participate in scheduling |
-| **Public** | Public pages | View booking pages, create bookings |
+**Protected (require auth):**
+- `/dashboard/*` - All dashboard pages
+- `/api/availability/*`, `/api/event-types/*`, `/api/users/me`, `/api/webhooks/*`, `/api/teams/*`, `/api/calendars/*`
 
-### Route Protection
+**Public:**
+- `/` - Landing page
+- `/auth/*` - Auth pages
+- `/[username]/*` - Public booking pages
+- `/team/*` - Public team pages
+- `/api/auth/*`, `/api/slots`, `/api/bookings` (POST), `/api/public/*`
 
-Protected routes are enforced in `middleware.ts`:
+**Additional checks:**
+- Unverified email → redirect to `/auth/verify-email-required`
+- Onboarding incomplete → redirect to `/dashboard/onboarding`
 
-```typescript
-// Protected routes (require authentication)
-/dashboard/*           // All dashboard pages
-/api/event-types/*     // Event type management
-/api/availability/*    // Availability management
-/api/calendars/*       // Calendar connections
-/api/users/me          // User profile
+### Team Roles
 
-// Public routes
-/                      // Landing page
-/auth/*               // Sign in/up pages
-/[username]/*         // Public booking pages
-/api/auth/*           // Auth endpoints
-/api/slots            // Available slot queries
-/api/bookings (POST)  // Create bookings
-```
-
-### Security Considerations
-
-| Area | Implementation |
-|------|----------------|
-| **Password Storage** | bcrypt with salt rounds (10) |
-| **Session Tokens** | JWT with 30-day expiry |
-| **CSRF Protection** | Built into NextAuth |
-| **SQL Injection** | Prevented by Prisma ORM |
-| **XSS Prevention** | React's default escaping |
-| **Rate Limiting** | In-memory (dev) / Redis (prod) |
-| **OAuth Tokens** | Stored encrypted in database |
-| **Input Validation** | Zod schemas on all endpoints |
+| Role | Permissions |
+|------|------------|
+| **OWNER** | Full team control, delete team, manage all |
+| **ADMIN** | Manage settings, members, event types |
+| **MEMBER** | View team, participate in scheduling |
 
 ---
 
@@ -593,96 +478,49 @@ Protected routes are enforced in `middleware.ts`:
 
 ### Prerequisites
 
-- **Node.js** 18.0.0 or higher
-- **PostgreSQL** 14 or higher
-- **Redis** 6 or higher (optional, for job queue)
-- **npm** or **yarn**
+- Node.js 18+
+- PostgreSQL 16+
+- Redis 7+ (optional, for job queue)
 
 ### Quick Start
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/your-org/timetide-app.git
 cd timetide-app
-
-# 2. Install dependencies
 npm install
-
-# 3. Copy environment file
-cp .env.example .env.local
-
-# 4. Configure environment variables (see below)
-# Edit .env.local with your values
-
-# 5. Start development services (PostgreSQL + Redis)
-docker-compose up -d
-
-# 6. Initialize database
-npm run db:generate
-npm run db:migrate
-
-# 7. Start development server
-npm run dev
-
-# 8. Open http://localhost:3000
+cp .env.example .env
+docker-compose up -d          # Start PostgreSQL + Redis
+npm run db:generate           # Generate Prisma client
+npm run db:migrate            # Run migrations
+npm run dev                   # Start dev server at http://localhost:3000
 ```
 
 ### Required Environment Variables
 
 ```env
-# ===================
-# Database (Required)
-# ===================
 DATABASE_URL="postgresql://user:password@localhost:5432/timetide?schema=public"
-
-# ===================
-# NextAuth.js (Required)
-# ===================
-# Generate with: openssl rand -base64 32
-NEXTAUTH_SECRET="your-32-character-or-longer-secret"
+NEXTAUTH_SECRET="openssl-rand-base64-32"
 NEXTAUTH_URL="http://localhost:3000"
-
-# ===================
-# Google OAuth (Required for Google login)
-# ===================
-# Get from: https://console.cloud.google.com/apis/credentials
-GOOGLE_CLIENT_ID="your-google-client-id.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID="your-google-client-id"
 GOOGLE_CLIENT_SECRET="your-google-client-secret"
-
-# ===================
-# App Configuration (Required)
-# ===================
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
-NEXT_PUBLIC_APP_NAME="TimeTide"
-NODE_ENV="development"
 ```
 
 ### Optional Environment Variables
 
 ```env
-# ===================
-# Email Service (Optional but recommended)
-# ===================
-# Get from: https://resend.com/api-keys
+# Email
 RESEND_API_KEY="re_your_api_key"
 EMAIL_FROM="TimeTide <noreply@yourdomain.com>"
 
-# ===================
-# Redis for Job Queue (Optional)
-# ===================
+# Redis
 REDIS_URL="redis://localhost:6379"
 
-# ===================
-# Zoom Integration (Optional)
-# ===================
-# Get from: https://marketplace.zoom.us/develop/create
+# Zoom
 ZOOM_CLIENT_ID="your-zoom-client-id"
 ZOOM_CLIENT_SECRET="your-zoom-client-secret"
 
-# ===================
-# Microsoft Outlook/Teams (Optional)
-# ===================
-# Get from: https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps
+# Microsoft
 MICROSOFT_CLIENT_ID="your-azure-app-id"
 MICROSOFT_CLIENT_SECRET="your-azure-client-secret"
 MICROSOFT_TENANT_ID="common"
@@ -691,171 +529,129 @@ MICROSOFT_TENANT_ID="common"
 ### Development Scripts
 
 ```bash
-# Development server
-npm run dev
-
-# Type checking
-npm run type-check
-
-# Linting
-npm run lint
-
-# Database commands
+npm run dev            # Development server
+npm run build          # Production build
+npm run lint           # ESLint
 npm run db:generate    # Generate Prisma client
 npm run db:migrate     # Run migrations
-npm run db:push        # Push schema changes (dev only)
-npm run db:studio      # Open Prisma Studio GUI
+npm run db:push        # Push schema (dev only)
+npm run db:studio      # Prisma Studio GUI
 npm run db:seed        # Seed database
-
-# Testing
 npm run test           # Unit tests (Vitest)
 npm run test:e2e       # E2E tests (Playwright)
-
-# Production build
-npm run build
-npm start
 ```
 
-### Docker Development Setup
-
-The `docker-compose.yml` provides PostgreSQL and Redis:
+### Docker Development
 
 ```bash
-# Start services
-docker-compose up -d
-
-# Stop services
-docker-compose down
-
-# View logs
-docker-compose logs -f
-
-# Reset database
-docker-compose down -v
-docker-compose up -d
+docker-compose up -d       # Start PostgreSQL + Redis
+docker-compose down        # Stop
+docker-compose down -v     # Stop + delete volumes
+docker-compose logs -f     # View logs
 ```
 
 ---
 
-## 7. Known Issues & Technical Debt
+## 7. Key Implementation Details
 
-### Bugs
+### Slot Calculation Safety Limits
 
-| Issue | Severity | Location | Description |
-|-------|----------|----------|-------------|
-| Console logging in production | Low | `src/lib/slots/calculator.ts` | Debug logs should be removed or gated |
-| Login page reference | Low | `src/lib/auth.ts` | References `/login` but page is at `/auth/signin` |
+```typescript
+MAX_SLOTS_PER_DAY = 100;     // Prevents memory explosion
+MAX_DAYS_TO_PROCESS = 90;    // Limits calculation scope
+MIN_SLOT_INTERVAL = 5;       // Minimum 5 minutes between slots
+```
 
-### Performance Issues
+### Double-Booking Prevention
 
-| Issue | Impact | Description | Suggested Fix |
-|-------|--------|-------------|---------------|
-| Slot calculation | Medium | Calculates all slots on every request | Add Redis caching with TTL |
-| Calendar API calls | Medium | Sequential fetches for multiple calendars | Parallelize API calls |
-| Analytics queries | Low | Multiple database queries per request | Consolidate into single aggregation |
+Slot availability checks ALL host bookings across ALL event types, not just the current one. Calendar busy times are fetched in real-time. Final validation occurs at booking creation.
 
-### Security Concerns
+### Plan Limits Configuration
 
-| Issue | Risk | Description | Status |
-|-------|------|-------------|--------|
-| Rate limit bypass | Low | In-memory rate limiting resets on restart | Use Redis in production |
-| Token encryption | Medium | OAuth tokens stored as plain text | Consider field-level encryption |
-| Webhook secrets | Low | No signature verification | Not implemented yet |
+Defined in `src/lib/pricing.ts` as `PLAN_LIMITS` object. Two enforcement layers:
+- **Server**: `checkNumericLimit()` and `checkFeatureAccess()` in API routes
+- **Client**: `useFeatureGate()` hook with ProBadge, UpgradeModal, FeatureGatePage components
 
-### Code Smells & Technical Debt
+### Webhook Security
 
-| Area | Issue | Description |
-|------|-------|-------------|
-| **API Routes** | Inconsistent error handling | Some routes return different error formats |
-| **Types** | Incomplete type exports | Some API response types are inline |
-| **Tests** | Missing test coverage | No visible test files in repository |
-| **Hooks folder** | Empty directory | Planned but not implemented |
-| **Email failures** | Fire-and-forget | Email errors logged but not retried |
-| **Calendar sync** | No background sync | Only fetches on demand |
+- HMAC-SHA256 signature in `X-Webhook-Signature` header
+- Secret auto-generated (32 bytes hex) on webhook creation
+- Signature format: `sha256=<hex_digest>`
 
-### Areas Needing Attention
+### Background Jobs
 
-1. **Test Coverage** - Add unit tests for slot calculator, integration tests for API
-2. **Error Boundaries** - Add React error boundaries for graceful failures
-3. **Loading States** - Some pages lack proper loading indicators
-4. **Accessibility** - Audit for WCAG compliance
-5. **i18n** - No internationalization support
+BullMQ queues with Redis backend. Initialized in `src/instrumentation.ts`. Fallback to direct execution when Redis is unavailable.
+
+### Prisma Client
+
+Generated to `src/generated/prisma/` (configured in `prisma.config.ts`). Path alias: `@/generated/prisma`.
 
 ---
 
-## 8. Future Improvements & Roadmap
+## 8. Known Issues & Technical Debt
 
-### Suggested Features
+### Performance
 
-#### High Priority
+| Issue | Impact | Suggested Fix |
+|-------|--------|---------------|
+| Slot calculation on every request | Medium | Add Redis caching with TTL |
+| Sequential calendar API calls | Medium | Parallelize multi-calendar fetches |
+| Multiple analytics DB queries | Low | Consolidate into single aggregation |
 
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Reminder System** | Scheduled email reminders before meetings | Medium |
-| **Team UI** | Complete team management dashboard | High |
-| **Webhooks** | External integrations for booking events | Medium |
-| **Calendar Sync Jobs** | Background calendar refresh | Medium |
+### Security
 
-#### Medium Priority
+| Issue | Risk | Status |
+|-------|------|--------|
+| In-memory rate limiting resets on restart | Low | Use Redis in production |
+| OAuth tokens stored as plain text | Medium | Consider field-level encryption |
 
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Payments Integration** | Stripe for paid bookings | High |
-| **Recurring Events** | Weekly/monthly recurring bookings | High |
-| **Buffer between events** | Global buffer settings | Low |
-| **Booking reschedule** | Self-service reschedule UI | Medium |
-| **SMS Notifications** | Twilio integration | Medium |
-| **Apple Calendar** | CalDAV integration | High |
+### Code Quality
 
-#### Nice to Have
+| Area | Issue |
+|------|-------|
+| API Routes | Inconsistent error response formats |
+| Types | Some API response types are inline rather than shared |
+| Testing | Limited test coverage (slots + validation have tests) |
+| Logging | Console-only, no structured logging |
+| Monitoring | No health checks or APM |
 
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Mobile App** | React Native app | Very High |
-| **White-label** | Embeddable booking widget | High |
-| **Custom Domains** | User-specific domains | Medium |
-| **Group Bookings** | Multiple invitees per slot | Medium |
-| **Waitlist** | When slots are full | Low |
-| **Analytics Export** | CSV/PDF reports | Low |
+---
 
-### Architectural Improvements
+## 9. Future Improvements
 
-| Area | Current State | Improvement |
-|------|---------------|-------------|
-| **Caching** | None | Add Redis caching for slots and availability |
-| **Job Queue** | BullMQ ready, not used | Implement workers for emails and reminders |
-| **API Versioning** | None | Add `/api/v1/` prefix for future changes |
-| **Logging** | Console only | Structured logging with service like LogTail |
-| **Monitoring** | None | Add health checks and APM (e.g., Sentry) |
-| **CDN** | Vercel default | Consider dedicated CDN for assets |
+### High Priority
 
-### Performance & Scalability
+| Feature | Description |
+|---------|-------------|
+| **Stripe Integration** | Payment processing for paid bookings |
+| **Structured Logging** | Replace console.log with LogTail/similar |
+| **Health Checks** | Endpoint for infrastructure monitoring |
+| **Test Coverage** | Expand unit and integration tests |
 
-| Area | Suggestion |
-|------|------------|
-| **Database** | Add connection pooling (PgBouncer) |
-| **Queries** | Implement database query caching |
-| **Static Pages** | Enable ISR for public booking pages |
-| **API** | Add response compression |
-| **Images** | Optimize with next/image and CDN |
-| **Bundles** | Analyze and code-split large dependencies |
+### Medium Priority
 
-### Security Enhancements
+| Feature | Description |
+|---------|-------------|
+| **Apple Calendar** | CalDAV integration |
+| **SMS Notifications** | Twilio integration |
+| **Custom Domains** | User-specific booking domains |
+| **i18n** | Internationalization support |
+| **API Versioning** | `/api/v1/` prefix |
 
-| Enhancement | Description |
-|-------------|-------------|
+### Nice to Have
+
+| Feature | Description |
+|---------|-------------|
+| **Mobile App** | React Native companion app |
+| **White-Label Embedding** | Customizable embedded booking widget |
+| **Analytics Export** | CSV/PDF report generation |
+| **Waitlist** | Queue when slots are full |
 | **2FA** | Two-factor authentication |
-| **Audit Logs** | Track sensitive actions |
-| **Token Encryption** | Encrypt OAuth tokens at rest |
-| **CSP Headers** | Content Security Policy |
-| **Dependency Scanning** | Automated vulnerability checks |
-| **GDPR Compliance** | Data export and deletion tools |
+| **GDPR Tools** | Data export and deletion |
 
 ---
 
-## Quick Reference
-
-### Key Files
+## Quick Reference: Key Files
 
 | Purpose | File |
 |---------|------|
@@ -863,50 +659,20 @@ docker-compose up -d
 | Route protection | `src/middleware.ts` |
 | Database schema | `prisma/schema.prisma` |
 | Slot calculation | `src/lib/slots/calculator.ts` |
+| Team slot calculation | `src/lib/slots/team-calculator.ts` |
 | Validation schemas | `src/lib/validation/schemas.ts` |
+| Plan limits | `src/lib/pricing.ts` |
+| Plan enforcement | `src/lib/plan-enforcement.ts` |
 | Google Calendar | `src/lib/calendar/google.ts` |
 | Outlook Calendar | `src/lib/calendar/outlook.ts` |
 | Zoom integration | `src/lib/zoom/index.ts` |
 | Email client | `src/lib/email/client.ts` |
-
-### API Endpoints
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/auth/*` | Various | No | NextAuth handlers |
-| `/api/slots` | GET | No | Get available slots |
-| `/api/bookings` | GET | Yes | List user's bookings |
-| `/api/bookings` | POST | No | Create booking (rate limited) |
-| `/api/bookings/[id]` | PATCH | Yes | Confirm/reject booking |
-| `/api/bookings/[id]` | DELETE | Yes | Cancel booking |
-| `/api/event-types` | GET/POST | Yes | List/create event types |
-| `/api/event-types/[id]` | GET/PATCH/DELETE | Yes | Event type CRUD |
-| `/api/availability` | GET/POST | Yes | List/create schedules |
-| `/api/availability/[id]` | GET/PUT/DELETE | Yes | Schedule CRUD |
-| `/api/analytics` | GET | Yes | Get analytics data |
-| `/api/calendars` | GET/POST/DELETE | Yes | Calendar management |
-| `/api/zoom/*` | Various | Yes | Zoom integration |
-| `/api/teams` | GET/POST | Yes | Team management |
-| `/api/users/me` | GET/PATCH | Yes | User profile |
-| `/api/users/check-username` | GET | No | Username availability |
+| Queue system | `src/lib/queue/index.ts` |
+| Recurring utils | `src/lib/recurring/utils.ts` |
+| Notifications | `src/lib/notifications.ts` |
 
 ---
 
-## Contributing
+*Copyright (c) 2024 SeekaHost Technologies Ltd. All Rights Reserved.*
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## License
-
-Copyright (c) 2024 SeekaHost Technologies Ltd. All Rights Reserved.
-
----
-
-*Last updated: January 2026*
-*Document version: 1.0.0*
+*Last updated: March 2026*

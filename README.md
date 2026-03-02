@@ -2,63 +2,112 @@
 
 **Modern scheduling that flows with your time.**
 
-TimeTide is a clean, modern scheduling platform that helps professionals and teams manage their availability and bookings effortlessly. Inspired by the natural rhythm of tides, TimeTide adapts to your schedule.
+TimeTide is a full-featured, self-hostable scheduling platform that helps professionals and teams manage their availability and bookings effortlessly. Built with Next.js 14, TypeScript, and a calm oceanic design aesthetic.
 
 ![TimeTide Banner](./public/og-image.png)
 
-## ✨ Features
+## Features
 
 ### Core Scheduling
-- **Event Types**: Create custom meeting types with durations, buffers, and custom questions
-- **Smart Availability**: Set complex availability rules with timezone support
-- **Public Booking Links**: Share `timetide.app/username/event` links
-- **Calendar Sync**: Real-time sync with Google Calendar (Outlook coming soon)
-- **Email Notifications**: Automatic confirmations and reminders
+- **Event Types** - Create custom meeting types with durations, buffers, custom questions, booking limits, and confirmation workflows
+- **Smart Availability** - Weekly schedules with date overrides, multiple named schedules, timezone-aware
+- **Public Booking Links** - Share `timetide.app/username/event-slug` links for self-service booking
+- **Recurring Bookings** - Weekly, biweekly, monthly, and custom frequency recurring meetings (up to 24 occurrences)
+- **Group Bookings** - Multi-seat events with capacity tracking
 
-### Team Scheduling (MVP)
-- **Round-Robin**: Distribute meetings across team members
-- **Collective Availability**: Find times when all team members are free
-- **Team Pages**: Shared booking pages for teams
+### Calendar & Video Integration
+- **Google Calendar** - Two-way sync, busy time detection, automatic Google Meet link generation
+- **Microsoft Outlook** - Full calendar sync via Microsoft Graph API with Teams meeting support
+- **Zoom** - OAuth-based integration with automatic meeting creation, update, and deletion
+- **Double-Booking Prevention** - Real-time availability checking across all connected calendars and all event types
 
-### Smart Features
-- **Timezone Detection**: Automatic timezone handling with DST support
-- **Buffer Times**: Before/after meeting buffers
-- **Booking Windows**: Min notice and max future booking limits
-- **Double-Booking Prevention**: Real-time availability checking
+### Team Scheduling
+- **Team Management** - Create teams with OWNER, ADMIN, MEMBER roles
+- **Round-Robin** - Distribute meetings across team members with rotation tracking
+- **Collective Availability** - Find times when all required team members are free
+- **Managed Scheduling** - Host assigns team member after booking
+- **Team Booking Pages** - Public team pages at `/team/[slug]/[event-slug]`
+- **Team Invitations** - Email-based team invitations with accept/decline flow
+- **Audit Logging** - Track all team actions with full audit trail
 
-## 🏗️ Architecture
+### Notifications & Webhooks
+- **Email Notifications** - Confirmations, cancellations, reschedule notices, reminders, pending approval alerts
+- **In-App Notifications** - Real-time notification bell with unread count and type-based icons
+- **Webhooks** - CRUD management with HMAC-SHA256 signatures, delivery tracking, retry logic, and auto-disable after failures
+- **Background Jobs** - BullMQ-powered queues for emails, calendar sync, webhook delivery, and reminders
+
+### Analytics (Team Plan)
+- **Dashboard Metrics** - Total bookings, monthly count, hours booked, unique guests
+- **7 Customizable Charts** - Bookings over time, popular event types, booking hours distribution, status breakdown, lead time, day-of-week, repeat guests
+- **Chart Visibility** - Toggle charts on/off with localStorage persistence
+
+### Plan & Billing
+- **Three Tiers** - FREE, PRO ($12/mo), TEAM ($20/user/mo)
+- **Feature Gating** - Server + client-side enforcement with upgrade prompts
+- **Usage Tracking** - Event types, calendars, webhooks usage bars
+- **Dev Plan Switcher** - Mock plan switching for development testing
+
+### User Experience
+- **5-Step Onboarding** - Timezone, availability, booking link, event types, integrations
+- **PWA Support** - Progressive Web App with install banner and service worker
+- **Responsive Design** - Full mobile support with sidebar navigation
+- **Ocean Theme** - Custom color palette (ocean, tide, coral, sand) with Plus Jakarta Sans + Inter typography
+
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        TimeTide.app                              │
-├─────────────────────────────────────────────────────────────────┤
-│  Next.js 14 (App Router) + TypeScript                           │
-├──────────────────┬──────────────────┬───────────────────────────┤
-│   Public Pages   │   Dashboard      │   API Routes              │
-│   - Landing      │   - Event Types  │   - /api/bookings         │
-│   - Booking      │   - Availability │   - /api/slots            │
-│   - Confirmation │   - Bookings     │   - /api/calendars        │
-│                  │   - Teams        │   - /api/webhooks         │
-├──────────────────┴──────────────────┴───────────────────────────┤
-│                    Service Layer                                 │
-│   - SlotCalculator    - BookingService    - CalendarSync        │
-│   - AvailabilityEngine - NotificationService                    │
-├─────────────────────────────────────────────────────────────────┤
-│                    Data Layer (Prisma)                          │
-│   PostgreSQL: Users, EventTypes, Bookings, Teams, Calendars     │
-├─────────────────────────────────────────────────────────────────┤
-│                    External Services                            │
-│   - Google Calendar API    - Resend (Email)    - Redis (Jobs)   │
-└─────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+|                          TimeTide.app                             |
++------------------------------------------------------------------+
+|  Next.js 14 (App Router) + TypeScript + React 18                 |
++-------------------+-------------------+--------------------------+
+|   Public Pages    |    Dashboard      |     API Routes           |
+|   - Landing       |    - Bookings     |     - /api/bookings      |
+|   - Booking Flow  |    - Event Types  |     - /api/slots         |
+|   - Team Pages    |    - Availability |     - /api/calendars     |
+|   - User Profiles |    - Teams        |     - /api/teams         |
+|                   |    - Analytics    |     - /api/webhooks      |
+|                   |    - Webhooks     |     - /api/analytics     |
+|                   |    - Billing      |     - /api/notifications |
++-------------------+-------------------+--------------------------+
+|                      Service Layer                               |
+|   SlotCalculator  |  TeamCalculator  |  PlanEnforcement          |
+|   CalendarSync    |  Notifications   |  Validation (Zod)        |
++------------------------------------------------------------------+
+|                    Background Jobs (BullMQ)                       |
+|   EmailQueue  |  WebhookQueue  |  CalendarSyncQueue  |  Reminders|
++------------------------------------------------------------------+
+|                    Data Layer (Prisma ORM)                        |
+|   PostgreSQL: Users, EventTypes, Bookings, Teams, Calendars,     |
+|               Webhooks, Notifications, Analytics                  |
++------------------------------------------------------------------+
+|                    External Services                             |
+|   Google Calendar  |  Outlook/Graph  |  Zoom  |  Resend (Email) |
++------------------------------------------------------------------+
 ```
 
-## 🚀 Quick Start
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Framework** | Next.js 14.1 (App Router) |
+| **Language** | TypeScript 5.3 |
+| **UI** | React 18, Tailwind CSS 3.4, Shadcn/UI (Radix), Lucide Icons |
+| **State** | React Query v5 (server), React Hook Form + Zod (forms) |
+| **Auth** | NextAuth v4 (JWT, Google OAuth, Credentials) |
+| **Database** | PostgreSQL 16 via Prisma ORM v7.3 |
+| **Cache/Queue** | Redis 7 via ioredis, BullMQ 5.4 |
+| **Email** | Resend API |
+| **Charts** | Recharts |
+| **Testing** | Vitest (unit), Playwright (E2E) |
+| **Deployment** | Docker Compose, Vercel, or self-hosted |
+
+## Quick Start
 
 ### Prerequisites
 - Node.js 18+
-- PostgreSQL 14+
-- Redis (for background jobs)
-- Google Cloud Project (for Calendar API)
+- PostgreSQL 16+
+- Redis 7+ (for background jobs)
 
 ### 1. Clone and Install
 
@@ -71,59 +120,26 @@ npm install
 ### 2. Environment Setup
 
 ```bash
-cp .env.example .env.local
+cp .env.example .env
 ```
 
-Edit `.env.local` with your credentials:
+Edit `.env` with your credentials (see [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) for full variable reference).
 
-```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/timetide"
-
-# Auth (NextAuth)
-NEXTAUTH_URL="http://localhost:3000"
-NEXTAUTH_SECRET="your-secret-key-min-32-chars"
-
-# Google OAuth + Calendar
-GOOGLE_CLIENT_ID="your-google-client-id"
-GOOGLE_CLIENT_SECRET="your-google-client-secret"
-
-# Microsoft (optional for v1)
-MICROSOFT_CLIENT_ID=""
-MICROSOFT_CLIENT_SECRET=""
-
-# Email (Resend)
-RESEND_API_KEY="re_xxxxxxxxxxxx"
-EMAIL_FROM="notifications@timetide.app"
-
-# Redis (for background jobs)
-REDIS_URL="redis://localhost:6379"
-
-# App
-NEXT_PUBLIC_APP_URL="http://localhost:3000"
-```
-
-### 3. Database Setup
+### 3. Start Services (Docker)
 
 ```bash
-# Generate Prisma client
-npx prisma generate
-
-# Run migrations
-npx prisma migrate dev --name init
-
-# (Optional) Seed demo data
-npx prisma db seed
+docker-compose up -d
 ```
 
-### 4. Google Calendar Setup
+This starts PostgreSQL and Redis.
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com)
-2. Create a new project or select existing
-3. Enable the Google Calendar API
-4. Create OAuth 2.0 credentials
-5. Add authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
-6. Add scopes: `calendar.readonly`, `calendar.events`
+### 4. Database Setup
+
+```bash
+npm run db:generate    # Generate Prisma client
+npm run db:migrate     # Run migrations
+npm run db:seed        # (Optional) Seed demo data
+```
 
 ### 5. Run Development Server
 
@@ -133,179 +149,91 @@ npm run dev
 
 Visit `http://localhost:3000`
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 timetide-app/
 ├── prisma/
-│   ├── schema.prisma          # Data model
-│   └── seed.ts                # Demo data seeder
+│   ├── schema.prisma              # Database schema (700+ lines)
+│   └── migrations/                # 12 migration files
 ├── src/
 │   ├── app/
-│   │   ├── (auth)/            # Auth pages (login/signup)
-│   │   ├── (dashboard)/       # Protected dashboard pages
-│   │   │   ├── dashboard/
-│   │   │   ├── event-types/
-│   │   │   ├── availability/
-│   │   │   ├── bookings/
-│   │   │   └── teams/
-│   │   ├── (public)/          # Public pages
-│   │   │   └── [username]/[eventSlug]/
-│   │   ├── api/               # API routes
-│   │   │   ├── auth/
-│   │   │   ├── bookings/
-│   │   │   ├── slots/
-│   │   │   ├── calendars/
-│   │   │   └── webhooks/
-│   │   ├── layout.tsx
-│   │   └── page.tsx           # Landing page
+│   │   ├── api/                   # 50+ API route handlers
+│   │   ├── auth/                  # Sign in/up, password reset, email verification
+│   │   ├── dashboard/             # Protected pages (bookings, events, teams, etc.)
+│   │   ├── bookings/              # Public booking detail & reschedule
+│   │   ├── team/                  # Public team booking pages
+│   │   ├── [username]/            # Public user booking pages
+│   │   ├── layout.tsx             # Root layout (SEO, PWA, providers)
+│   │   └── page.tsx               # Marketing landing page
 │   ├── components/
-│   │   ├── ui/                # shadcn/ui components
-│   │   ├── booking/           # Booking-related components
-│   │   ├── dashboard/         # Dashboard components
-│   │   └── shared/            # Shared components
+│   │   ├── ui/                    # 18 Shadcn/UI components
+│   │   ├── booking/               # Booking + team booking widgets
+│   │   └── *.tsx                  # Feature components (pricing, notifications, etc.)
+│   ├── hooks/                     # useFeatureGate, useNotifications, useIntegrationStatus
 │   ├── lib/
-│   │   ├── auth.ts            # NextAuth config
-│   │   ├── prisma.ts          # Prisma client
-│   │   ├── slots/             # Slot calculation engine
-│   │   │   ├── calculator.ts
-│   │   │   ├── availability.ts
-│   │   │   └── timezone.ts
-│   │   ├── calendar/          # Calendar integrations
-│   │   │   ├── google.ts
-│   │   │   └── microsoft.ts
-│   │   ├── email/             # Email templates & sending
-│   │   ├── queue/             # Background job processing
-│   │   └── validators/        # Zod schemas
-│   ├── hooks/                 # React hooks
-│   ├── types/                 # TypeScript types
-│   └── styles/
-│       └── globals.css
-├── public/
-├── .env.example
-├── package.json
-├── tailwind.config.ts
-├── tsconfig.json
-└── next.config.js
+│   │   ├── auth.ts                # NextAuth config (JWT, providers, callbacks)
+│   │   ├── prisma.ts              # Prisma client singleton
+│   │   ├── pricing.ts             # Plan tiers, limits, helpers
+│   │   ├── plan-enforcement.ts    # Server-side feature gating
+│   │   ├── calendar/              # Google + Outlook integrations
+│   │   ├── email/                 # Resend email templates
+│   │   ├── slots/                 # Slot + team slot calculators
+│   │   ├── queue/                 # BullMQ queues (email, webhook, calendar, reminder)
+│   │   ├── recurring/             # Recurring booking utilities
+│   │   ├── validation/            # Zod schemas (23 schemas, 23 types)
+│   │   └── zoom/                  # Zoom API integration
+│   ├── middleware.ts              # Route protection, email verification, onboarding redirect
+│   └── globals.css                # Tailwind + custom styles
+├── docs/
+│   ├── DEVELOPMENT.md             # Development guide
+│   ├── DEPLOYMENT.md              # Self-hosted deployment guide
+│   ├── API.md                     # API reference
+│   └── DATABASE.md                # Database schema documentation
+├── docker-compose.yml             # PostgreSQL + Redis + App
+├── Dockerfile.dev                 # Development container
+└── vitest.config.ts               # Test configuration
 ```
 
-## 📊 Data Model Overview
-
-```
-User ─────────────┬──── EventType ──── Booking
-                  │         │
-                  │         └──── BookingQuestion
-                  │
-                  ├──── Calendar ──── CalendarEvent
-                  │
-                  ├──── Availability
-                  │
-                  └──── TeamMember ──── Team
-```
-
-## 🔌 API Endpoints
-
-### Public API
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/slots/[eventTypeId]` | Get available time slots |
-| POST | `/api/bookings` | Create a new booking |
-| GET | `/api/bookings/[uid]` | Get booking details |
-| PATCH | `/api/bookings/[uid]/cancel` | Cancel a booking |
-| PATCH | `/api/bookings/[uid]/reschedule` | Reschedule a booking |
-
-### Protected API (requires auth)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET/POST | `/api/event-types` | List/create event types |
-| GET/PATCH/DELETE | `/api/event-types/[id]` | Manage event type |
-| GET/POST | `/api/availability` | Manage availability |
-| POST | `/api/calendars/connect` | Connect calendar |
-| DELETE | `/api/calendars/[id]` | Disconnect calendar |
-
-## 🎨 Brand Guidelines
-
-### Colors
-- **Ocean Deep**: `#0c4a6e` (primary)
-- **Tide Blue**: `#0ea5e9` (accent)
-- **Seafoam**: `#a5f3fc` (light accent)
-- **Sand**: `#fef3c7` (warm neutral)
-- **Coral**: `#f97316` (CTA/warning)
-
-### Typography
-- **Headings**: Plus Jakarta Sans
-- **Body**: Inter
-
-### Design Principles
-- Calm, professional, trustworthy
-- Oceanic metaphors (tides, waves, flow)
-- Minimal, focused interfaces
-- Generous whitespace
-
-## 📋 MVP Roadmap
-
-### Phase 1: Core (Current)
-- [x] User authentication
-- [x] Event type creation
-- [x] Availability management
-- [x] Public booking page
-- [x] Slot calculation engine
-- [x] Google Calendar integration
-- [x] Email notifications
-- [x] Booking management
-
-### Phase 2: Teams & Polish
-- [ ] Team creation & management
-- [ ] Round-robin scheduling
-- [ ] Collective availability
-- [ ] Microsoft Outlook integration
-- [ ] Recurring availability rules
-- [ ] Custom branding per user
-
-### Phase 3: Scale
-- [ ] Webhooks for integrations
-- [ ] Zapier/Make integration
-- [ ] Analytics dashboard
-- [ ] Payment integration (Stripe)
-- [ ] Custom domains
-- [ ] API access for developers
-
-## 🧪 Testing
+## Scripts
 
 ```bash
-# Unit tests
-npm run test
-
-# E2E tests
-npm run test:e2e
-
-# Type checking
-npm run type-check
+npm run dev            # Development server
+npm run build          # Production build
+npm run start          # Production server
+npm run lint           # ESLint
+npm run db:generate    # Generate Prisma client
+npm run db:migrate     # Run database migrations
+npm run db:push        # Push schema changes (dev only)
+npm run db:studio      # Prisma Studio GUI
+npm run db:seed        # Seed database
+npm run test           # Unit tests (Vitest)
+npm run test:e2e       # E2E tests (Playwright)
 ```
 
-## 🚢 Deployment
+## Documentation
 
-### Vercel (Recommended)
-```bash
-vercel --prod
-```
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, design decisions, data flow |
+| [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) | Development setup, environment variables, feature status |
+| [docs/API.md](./docs/API.md) | Complete API endpoint reference |
+| [docs/DATABASE.md](./docs/DATABASE.md) | Database schema, models, enums, relationships |
+| [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Self-hosted deployment guide (Debian/Ubuntu) |
 
-### Docker
-```bash
-docker build -t timetide-app .
-docker run -p 3000:3000 timetide-app
-```
+## Brand
 
-### Self-hosted (Debian)
-See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for detailed instructions.
+| Element | Value |
+|---------|-------|
+| **Primary Color** | Ocean Deep `#0c4a6e` |
+| **Accent** | Tide Blue `#0ea5e9` |
+| **Heading Font** | Plus Jakarta Sans |
+| **Body Font** | Inter |
+| **Design** | Calm, professional, oceanic metaphors, generous whitespace |
 
-## 📄 License
+## License
 
-MIT License - see [LICENSE](./LICENSE)
-
-## 🤝 Contributing
-
-Contributions welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
+Copyright (c) 2024 SeekaHost Technologies Ltd. All Rights Reserved.
 
 ---
 

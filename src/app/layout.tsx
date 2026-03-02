@@ -52,10 +52,13 @@ export const metadata: Metadata = {
     follow: true,
   },
   manifest: '/manifest.json',
-  themeColor: '#0ea5e9',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#0ea5e9' },
+    { media: '(prefers-color-scheme: dark)', color: '#0f0f0f' },
+  ],
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
+    statusBarStyle: 'black-translucent',
     title: 'TimeTide',
   },
 }

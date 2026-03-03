@@ -322,19 +322,43 @@ export async function queueBookingCancellationEmails(
   reason?: string,
   cancelledByHost: boolean = false
 ): Promise<void> {
-  const recipient = cancelledByHost ? data.inviteeEmail : data.hostEmail;
-  const subject = cancelledByHost
-    ? `Cancelled: ${data.eventTitle} - ${data.hostName} cancelled`
-    : `Cancelled: ${data.eventTitle} - ${data.inviteeName} cancelled`;
-
-  await queueEmail({
-    type: 'booking_cancelled',
-    to: recipient,
-    subject,
-    bookingData: data,
-    isHost: !cancelledByHost,
-    reason,
-  });
+  if (cancelledByHost) {
+    // Host cancelled → notify invitee
+    const hostLabel = data.teamMembers && data.teamMembers.length > 0
+      ? data.teamMembers.map(m => m.name).join(', ')
+      : data.hostName;
+    await queueEmail({
+      type: 'booking_cancelled',
+      to: data.inviteeEmail,
+      subject: `Cancelled: ${data.eventTitle} - ${hostLabel} cancelled`,
+      bookingData: data,
+      isHost: false,
+      reason,
+    });
+  } else if (data.teamMembers && data.teamMembers.length > 0) {
+    // Invitee cancelled → notify all team members
+    for (const member of data.teamMembers) {
+      await queueEmail({
+        type: 'booking_cancelled',
+        to: member.email,
+        subject: `Cancelled: ${data.eventTitle} - ${data.inviteeName} cancelled`,
+        bookingData: data,
+        isHost: true,
+        reason,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  } else {
+    // Invitee cancelled → notify host
+    await queueEmail({
+      type: 'booking_cancelled',
+      to: data.hostEmail,
+      subject: `Cancelled: ${data.eventTitle} - ${data.inviteeName} cancelled`,
+      bookingData: data,
+      isHost: true,
+      reason,
+    });
+  }
 }
 
 /**
@@ -366,10 +390,13 @@ export async function queueBookingPendingEmails(data: BookingEmailData): Promise
  * Queue booking confirmed by host email (to invitee)
  */
 export async function queueBookingConfirmedByHostEmail(data: BookingEmailData): Promise<void> {
+  const hostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
   await queueEmail({
     type: 'booking_confirmed_by_host',
     to: data.inviteeEmail,
-    subject: `Confirmed: ${data.eventTitle} with ${data.hostName}`,
+    subject: `Confirmed: ${data.eventTitle} with ${hostLabel}`,
     bookingData: data,
     replyTo: data.hostEmail,
   });
@@ -395,10 +422,13 @@ export async function queueBookingRejectedEmail(
   data: BookingEmailData,
   reason?: string
 ): Promise<void> {
+  const hostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
   await queueEmail({
     type: 'booking_rejected',
     to: data.inviteeEmail,
-    subject: `Declined: ${data.eventTitle} with ${data.hostName}`,
+    subject: `Declined: ${data.eventTitle} with ${hostLabel}`,
     bookingData: data,
     reason,
     replyTo: data.hostEmail,
@@ -435,10 +465,13 @@ export async function queueBookingRescheduledEmails(
   reason?: string
 ): Promise<void> {
   // Always notify the invitee
+  const hostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
   await queueEmail({
     type: 'booking_rescheduled',
     to: data.inviteeEmail,
-    subject: `Rescheduled: ${data.eventTitle} with ${data.hostName}`,
+    subject: `Rescheduled: ${data.eventTitle} with ${hostLabel}`,
     bookingData: data,
     isHost: false,
     oldTime,
@@ -446,18 +479,33 @@ export async function queueBookingRescheduledEmails(
     replyTo: data.hostEmail,
   });
 
-  // Notify host if invitee rescheduled
+  // Notify host(s) if invitee rescheduled
   if (!rescheduledByHost) {
-    await queueEmail({
-      type: 'booking_rescheduled',
-      to: data.hostEmail,
-      subject: `Rescheduled: ${data.eventTitle} - ${data.inviteeName} changed time`,
-      bookingData: data,
-      isHost: true,
-      oldTime: hostOldTime,
-      reason,
-      replyTo: data.inviteeEmail,
-    });
+    if (data.teamMembers && data.teamMembers.length > 0) {
+      for (const member of data.teamMembers) {
+        await queueEmail({
+          type: 'booking_rescheduled',
+          to: member.email,
+          subject: `Rescheduled: ${data.eventTitle} - ${data.inviteeName} changed time`,
+          bookingData: data,
+          isHost: true,
+          oldTime: hostOldTime,
+          reason,
+          replyTo: data.inviteeEmail,
+        });
+      }
+    } else {
+      await queueEmail({
+        type: 'booking_rescheduled',
+        to: data.hostEmail,
+        subject: `Rescheduled: ${data.eventTitle} - ${data.inviteeName} changed time`,
+        bookingData: data,
+        isHost: true,
+        oldTime: hostOldTime,
+        reason,
+        replyTo: data.inviteeEmail,
+      });
+    }
   }
 }
 

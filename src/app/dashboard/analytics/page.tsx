@@ -45,6 +45,7 @@ interface AnalyticsData {
     leadTime: Array<{ label: string; bookings: number }>
     dayOfWeek: Array<{ day: string; label: string; bookings: number }>
     repeatGuests: Array<{ label: string; guests: number; color: string }>
+    topRepeatGuests: Array<{ name: string; email: string; bookings: number }>
   }
 }
 
@@ -561,35 +562,57 @@ export default function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               {hasBookings && charts?.repeatGuests && charts.repeatGuests.length > 0 ? (
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={charts.repeatGuests}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="guests"
-                        nameKey="label"
-                        label={({ name, value }) => `${name}: ${value}`}
-                        labelLine={false}
-                      >
-                        {charts.repeatGuests.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                <div className="space-y-6">
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={charts.repeatGuests}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="guests"
+                          nameKey="label"
+                          label={({ name, value }) => `${name}: ${value}`}
+                          labelLine={false}
+                        >
+                          {charts.repeatGuests.map((entry: { color: string }, index: number) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#fff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Top repeat guests list */}
+                  {charts.topRepeatGuests && charts.topRepeatGuests.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-3">Top Returning Guests</p>
+                      <div className="space-y-2">
+                        {charts.topRepeatGuests.map((guest: { name: string; email: string; bookings: number }, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">{guest.name}</p>
+                              <p className="text-xs text-gray-500 truncate">{guest.email}</p>
+                            </div>
+                            <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-ocean-100 text-ocean-700">
+                              {guest.bookings} bookings
+                            </span>
+                          </div>
                         ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#fff',
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                        }}
-                      />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">

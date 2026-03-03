@@ -120,7 +120,7 @@ export default function PublicBookingManagementPage() {
   const [cancellationReason, setCancellationReason] = useState('')
   const [cancelled, setCancelled] = useState(false)
 
-  const { data: bookingData, isLoading, error } = useQuery({
+  const { data: bookingData, isPending, error } = useQuery({
     queryKey: ['public-booking', params.id],
     queryFn: async () => {
       const res = await fetch(`/api/bookings/${params.id}`)
@@ -131,6 +131,7 @@ export default function PublicBookingManagementPage() {
       const data = await res.json()
       return data.booking as BookingDetails
     },
+    enabled: !!params.id,
   })
 
   const cancelMutation = useMutation({
@@ -153,7 +154,7 @@ export default function PublicBookingManagementPage() {
     },
   })
 
-  if (isLoading) {
+  if (isPending) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-sunset-50 flex items-center justify-center p-4">
         <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />

@@ -398,12 +398,13 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
               )}
             </div>
 
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {bookingData.meetingUrl && (
                 <a
                   href={bookingData.meetingUrl}
                   target="_blank"
                   rel="noopener noreferrer"
+                  className="block"
                 >
                   <Button className="w-full">
                     <Video className="h-4 w-4 mr-2" />
@@ -413,14 +414,14 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
               )}
 
               {isEmbed ? (
-                <a href={`/bookings/${bookingData.uid}`} target="_blank" rel="noopener noreferrer">
+                <a href={`/bookings/${bookingData.uid}`} target="_blank" rel="noopener noreferrer" className="block">
                   <Button variant="outline" className="w-full">
                     <Calendar className="h-4 w-4 mr-2" />
                     Manage Booking
                   </Button>
                 </a>
               ) : (
-                <Link href={`/bookings/${bookingData.uid}`}>
+                <Link href={`/bookings/${bookingData.uid}`} className="block">
                   <Button variant="outline" className="w-full">
                     <Calendar className="h-4 w-4 mr-2" />
                     Manage Booking

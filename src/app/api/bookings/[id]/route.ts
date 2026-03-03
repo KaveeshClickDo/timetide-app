@@ -256,6 +256,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             slug: true,
             length: true,
             description: true,
+            schedulingType: true,
+            teamMemberAssignments: {
+              where: { isActive: true },
+              select: {
+                teamMember: {
+                  select: {
+                    userId: true,
+                    user: { select: { name: true, email: true } },
+                  },
+                },
+              },
+            },
           },
         },
         host: {
@@ -277,8 +289,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Only the host can confirm/reject
-    if (session.user.id !== booking.hostId) {
+    // Only the host or team members can confirm/reject
+    const isTeamMemberPatch = booking.eventType.teamMemberAssignments?.some(
+      (a: { teamMember: { userId: string } }) => a.teamMember.userId === session.user.id
+    );
+    if (session.user.id !== booking.hostId && !isTeamMemberPatch) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -386,6 +401,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             deleteGoogleCalendarEvent(primaryCalendar.id, pb.calendarEventId).catch(console.error);
           }
         }
+        // Build teamMembers for rejected email
+        const bulkRejectTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
+          && booking.eventType.teamMemberAssignments.length > 0
+          ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
+              name: a.teamMember.user.name ?? 'Team Member',
+              email: a.teamMember.user.email!,
+            }))
+          : undefined;
+
         queueBookingRejectedEmail({
           hostName: booking.host.name ?? 'Host',
           hostEmail: booking.host.email!,
@@ -398,6 +422,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           endTime: '',
           timezone: booking.timezone,
           bookingUid: booking.uid,
+          teamMembers: bulkRejectTeamMembers,
         }, reason).catch(console.error);
 
         triggerBookingRejectedWebhook(booking.hostId, {
@@ -464,6 +489,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       },
     });
 
+    // Build teamMembers for email
+    const patchTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
+      && booking.eventType.teamMemberAssignments.length > 0
+      ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
+          name: a.teamMember.user.name ?? 'Team Member',
+          email: a.teamMember.user.email!,
+        }))
+      : undefined;
+
     // Prepare email data
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
@@ -484,6 +518,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       location: booking.location ?? undefined,
       meetingUrl: booking.meetingUrl ?? undefined,
       bookingUid: booking.uid,
+      teamMembers: patchTeamMembers,
     };
 
     // Build webhook payload data
@@ -594,6 +629,18 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             slug: true,
             length: true,
             description: true,
+            schedulingType: true,
+            teamMemberAssignments: {
+              where: { isActive: true },
+              select: {
+                teamMember: {
+                  select: {
+                    userId: true,
+                    user: { select: { name: true, email: true } },
+                  },
+                },
+              },
+            },
           },
         },
         host: {
@@ -615,11 +662,14 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Check authorization
+    // Check authorization - host, team members, or invitee via UID
     const isHost = session?.user?.id === booking.hostId;
+    const isTeamMemberDelete = booking.eventType.teamMemberAssignments?.some(
+      (a: { teamMember: { userId: string } }) => a.teamMember.userId === session?.user?.id
+    );
     const accessedByUid = id === booking.uid;
 
-    if (!isHost && !accessedByUid) {
+    if (!isHost && !isTeamMemberDelete && !accessedByUid) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -664,6 +714,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         cancelBookingReminders(fb.uid).catch(console.error);
       }
 
+      // Build teamMembers for email
+      const bulkCancelTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
+        && booking.eventType.teamMemberAssignments.length > 0
+        ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
+            name: a.teamMember.user.name ?? 'Team Member',
+            email: a.teamMember.user.email!,
+          }))
+        : undefined;
+
       // Send one cancellation email for the series
       const emailData: BookingEmailData = {
         hostName: booking.host.name ?? 'Host',
@@ -680,6 +739,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
         timezone: booking.timezone,
         bookingUid: booking.uid,
+        teamMembers: bulkCancelTeamMembers,
       };
       queueBookingCancellationEmails(emailData, reason, isHost).catch(console.error);
 
@@ -735,6 +795,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Build teamMembers for email
+    const cancelTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
+      && booking.eventType.teamMemberAssignments.length > 0
+      ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
+          name: a.teamMember.user.name ?? 'Team Member',
+          email: a.teamMember.user.email!,
+        }))
+      : undefined;
+
     // Send cancellation emails
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
@@ -753,6 +822,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
       timezone: booking.timezone,
       bookingUid: booking.uid,
+      teamMembers: cancelTeamMembers,
     };
 
     queueBookingCancellationEmails(emailData, reason, isHost).catch(console.error);

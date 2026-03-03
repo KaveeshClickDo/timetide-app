@@ -32,6 +32,7 @@ export async function GET() {
         startTime: true,
         endTime: true,
         status: true,
+        inviteeName: true,
         inviteeEmail: true,
         createdAt: true,
         eventType: {
@@ -165,30 +166,23 @@ export async function GET() {
       bookings: count,
     }))
 
-    // Repeat Guests
-    const guestBookingCounts: Record<string, number> = {}
+    // Repeat Guests — track per-guest name + count
+    const guestData: Record<string, { name: string; email: string; count: number }> = {}
     allBookings.forEach((b) => {
       const email = b.inviteeEmail.toLowerCase()
-      guestBookingCounts[email] = (guestBookingCounts[email] || 0) + 1
+      if (!guestData[email]) {
+        guestData[email] = { name: b.inviteeName, email: b.inviteeEmail, count: 0 }
+      }
+      guestData[email].count++
     })
 
-    const repeatGuestsData = {
-      oneTime: 0,
-      twoToThree: 0,
-      fourToFive: 0,
-      sixPlus: 0,
-    }
-
-    Object.values(guestBookingCounts).forEach((count) => {
-      if (count === 1) {
-        repeatGuestsData.oneTime++
-      } else if (count <= 3) {
-        repeatGuestsData.twoToThree++
-      } else if (count <= 5) {
-        repeatGuestsData.fourToFive++
-      } else {
-        repeatGuestsData.sixPlus++
-      }
+    // Category distribution (donut chart)
+    const repeatGuestsData = { oneTime: 0, twoToThree: 0, fourToFive: 0, sixPlus: 0 }
+    Object.values(guestData).forEach(({ count }) => {
+      if (count === 1) repeatGuestsData.oneTime++
+      else if (count <= 3) repeatGuestsData.twoToThree++
+      else if (count <= 5) repeatGuestsData.fourToFive++
+      else repeatGuestsData.sixPlus++
     })
 
     const repeatGuestsChartData = [
@@ -197,6 +191,13 @@ export async function GET() {
       { label: '4-5 Bookings', guests: repeatGuestsData.fourToFive, color: '#f59e0b' },
       { label: '6+ Bookings', guests: repeatGuestsData.sixPlus, color: '#8b5cf6' },
     ].filter((d) => d.guests > 0)
+
+    // Top repeat guests (2+ bookings), sorted by count descending
+    const topRepeatGuests = Object.values(guestData)
+      .filter((g) => g.count >= 2)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10)
+      .map((g) => ({ name: g.name, email: g.email, bookings: g.count }))
 
     // Status distribution (time-aware, matching dashboard logic)
     const cancelledCount = allBookings.filter((b) => b.status === 'CANCELLED').length
@@ -246,6 +247,7 @@ export async function GET() {
         leadTime: leadTimeData,
         dayOfWeek: dayOfWeekData,
         repeatGuests: repeatGuestsChartData,
+        topRepeatGuests,
       },
     })
   } catch (error) {

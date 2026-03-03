@@ -80,13 +80,14 @@ export default function ReschedulePage() {
   }, [])
 
   // Fetch booking details
-  const { data: bookingData, isLoading: bookingLoading, error: bookingError } = useQuery({
+  const { data: bookingData, isPending: bookingPending, error: bookingError } = useQuery({
     queryKey: ['booking', bookingId],
     queryFn: async () => {
       const res = await fetch(`/api/bookings/${bookingId}`)
       if (!res.ok) throw new Error('Booking not found')
       return res.json()
     },
+    enabled: !!bookingId,
   })
 
   const booking = bookingData?.booking
@@ -192,7 +193,7 @@ export default function ReschedulePage() {
     : Globe
 
   // Loading state
-  if (bookingLoading) {
+  if (bookingPending) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-sunset-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />

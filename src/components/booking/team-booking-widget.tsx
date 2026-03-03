@@ -356,18 +356,52 @@ export default function TeamBookingWidget({
               </div>
             </div>
 
-            {bookingResult.meetingUrl && (
-              <a
-                href={bookingResult.meetingUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+            <div className="flex flex-col gap-3">
+              {bookingResult.meetingUrl && (
+                <a
+                  href={bookingResult.meetingUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block"
+                >
+                  <Button className="w-full">
+                    <Video className="h-4 w-4 mr-2" />
+                    Join Meeting
+                  </Button>
+                </a>
+              )}
+
+              {isEmbed ? (
+                <a href={`/bookings/${bookingResult.uid}`} target="_blank" rel="noopener noreferrer" className="block">
+                  <Button variant="outline" className="w-full">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Manage Booking
+                  </Button>
+                </a>
+              ) : (
+                <Link href={`/bookings/${bookingResult.uid}`} className="block">
+                  <Button variant="outline" className="w-full">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Manage Booking
+                  </Button>
+                </Link>
+              )}
+
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setStep('calendar');
+                  setSelectedDate(null);
+                  setSelectedSlot(null);
+                  setFormData({ name: '', email: '', notes: '', responses: {} });
+                  setBookingResult(null);
+                }}
               >
-                <Button className="w-full">
-                  <Video className="h-4 w-4 mr-2" />
-                  Join Meeting
-                </Button>
-              </a>
-            )}
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                Book Another Time
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

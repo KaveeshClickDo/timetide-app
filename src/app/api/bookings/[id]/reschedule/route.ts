@@ -61,6 +61,18 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             slug: true,
             description: true,
             length: true,
+            schedulingType: true,
+            teamMemberAssignments: {
+              where: { isActive: true },
+              select: {
+                teamMember: {
+                  select: {
+                    userId: true,
+                    user: { select: { name: true, email: true, timezone: true } },
+                  },
+                },
+              },
+            },
           },
         },
         host: {
@@ -81,11 +93,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Check authorization - host can always reschedule, invitee via UID
+    // Check authorization - host, assigned member, team members can reschedule; invitee via UID
     const isHost = session?.user?.id === booking.hostId;
+    const isAssignedMember = session?.user?.id === booking.assignedUserId;
+    const isTeamMember = booking.eventType.teamMemberAssignments?.some(
+      (a: { teamMember: { userId: string } }) => a.teamMember.userId === session?.user?.id
+    );
     const accessedByUid = id === booking.uid;
 
-    if (!isHost && !accessedByUid) {
+    if (!isHost && !isAssignedMember && !isTeamMember && !accessedByUid) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
@@ -113,6 +129,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         orderBy: { startTime: 'asc' },
       });
 
+      // Build list of user IDs to check for conflicts (team-aware)
+      let bulkConflictUserIds: string[];
+      if (booking.eventType.schedulingType === 'COLLECTIVE' && booking.eventType.teamMemberAssignments.length > 0) {
+        bulkConflictUserIds = booking.eventType.teamMemberAssignments.map((a: { teamMember: { userId: string } }) => a.teamMember.userId);
+      } else if (booking.eventType.schedulingType === 'MANAGED' && booking.assignedUserId) {
+        bulkConflictUserIds = [booking.assignedUserId];
+      } else {
+        bulkConflictUserIds = [booking.hostId];
+      }
+
       // Validate ALL shifted times for conflicts first (all-or-nothing)
       for (const fb of futureBookings) {
         const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
@@ -120,7 +146,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
         const conflict = await prisma.booking.findFirst({
           where: {
-            hostId: booking.hostId,
+            OR: [
+              { hostId: { in: bulkConflictUserIds } },
+              { assignedUserId: { in: bulkConflictUserIds } },
+            ],
             id: { notIn: futureBookings.map(b => b.id) },
             status: { in: ['PENDING', 'CONFIRMED'] },
             startTime: { lt: shiftedEnd },
@@ -177,6 +206,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         rescheduleBookingReminders(fb.id, fb.uid, shiftedStart).catch(console.error);
       }
 
+      // Build teamMembers for email
+      const bulkTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
+        && booking.eventType.teamMemberAssignments.length > 0
+        ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
+            name: a.teamMember.user.name ?? 'Team Member',
+            email: a.teamMember.user.email!,
+          }))
+        : undefined;
+
       // Send one summary email for the first occurrence
       const emailData: BookingEmailData = {
         hostName: booking.host.name ?? 'Host',
@@ -189,6 +227,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         endTime: '',
         timezone: booking.timezone,
         bookingUid: booking.uid,
+        teamMembers: bulkTeamMembers,
       };
 
       queueBookingRescheduledEmails(
@@ -261,10 +300,23 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // ── Single scope (default): reschedule just this booking ──
 
+    // Build list of user IDs to check for conflicts (team-aware)
+    let conflictUserIds: string[];
+    if (booking.eventType.schedulingType === 'COLLECTIVE' && booking.eventType.teamMemberAssignments.length > 0) {
+      conflictUserIds = booking.eventType.teamMemberAssignments.map((a: { teamMember: { userId: string } }) => a.teamMember.userId);
+    } else if (booking.eventType.schedulingType === 'MANAGED' && booking.assignedUserId) {
+      conflictUserIds = [booking.assignedUserId];
+    } else {
+      conflictUserIds = [booking.hostId];
+    }
+
     // Check for conflicting bookings at the new time (exclude this booking)
     const conflict = await prisma.booking.findFirst({
       where: {
-        hostId: booking.hostId,
+        OR: [
+          { hostId: { in: conflictUserIds } },
+          { assignedUserId: { in: conflictUserIds } },
+        ],
         id: { not: booking.id },
         status: { in: ['PENDING', 'CONFIRMED'] },
         startTime: { lt: newEnd },
@@ -353,6 +405,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Build teamMembers for email
+    const teamMembersForEmail = booking.eventType.schedulingType === 'COLLECTIVE'
+      && booking.eventType.teamMemberAssignments.length > 0
+      ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
+          name: a.teamMember.user.name ?? 'Team Member',
+          email: a.teamMember.user.email!,
+        }))
+      : undefined;
+
     // Prepare email data with new times
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
@@ -371,6 +432,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       location: booking.location ?? undefined,
       meetingUrl: booking.meetingUrl ?? undefined,
       bookingUid: booking.uid,
+      teamMembers: teamMembersForEmail,
     };
 
     // Queue reschedule emails

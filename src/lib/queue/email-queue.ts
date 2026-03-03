@@ -273,27 +273,45 @@ async function processEmailJobDirect(data: EmailJobData): Promise<void> {
 
 /**
  * Queue booking confirmation emails (to both host and invitee)
+ * For collective team events with teamMembers, sends to all team members
  */
 export async function queueBookingConfirmationEmails(data: BookingEmailData): Promise<void> {
   // Queue email to invitee
+  const inviteeHostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
   await queueEmail({
     type: 'booking_confirmed',
     to: data.inviteeEmail,
-    subject: `Confirmed: ${data.eventTitle} with ${data.hostName}`,
+    subject: `Confirmed: ${data.eventTitle} with ${inviteeHostLabel}`,
     bookingData: data,
     isHost: false,
     replyTo: data.hostEmail,
   });
 
-  // Queue email to host
-  await queueEmail({
-    type: 'booking_confirmed',
-    to: data.hostEmail,
-    subject: `New Booking: ${data.eventTitle} with ${data.inviteeName}`,
-    bookingData: data,
-    isHost: true,
-    replyTo: data.inviteeEmail,
-  });
+  // Queue email to each team member (for collective events)
+  if (data.teamMembers && data.teamMembers.length > 0) {
+    for (const member of data.teamMembers) {
+      await queueEmail({
+        type: 'booking_confirmed',
+        to: member.email,
+        subject: `New Booking: ${data.eventTitle} with ${data.inviteeName}`,
+        bookingData: data,
+        isHost: true,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  } else {
+    // Queue email to host (single host)
+    await queueEmail({
+      type: 'booking_confirmed',
+      to: data.hostEmail,
+      subject: `New Booking: ${data.eventTitle} with ${data.inviteeName}`,
+      bookingData: data,
+      isHost: true,
+      replyTo: data.inviteeEmail,
+    });
+  }
 }
 
 /**

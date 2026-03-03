@@ -70,6 +70,7 @@ export interface BookingEmailData {
   meetingUrl?: string;
   bookingUid: string;
   notes?: string;
+  teamMembers?: Array<{ name: string; email: string }>; // For collective team events
 }
 
 const baseStyles = `
@@ -149,6 +150,12 @@ export function generateBookingConfirmedEmail(
 
           <div class="divider"></div>
 
+          ${data.teamMembers && data.teamMembers.length > 0 && !isHost ? `
+          <div class="detail-row">
+            <span class="detail-label">👥 Hosts</span>
+            <span class="detail-value">${data.teamMembers.map(m => esc(m.name)).join(', ')}</span>
+          </div>
+          ` : `
           <div class="detail-row">
             <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
             <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
@@ -158,6 +165,7 @@ export function generateBookingConfirmedEmail(
             <span class="detail-label">✉️ Email</span>
             <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
           </div>
+          `}
 
           ${data.notes ? `
           <div class="divider"></div>
@@ -167,7 +175,7 @@ export function generateBookingConfirmedEmail(
           </div>
           ` : ''}
         </div>
-        
+
         <div style="text-align: center; margin: 32px 0;">
           <a href="${manageUrl}" class="btn" style="color: #ffffff; margin-bottom: 8px;">Manage Booking</a>
           <a href="${addToCalendarUrl}" class="btn btn-outline" style="margin-left: 12px; color: #0369a1; background: #f0f9ff; border: 1px solid #0ea5e9;">Add to Calendar</a>

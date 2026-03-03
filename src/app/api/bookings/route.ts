@@ -793,6 +793,16 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     // EMAILS & NOTIFICATIONS
     // ========================================================================
+    // Build team members list for collective events
+    const teamMembersForEmail = eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0
+      ? eventType.teamMemberAssignments
+          .map(a => ({
+            name: a.teamMember.user.name ?? 'Team Member',
+            email: a.teamMember.user.email!,
+          }))
+          .filter(m => m.email)
+      : undefined;
+
     const emailData: BookingEmailData = {
       hostName: selectedHost.name ?? 'Host',
       hostEmail: selectedHost.email!,
@@ -809,6 +819,7 @@ export async function POST(request: NextRequest) {
       meetingUrl: meetingUrl ?? undefined,
       bookingUid: primaryBooking.uid,
       notes,
+      teamMembers: teamMembersForEmail,
     };
 
     if (eventType.requiresConfirmation) {

@@ -80,37 +80,53 @@ export default function ReschedulePage() {
   }, [])
 
   // Fetch booking details
-  const { data: bookingData, isPending: bookingPending, error: bookingError } = useQuery({
+  const { data: booking, isPending: bookingPending, error: bookingError } = useQuery({
     queryKey: ['booking', bookingId],
     queryFn: async () => {
       const res = await fetch(`/api/bookings/${bookingId}`)
       if (!res.ok) throw new Error('Booking not found')
-      return res.json()
+      const data = await res.json()
+      return data.booking
     },
     enabled: !!bookingId,
   })
 
-  const booking = bookingData?.booking
+  // Detect if this is a team event type
+  const isTeamEvent = !!(booking?.eventType?.schedulingType && booking?.eventType?.team?.slug)
 
   // Fetch available slots for selected month
   const { data: slotsData, isLoading: slotsLoading } = useQuery({
-    queryKey: ['slots', booking?.eventType?.id, format(currentMonth, 'yyyy-MM'), inviteeTimezone],
+    queryKey: ['slots', booking?.eventType?.id, format(currentMonth, 'yyyy-MM'), inviteeTimezone, isTeamEvent],
     queryFn: async () => {
       const monthStart = startOfMonth(currentMonth)
       const monthEnd = endOfMonth(currentMonth)
 
-      const params = new URLSearchParams({
-        eventTypeId: booking.eventType.id,
-        startDate: format(monthStart, 'yyyy-MM-dd'),
-        endDate: format(monthEnd, 'yyyy-MM-dd'),
-        timezone: inviteeTimezone,
-      })
+      let res: Response
+      if (isTeamEvent) {
+        // Team event types use the team slots API
+        const params = new URLSearchParams({
+          teamSlug: booking.eventType.team.slug,
+          eventSlug: booking.eventType.slug,
+          startDate: format(monthStart, 'yyyy-MM-dd'),
+          endDate: format(monthEnd, 'yyyy-MM-dd'),
+          timezone: inviteeTimezone,
+        })
+        res = await fetch(`/api/slots/team?${params}`)
+      } else {
+        // Individual event types use the regular slots API
+        const params = new URLSearchParams({
+          eventTypeId: booking.eventType.id,
+          startDate: format(monthStart, 'yyyy-MM-dd'),
+          endDate: format(monthEnd, 'yyyy-MM-dd'),
+          timezone: inviteeTimezone,
+        })
+        res = await fetch(`/api/slots?${params}`)
+      }
 
-      const res = await fetch(`/api/slots?${params}`)
       if (!res.ok) throw new Error('Failed to fetch slots')
       const data = await res.json()
 
-      // Transform slots
+      // Transform slots (both APIs return the same slots format)
       const transformedSlots: Record<string, TimeSlot[]> = {}
       if (data.slots && typeof data.slots === 'object') {
         Object.keys(data.slots).forEach((dateKey) => {

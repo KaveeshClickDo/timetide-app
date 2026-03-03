@@ -49,12 +49,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           select: {
             id: true,
             title: true,
+            slug: true,
             description: true,
             length: true,
             locationType: true,
             locationValue: true,
             schedulingType: true,
             teamId: true,
+            team: {
+              select: { slug: true },
+            },
             questions: true,
           },
         },

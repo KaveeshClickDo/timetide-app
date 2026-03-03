@@ -705,6 +705,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Build attendees list based on scheduling type
+    const calendarAttendees: Array<{ email: string; name?: string }> = [
+      { email, name },
+    ];
+    if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
+      // Add all assigned team members for collective events
+      for (const assignment of eventType.teamMemberAssignments) {
+        const memberEmail = assignment.teamMember.user.email;
+        if (memberEmail) {
+          calendarAttendees.push({ email: memberEmail, name: assignment.teamMember.user.name ?? undefined });
+        }
+      }
+    } else {
+      calendarAttendees.push({ email: selectedHost.email!, name: selectedHost.name ?? undefined });
+    }
+
     // Create calendar events for each booking
     for (const booking of createdBookings) {
       if (calendarForEvent) {
@@ -716,10 +732,7 @@ export async function POST(request: NextRequest) {
             description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}${recurring ? `\nRecurring: Week ${createdBookings.indexOf(booking) + 1} of ${occurrenceCount}` : ''}`,
             startTime: booking.startTime,
             endTime: booking.endTime,
-            attendees: [
-              { email, name },
-              { email: selectedHost.email!, name: selectedHost.name ?? undefined },
-            ],
+            attendees: calendarAttendees,
             location,
             conferenceData: needsConferenceData,
           };

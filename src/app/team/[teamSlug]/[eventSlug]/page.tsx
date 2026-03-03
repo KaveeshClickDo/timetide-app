@@ -114,6 +114,7 @@ export default function TeamBookingPage() {
         }}
         eventType={{
           id: eventType.id,
+          slug: eventSlug,
           title: eventType.title,
           description: eventType.description,
           length: eventType.length,

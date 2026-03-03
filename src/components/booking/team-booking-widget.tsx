@@ -69,6 +69,7 @@ interface TeamBookingWidgetProps {
   };
   eventType: {
     id: string;
+    slug: string;
     title: string;
     description: string | null;
     length: number;
@@ -149,7 +150,7 @@ export default function TeamBookingWidget({
     isLoading: slotsLoading,
     error: slotsError,
   } = useQuery({
-    queryKey: ['team-slots', eventType.id, format(currentMonth, 'yyyy-MM'), inviteeTimezone],
+    queryKey: ['team-slots', team.slug, eventType.slug, format(currentMonth, 'yyyy-MM'), inviteeTimezone],
     queryFn: async () => {
       const monthStart = startOfMonth(currentMonth);
       const monthEnd = endOfMonth(currentMonth);
@@ -158,14 +159,14 @@ export default function TeamBookingWidget({
       const endDate = format(monthEnd, 'yyyy-MM-dd');
 
       const params = new URLSearchParams({
-        eventTypeId: eventType.id,
+        teamSlug: team.slug,
+        eventSlug: eventType.slug,
         startDate,
         endDate,
         timezone: inviteeTimezone,
-        isTeam: 'true',
       });
 
-      const res = await fetch(`/api/slots?${params}`);
+      const res = await fetch(`/api/slots/team?${params}`);
 
       if (!res.ok) {
         const errorText = await res.text();

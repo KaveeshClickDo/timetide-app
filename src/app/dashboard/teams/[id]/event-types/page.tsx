@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format, addDays } from 'date-fns';
 import {
   Plus,
   Loader2,
@@ -19,6 +20,8 @@ import {
   MapPin,
   Globe,
   Settings,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -138,6 +141,7 @@ export default function TeamEventTypesPage() {
   const teamId = params.id as string;
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [newEventType, setNewEventType] = useState({
     title: '',
     slug: '',
@@ -146,6 +150,17 @@ export default function TeamEventTypesPage() {
     locationType: 'GOOGLE_MEET',
     schedulingType: 'ROUND_ROBIN' as 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED',
     memberIds: [] as string[],
+    // Booking window
+    periodType: 'ROLLING' as 'ROLLING' | 'RANGE' | 'UNLIMITED',
+    periodDays: 30,
+    periodStartDate: format(new Date(), 'yyyy-MM-dd'),
+    periodEndDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+    // Advanced settings
+    bufferTimeBefore: 0,
+    bufferTimeAfter: 0,
+    minimumNotice: 60,
+    maxBookingsPerDay: 0,
+    requiresConfirmation: false,
   });
 
   // Fetch team details
@@ -172,10 +187,36 @@ export default function TeamEventTypesPage() {
   // Create event type mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof newEventType) => {
+      const payload: Record<string, unknown> = {
+        title: data.title,
+        slug: data.slug,
+        description: data.description || undefined,
+        length: data.length,
+        locationType: data.locationType,
+        schedulingType: data.schedulingType,
+        memberIds: data.memberIds,
+        periodType: data.periodType,
+        bufferTimeBefore: data.bufferTimeBefore,
+        bufferTimeAfter: data.bufferTimeAfter,
+        minimumNotice: data.minimumNotice,
+        requiresConfirmation: data.requiresConfirmation,
+      };
+
+      if (data.periodType === 'ROLLING') {
+        payload.periodDays = data.periodDays;
+      } else if (data.periodType === 'RANGE') {
+        payload.periodStartDate = new Date(data.periodStartDate).toISOString();
+        payload.periodEndDate = new Date(data.periodEndDate).toISOString();
+      }
+
+      if (data.maxBookingsPerDay > 0) {
+        payload.maxBookingsPerDay = data.maxBookingsPerDay;
+      }
+
       const res = await fetch(`/api/teams/${teamId}/event-types`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -186,6 +227,7 @@ export default function TeamEventTypesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-event-types', teamId] });
       setIsCreateDialogOpen(false);
+      setShowAdvanced(false);
       setNewEventType({
         title: '',
         slug: '',
@@ -194,6 +236,15 @@ export default function TeamEventTypesPage() {
         locationType: 'GOOGLE_MEET',
         schedulingType: 'ROUND_ROBIN',
         memberIds: [],
+        periodType: 'ROLLING',
+        periodDays: 30,
+        periodStartDate: format(new Date(), 'yyyy-MM-dd'),
+        periodEndDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
+        bufferTimeBefore: 0,
+        bufferTimeAfter: 0,
+        minimumNotice: 60,
+        maxBookingsPerDay: 0,
+        requiresConfirmation: false,
       });
       toast({ title: 'Event type created successfully' });
     },
@@ -424,6 +475,168 @@ export default function TeamEventTypesPage() {
                       <SelectItem value="CUSTOM">Custom</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                {/* Booking Window */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Booking Window
+                  </Label>
+                  <div className="space-y-2">
+                    {[
+                      { value: 'ROLLING', label: 'Rolling Window', desc: 'Next X days from today' },
+                      { value: 'RANGE', label: 'Date Range', desc: 'Specific date range' },
+                      { value: 'UNLIMITED', label: 'Unlimited', desc: 'No date restrictions' },
+                    ].map((option) => (
+                      <label
+                        key={option.value}
+                        className={cn(
+                          'flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors',
+                          newEventType.periodType === option.value
+                            ? 'border-ocean-500 bg-ocean-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="periodType"
+                          value={option.value}
+                          checked={newEventType.periodType === option.value}
+                          onChange={() => setNewEventType({ ...newEventType, periodType: option.value as typeof newEventType.periodType })}
+                          className="h-4 w-4 text-ocean-600 border-gray-300"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{option.label}</p>
+                          <p className="text-xs text-gray-500">{option.desc}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  {newEventType.periodType === 'ROLLING' && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={newEventType.periodDays}
+                        onChange={(e) => setNewEventType({
+                          ...newEventType,
+                          periodDays: Math.min(365, Math.max(1, parseInt(e.target.value) || 30)),
+                        })}
+                        className="w-20"
+                      />
+                      <span className="text-sm text-gray-500">days into the future</span>
+                    </div>
+                  )}
+
+                  {newEventType.periodType === 'RANGE' && (
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Start Date</Label>
+                        <Input
+                          type="date"
+                          value={newEventType.periodStartDate}
+                          min={format(new Date(), 'yyyy-MM-dd')}
+                          onChange={(e) => setNewEventType({ ...newEventType, periodStartDate: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">End Date</Label>
+                        <Input
+                          type="date"
+                          value={newEventType.periodEndDate}
+                          min={newEventType.periodStartDate}
+                          onChange={(e) => setNewEventType({ ...newEventType, periodEndDate: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {newEventType.periodType === 'UNLIMITED' && (
+                    <p className="text-xs text-amber-600 pt-1">
+                      Invitees can book any date in the future.
+                    </p>
+                  )}
+                </div>
+
+                {/* Requires Confirmation */}
+                <div className="flex items-center justify-between p-3 rounded-lg border">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Require Confirmation</p>
+                    <p className="text-xs text-gray-500">Bookings need manual approval</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={newEventType.requiresConfirmation}
+                    onChange={(e) => setNewEventType({ ...newEventType, requiresConfirmation: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-ocean-600"
+                  />
+                </div>
+
+                {/* Advanced Settings (collapsible) */}
+                <div className="border rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    className="flex items-center justify-between w-full p-3 text-left"
+                  >
+                    <span className="text-sm font-medium text-gray-900">Advanced Settings</span>
+                    {showAdvanced ? (
+                      <ChevronUp className="h-4 w-4 text-gray-500" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-gray-500" />
+                    )}
+                  </button>
+                  {showAdvanced && (
+                    <div className="px-3 pb-3 space-y-3 border-t pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Buffer Before (min)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={120}
+                            value={newEventType.bufferTimeBefore}
+                            onChange={(e) => setNewEventType({ ...newEventType, bufferTimeBefore: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Buffer After (min)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={120}
+                            value={newEventType.bufferTimeAfter}
+                            onChange={(e) => setNewEventType({ ...newEventType, bufferTimeAfter: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Min Notice (min)</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={newEventType.minimumNotice}
+                            onChange={(e) => setNewEventType({ ...newEventType, minimumNotice: parseInt(e.target.value) || 0 })}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Max Bookings/Day</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={newEventType.maxBookingsPerDay}
+                            onChange={(e) => setNewEventType({ ...newEventType, maxBookingsPerDay: parseInt(e.target.value) || 0 })}
+                          />
+                          <p className="text-[10px] text-gray-500">0 = unlimited</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

@@ -53,9 +53,27 @@ export async function GET(request: NextRequest) {
     const upcoming = searchParams.get('upcoming') === 'true';
     const past = searchParams.get('past') === 'true';
 
-    const where: Prisma.BookingWhereInput = {
-      hostId: session.user.id,
+    // Include bookings where user is host, assigned member, or a collective team member
+    const userFilter: Prisma.BookingWhereInput = {
+      OR: [
+        { hostId: session.user.id },
+        { assignedUserId: session.user.id },
+        {
+          eventType: {
+            teamMemberAssignments: {
+              some: {
+                isActive: true,
+                teamMember: {
+                  userId: session.user.id,
+                },
+              },
+            },
+          },
+        },
+      ],
     };
+
+    const where: Prisma.BookingWhereInput = { ...userFilter };
 
     if (status) {
       where.status = status as BookingStatus;
@@ -80,6 +98,13 @@ export async function GET(request: NextRequest) {
             title: true,
             length: true,
             locationType: true,
+            schedulingType: true,
+            team: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },

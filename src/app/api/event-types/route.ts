@@ -18,6 +18,7 @@ export async function GET() {
     const eventTypes = await prisma.eventType.findMany({
       where: {
         userId: session.user.id,
+        teamId: null, // Exclude team event types from personal list
       },
       include: {
         _count: {

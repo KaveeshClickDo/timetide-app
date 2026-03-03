@@ -13,6 +13,7 @@ import {
   MapPin,
   Phone,
   User,
+  Users,
   ChevronRight,
   ExternalLink,
   XCircle,
@@ -46,6 +47,11 @@ interface Booking {
     title: string
     length: number
     locationType: string
+    schedulingType?: string | null
+    team?: {
+      id: string
+      name: string
+    } | null
   }
 }
 
@@ -335,6 +341,12 @@ export default function DashboardPage() {
                               <div className="min-w-0 flex-1">
                                 <h3 className="font-medium text-gray-900 truncate text-sm sm:text-base">
                                   {booking.eventType.title}
+                                  {booking.eventType.team && (
+                                    <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-700">
+                                      <Users className="h-3 w-3" />
+                                      {booking.eventType.team.name}
+                                    </span>
+                                  )}
                                   {booking.recurringGroupId && booking.recurringCount && (
                                     <Link
                                       href={`/dashboard/bookings/series/${booking.recurringGroupId}`}

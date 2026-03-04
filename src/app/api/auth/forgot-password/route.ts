@@ -5,7 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendPasswordResetEmail } from '@/lib/email/client';
+import { sendPasswordResetEmail } from '@/lib/integrations/email/client';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
 

@@ -61,53 +61,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
-
-interface TeamMember {
-  id: string;
-  role: 'OWNER' | 'ADMIN' | 'MEMBER';
-  isActive: boolean;
-  user: {
-    id: string;
-    name: string | null;
-    email: string;
-    image: string | null;
-  };
-}
-
-interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  members: TeamMember[];
-}
-
-interface EventTypeAssignment {
-  id: string;
-  teamMember: {
-    id: string;
-    user: {
-      id: string;
-      name: string | null;
-      email: string;
-      image: string | null;
-    };
-  };
-}
-
-interface TeamEventType {
-  id: string;
-  title: string;
-  slug: string;
-  description: string | null;
-  length: number;
-  locationType: string;
-  schedulingType: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED' | null;
-  isActive: boolean;
-  teamMemberAssignments: EventTypeAssignment[];
-  _count: {
-    bookings: number;
-  };
-}
+import type { TeamMemberWithRole } from '@/types/team';
+import type { TeamEventType, EventTypeAssignment } from '@/types/event-type';
 
 const LOCATION_ICONS: Record<string, any> = {
   GOOGLE_MEET: Video,
@@ -164,7 +119,7 @@ export default function TeamEventTypesPage() {
   });
 
   // Fetch team details
-  const { data: teamData, isLoading: isTeamLoading } = useQuery<{ team: Team }>({
+  const { data: teamData, isLoading: isTeamLoading } = useQuery<{ team: { id: string; name: string; slug: string; members: TeamMemberWithRole[] } }>({
     queryKey: ['team', teamId],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${teamId}`);

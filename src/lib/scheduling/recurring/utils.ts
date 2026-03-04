@@ -4,18 +4,9 @@
  */
 
 import { addDays, addMonths } from 'date-fns'
+import type { RecurringFrequency, RecurringConfig } from '@/types/recurring'
 
-// ============================================================================
-// TYPES
-// ============================================================================
-
-export type RecurringFrequency = 'weekly' | 'biweekly' | 'monthly' | 'custom'
-
-export interface RecurringConfig {
-  frequency: RecurringFrequency
-  count: number
-  interval?: number // days, for 'custom' frequency
-}
+export type { RecurringFrequency, RecurringConfig } from '@/types/recurring'
 
 // ============================================================================
 // CONSTANTS

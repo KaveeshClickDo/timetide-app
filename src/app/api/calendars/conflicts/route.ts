@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { parseISO } from 'date-fns';
 import { authOptions } from '@/lib/auth';
-import { checkCalendarConflicts } from '@/lib/queue';
+import { checkCalendarConflicts } from '@/lib/infrastructure/queue';
 import { z } from 'zod';
 
 const checkConflictsSchema = z.object({

@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { disconnectZoomAccount } from '@/lib/zoom';
+import { disconnectZoomAccount } from '@/lib/integrations/zoom';
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);

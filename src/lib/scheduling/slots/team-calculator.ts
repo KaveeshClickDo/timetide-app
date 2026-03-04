@@ -11,49 +11,23 @@ import { addDays, format, parseISO } from 'date-fns';
 import prisma from '@/lib/prisma';
 import {
   SlotCalculator,
-  SlotCalculatorOptions,
-  CalculatedSlots,
-  TimeSlot,
-  BusyTime,
   mergeBusyTimes,
+} from './calculator';
+import type { TimeSlot } from './calculator';
+import type {
   AvailabilityWindow,
   DateOverride,
-} from './calculator';
-import { getAllBusyTimes } from '@/lib/calendar/google';
-import { getOutlookBusyTimes } from '@/lib/calendar/outlook';
+  BusyTime,
+  CalculatedSlots,
+  TeamMemberInfo,
+  TeamSlotWithAssignment,
+  TeamCalculatedSlots,
+  TeamSlotCalculatorResult,
+} from '@/types/slots';
+import { getAllBusyTimes } from '@/lib/integrations/calendar/google';
+import { getOutlookBusyTimes } from '@/lib/integrations/calendar/outlook';
 
-// ============================================================================
-// TYPES
-// ============================================================================
-
-export interface TeamMemberInfo {
-  id: string;
-  userId: string;
-  userName: string;
-  userImage: string | null;
-  timezone: string;
-  priority: number;
-  isActive: boolean;
-}
-
-export interface TeamSlotWithAssignment {
-  start: Date;
-  end: Date;
-  assignedMemberId?: string;
-  assignedMemberName?: string;
-  availableMembers?: TeamMemberInfo[]; // For MANAGED type
-}
-
-export interface TeamCalculatedSlots {
-  [date: string]: TeamSlotWithAssignment[];
-}
-
-export interface TeamSlotCalculatorResult {
-  slots: TeamCalculatedSlots;
-  schedulingType: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED';
-  members: TeamMemberInfo[];
-  lastAssignedMemberId?: string;
-}
+export type { TeamMemberInfo, TeamSlotWithAssignment, TeamCalculatedSlots, TeamSlotCalculatorResult } from '@/types/slots';
 
 interface MemberAvailabilityData {
   member: TeamMemberInfo;

@@ -20,64 +20,21 @@ import {
   getDay,
 } from 'date-fns';
 import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz';
+import type {
+  SlotTimeSlot,
+  AvailabilityWindow,
+  DateOverride,
+  BusyTime,
+  SlotCalculatorOptions,
+  CalculatedSlots,
+  TeamMemberAvailability,
+} from '@/types/slots';
 
-// ============================================================================
-// TYPES
-// ============================================================================
+// Re-export types for backward compatibility (consumers import from calculator.ts)
+export type { AvailabilityWindow, DateOverride, BusyTime, SlotCalculatorOptions, CalculatedSlots, TeamMemberAvailability } from '@/types/slots';
 
-export interface TimeSlot {
-  start: Date;
-  end: Date;
-}
-
-export interface AvailabilityWindow {
-  dayOfWeek: number; // 0 = Sunday, 6 = Saturday
-  startTime: string; // HH:mm
-  endTime: string;   // HH:mm
-}
-
-export interface DateOverride {
-  date: Date;
-  isWorking: boolean;
-  startTime?: string; // HH:mm
-  endTime?: string;   // HH:mm
-}
-
-export interface BusyTime {
-  start: Date;
-  end: Date;
-}
-
-export interface SlotCalculatorOptions {
-  // Event type settings
-  duration: number;         // Slot duration in minutes
-  bufferBefore: number;     // Buffer before slot in minutes
-  bufferAfter: number;      // Buffer after slot in minutes
-  slotInterval?: number;    // Custom interval between slot starts
-
-  // Booking window
-  minimumNotice: number;    // Minutes from now before first bookable slot
-  maxDaysInAdvance: number; // How far in future slots are available
-
-  // Timezone settings
-  hostTimezone: string;     // Host's timezone (availability is defined in this TZ)
-  inviteeTimezone: string;  // Invitee's timezone (slots returned in this TZ)
-
-  // Availability
-  availability: AvailabilityWindow[];
-  dateOverrides: DateOverride[];
-
-  // Busy times (from calendars + existing bookings)
-  busyTimes: BusyTime[];
-
-  // Optional constraints
-  maxBookingsPerDay?: number;
-  existingBookingsPerDay?: Map<string, number>; // YYYY-MM-DD -> count
-}
-
-export interface CalculatedSlots {
-  [date: string]: TimeSlot[]; // YYYY-MM-DD -> slots
-}
+/** TimeSlot used by slot calculator (start/end Dates) */
+export type TimeSlot = SlotTimeSlot;
 
 // ============================================================================
 // SAFETY CONSTANTS - Prevent infinite loops and memory issues
@@ -444,12 +401,6 @@ export function getNextAvailableSlot(
 // ============================================================================
 // TEAM SCHEDULING
 // ============================================================================
-
-export interface TeamMemberAvailability {
-  memberId: string;
-  memberName: string;
-  slots: CalculatedSlots;
-}
 
 /**
  * Calculate round-robin slot assignment

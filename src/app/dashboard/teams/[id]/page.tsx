@@ -63,49 +63,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
-
-interface TeamMember {
-  id: string;
-  role: 'OWNER' | 'ADMIN' | 'MEMBER';
-  isActive: boolean;
-  priority: number;
-  user: {
-    id: string;
-    name: string | null;
-    email: string;
-    image: string | null;
-  };
-  _count?: {
-    assignments: number;
-  };
-}
-
-interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  logo: string | null;
-  members: TeamMember[];
-  _count: {
-    eventTypes: number;
-  };
-}
-
-interface AuditLogEntry {
-  id: string;
-  action: string;
-  targetType: string | null;
-  targetId: string | null;
-  changes: Record<string, unknown> | null;
-  createdAt: string;
-  user: {
-    id: string;
-    name: string | null;
-    email: string;
-    image: string | null;
-  };
-}
+import type { TeamDetail, TeamMemberDetail, AuditLogEntry, TeamInvitation } from '@/types/team';
 
 const auditActionLabels: Record<string, string> = {
   'team.updated': 'Updated team settings',
@@ -137,16 +95,6 @@ const roleIcons = {
   MEMBER: User,
 };
 
-interface TeamInvitation {
-  id: string;
-  email: string;
-  role: 'OWNER' | 'ADMIN' | 'MEMBER';
-  status: string;
-  expiresAt: string;
-  createdAt: string;
-  inviter: { id: string; name: string | null; email: string } | null;
-}
-
 export default function TeamDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -169,7 +117,7 @@ export default function TeamDetailPage() {
   });
 
   // Fetch team details
-  const { data, isLoading, error } = useQuery<{ team: Team; currentUserRole: string }>({
+  const { data, isLoading, error } = useQuery<{ team: TeamDetail; currentUserRole: string }>({
     queryKey: ['team', teamId],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${teamId}`);
@@ -179,7 +127,7 @@ export default function TeamDetailPage() {
   });
 
   // Fetch team members with details
-  const { data: membersData } = useQuery<{ members: TeamMember[] }>({
+  const { data: membersData } = useQuery<{ members: TeamMemberDetail[] }>({
     queryKey: ['team-members', teamId],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${teamId}/members`);

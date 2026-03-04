@@ -658,17 +658,17 @@ Generated to `src/generated/prisma/` (configured in `prisma.config.ts`). Path al
 | Auth config | `src/lib/auth.ts` |
 | Route protection | `src/middleware.ts` |
 | Database schema | `prisma/schema.prisma` |
-| Slot calculation | `src/lib/slots/calculator.ts` |
-| Team slot calculation | `src/lib/slots/team-calculator.ts` |
+| Slot calculation | `src/lib/scheduling/slots/calculator.ts` |
+| Team slot calculation | `src/lib/scheduling/slots/team-calculator.ts` |
 | Validation schemas | `src/lib/validation/schemas.ts` |
 | Plan limits | `src/lib/pricing.ts` |
 | Plan enforcement | `src/lib/plan-enforcement.ts` |
-| Google Calendar | `src/lib/calendar/google.ts` |
-| Outlook Calendar | `src/lib/calendar/outlook.ts` |
-| Zoom integration | `src/lib/zoom/index.ts` |
-| Email client | `src/lib/email/client.ts` |
-| Queue system | `src/lib/queue/index.ts` |
-| Recurring utils | `src/lib/recurring/utils.ts` |
+| Google Calendar | `src/lib/integrations/calendar/google.ts` |
+| Outlook Calendar | `src/lib/integrations/calendar/outlook.ts` |
+| Zoom integration | `src/lib/integrations/zoom/index.ts` |
+| Email client | `src/lib/integrations/email/client.ts` |
+| Queue system | `src/lib/infrastructure/queue/index.ts` |
+| Recurring utils | `src/lib/scheduling/recurring/utils.ts` |
 | Notifications | `src/lib/notifications.ts` |
 
 ---

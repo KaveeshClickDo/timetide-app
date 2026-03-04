@@ -27,33 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn, getInitials, formatTime, formatDuration } from '@/lib/utils'
 import { UpgradeBanner } from '@/components/upgrade-banner'
-
-interface Booking {
-  id: string
-  uid: string
-  startTime: string
-  endTime: string
-  timezone: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED' | 'REJECTED' | 'SKIPPED'
-  meetingUrl?: string
-  location?: string
-  inviteeName: string
-  inviteeEmail: string
-  recurringGroupId?: string | null
-  recurringIndex?: number | null
-  recurringCount?: number | null
-  eventType: {
-    id: string
-    title: string
-    length: number
-    locationType: string
-    schedulingType?: string | null
-    team?: {
-      id: string
-      name: string
-    } | null
-  }
-}
+import type { BookingListItem } from '@/types/booking'
 
 const statusConfig = {
   PENDING: {
@@ -112,7 +86,7 @@ export default function DashboardPage() {
   const hostTimezone = session?.user?.timezone || 'UTC'
 
   // Fetch ALL bookings for stats cards (no filter)
-  const { data: allBookings } = useQuery<Booking[]>({
+  const { data: allBookings } = useQuery<BookingListItem[]>({
     queryKey: ['bookings', 'all'],
     queryFn: async () => {
       const res = await fetch('/api/bookings')
@@ -123,7 +97,7 @@ export default function DashboardPage() {
   })
 
   // Fetch filtered bookings for the current tab
-  const { data: bookings, isLoading } = useQuery<Booking[]>({
+  const { data: bookings, isLoading } = useQuery<BookingListItem[]>({
     queryKey: ['bookings', filter],
     queryFn: async () => {
       const params = new URLSearchParams()
@@ -152,7 +126,7 @@ export default function DashboardPage() {
     }
     groups[dateLabel].push(booking)
     return groups
-  }, {} as Record<string, Booking[]>)
+  }, {} as Record<string, BookingListItem[]>)
 
   // Calculate stats from ALL bookings
   const upcomingCount = allBookings?.filter(

@@ -23,20 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
-
-interface AvailabilitySlot {
-  id?: string
-  dayOfWeek: number
-  startTime: string
-  endTime: string
-}
-
-interface Schedule {
-  id: string
-  name: string
-  isDefault: boolean
-  slots: AvailabilitySlot[]
-}
+import type { AvailabilitySlot, Schedule } from '@/types/availability'
 
 const DAYS = [
   { value: 0, label: 'Sunday', short: 'Sun' },

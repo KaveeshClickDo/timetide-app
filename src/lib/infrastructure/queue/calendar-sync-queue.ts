@@ -5,27 +5,15 @@
 
 import { Queue, Worker, Job } from 'bullmq';
 import { redis, isRedisAvailable } from './redis';
-import prisma from '../prisma';
-import { refreshAccessToken, getGoogleBusyTimes } from '../calendar/google';
-import { refreshOutlookAccessToken, getOutlookBusyTimes } from '../calendar/outlook';
+import prisma from '../../prisma';
+import { refreshAccessToken, getGoogleBusyTimes } from '@/lib/integrations/calendar/google';
+import { refreshOutlookAccessToken, getOutlookBusyTimes } from '@/lib/integrations/calendar/outlook';
 import { addHours, addMinutes, subHours, isAfter, isBefore } from 'date-fns';
+import type { CalendarSyncJobType, CalendarSyncJobData } from '@/types/queue';
+import type { ConflictResult } from '@/types/calendar';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export type CalendarSyncJobType =
-  | 'sync_calendar'
-  | 'refresh_tokens'
-  | 'verify_health'
-  | 'sync_all_calendars';
-
-export interface CalendarSyncJobData {
-  type: CalendarSyncJobType;
-  calendarId?: string;
-  userId?: string;
-  forceFullSync?: boolean;
-}
+export type { CalendarSyncJobType, CalendarSyncJobData } from '@/types/queue';
+export type { ConflictResult } from '@/types/calendar';
 
 interface SyncedEvent {
   externalEventId: string;
@@ -472,16 +460,6 @@ export async function triggerCalendarSync(calendarId: string, forceFullSync: boo
 // ============================================================================
 // Conflict Detection
 // ============================================================================
-
-export interface ConflictResult {
-  hasConflict: boolean;
-  conflictingEvents: Array<{
-    title: string | null;
-    startTime: Date;
-    endTime: Date;
-    source: 'external' | 'booking';
-  }>;
-}
 
 /**
  * Check for conflicts between a proposed time slot and synced calendar events

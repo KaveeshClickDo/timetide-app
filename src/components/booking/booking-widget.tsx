@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { format, addDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isBefore, startOfDay } from 'date-fns'
-import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/recurring/utils'
+import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/scheduling/recurring/utils'
 import { formatInTimeZone } from 'date-fns-tz'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -30,20 +30,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { cn, formatDuration, getInitials } from '@/lib/utils'
-
-interface TimeSlot {
-  time: string
-  start: Date
-  end: Date
-  formattedTime: string
-  seatsRemaining?: number
-}
-
-interface BookingWindow {
-  type: 'ROLLING' | 'RANGE' | 'UNLIMITED'
-  start: string
-  end: string | null
-}
+import type { TimeSlot, BookingWindow, BookingStep } from '@/types/booking'
+import type { Question } from '@/types/event-type'
 
 interface BookingWidgetProps {
   user: {
@@ -63,14 +51,7 @@ interface BookingWidgetProps {
     recurringMaxWeeks?: number
     recurringFrequency?: string
     recurringInterval?: number
-    questions: Array<{
-      id: string
-      type: string
-      label: string
-      required: boolean
-      placeholder?: string
-      options?: string[]
-    }>
+    questions: Question[]
   }
   isEmbed?: boolean
 }
@@ -92,8 +73,6 @@ const locationLabels = {
   IN_PERSON: 'In Person',
   CUSTOM: 'Custom Location',
 }
-
-type BookingStep = 'calendar' | 'time' | 'details' | 'confirmation'
 
 export default function BookingWidget({ user, eventType, isEmbed }: BookingWidgetProps) {
   const [step, setStep] = useState<BookingStep>('calendar')
@@ -734,7 +713,7 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
                               responses: { ...formData.responses, [question.id]: e.target.value },
                             })
                           }
-                          placeholder={question.placeholder}
+                          placeholder={question.placeholder ?? undefined}
                           required={question.required}
                         />
                       ) : question.type === 'TEXTAREA' ? (
@@ -748,7 +727,7 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
                               responses: { ...formData.responses, [question.id]: e.target.value },
                             })
                           }
-                          placeholder={question.placeholder}
+                          placeholder={question.placeholder ?? undefined}
                           required={question.required}
                         />
                       ) : question.type === 'SELECT' && question.options ? (

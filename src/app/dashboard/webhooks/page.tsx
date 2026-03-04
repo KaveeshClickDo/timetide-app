@@ -56,38 +56,7 @@ import { cn } from '@/lib/utils';
 import { useFeatureGate } from '@/hooks/use-feature-gate';
 import { FeatureGatePage } from '@/components/feature-gate-page';
 import { UpgradeModal } from '@/components/upgrade-modal';
-
-interface WebhookDelivery {
-  id: string;
-  eventType: string;
-  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'RETRYING';
-  attempts: number;
-  responseStatus: number | null;
-  responseTimeMs: number | null;
-  errorMessage: string | null;
-  deliveredAt: string | null;
-  createdAt: string;
-}
-
-interface WebhookData {
-  id: string;
-  name: string | null;
-  url: string;
-  secret?: string;
-  eventTriggers: string[];
-  isActive: boolean;
-  failureCount: number;
-  lastTriggeredAt: string | null;
-  lastSuccessAt: string | null;
-  lastFailureAt: string | null;
-  lastErrorMessage: string | null;
-  createdAt: string;
-  totalDeliveries: number;
-  recentStats: {
-    success: number;
-    failed: number;
-  };
-}
+import type { WebhookDelivery, WebhookData } from '@/types/webhook';
 
 const EVENT_OPTIONS = [
   { value: 'booking.created', label: 'Booking Created', description: 'When a new booking is made' },

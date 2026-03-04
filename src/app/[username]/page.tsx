@@ -8,23 +8,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Clock, Video, MapPin, Phone, Globe, ChevronRight } from 'lucide-react'
 import { getInitials, formatDuration } from '@/lib/utils'
-
-interface User {
-  id: string
-  name: string | null
-  username: string
-  image: string | null
-  bio: string | null
-}
-
-interface EventType {
-  id: string
-  title: string
-  slug: string
-  description: string | null
-  length: number
-  locationType: string
-}
+import type { UserProfile } from '@/types/user'
+import type { EventTypeSummary } from '@/types/event-type'
 
 const locationIcons: Record<string, typeof Video> = {
   GOOGLE_MEET: Video,
@@ -49,7 +34,7 @@ export default function UserProfilePage() {
   const username = params?.username as string
 
   // Fetch user data
-  const { data: userData, isLoading: userLoading, error: userError } = useQuery<{ user: User }>({
+  const { data: userData, isLoading: userLoading, error: userError } = useQuery<{ user: UserProfile }>({
     queryKey: ['user', username],
     queryFn: async () => {
       const res = await fetch(`/api/users/${username}`)
@@ -62,7 +47,7 @@ export default function UserProfilePage() {
   })
 
   // Fetch event types
-  const { data: eventTypesData, isLoading: eventsLoading } = useQuery<{ eventTypes: EventType[] }>({
+  const { data: eventTypesData, isLoading: eventsLoading } = useQuery<{ eventTypes: EventTypeSummary[] }>({
     queryKey: ['user-event-types', username],
     queryFn: async () => {
       const res = await fetch(`/api/users/${username}/event-types`)

@@ -3,9 +3,9 @@
  * Handles OAuth, fetching busy times, and creating calendar events using Microsoft Graph API
  */
 
-import prisma from '../prisma'
-import { BusyTime } from '../slots/calculator'
-import { CreateCalendarEventParams, CreateCalendarEventResult } from './google'
+import prisma from '../../prisma'
+import type { BusyTime } from '@/types/slots'
+import type { CreateCalendarEventParams, CreateCalendarEventResult, MicrosoftTokenResponse, MicrosoftUserResponse, MicrosoftCalendarResponse, MicrosoftEventRequest, MicrosoftEventResponse } from '@/types/calendar'
 
 // Microsoft Graph API base URL
 const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0'
@@ -55,13 +55,6 @@ export function getOutlookAuthUrl(userId: string, returnTo?: string): string {
 // ============================================================================
 // TOKEN MANAGEMENT
 // ============================================================================
-
-interface MicrosoftTokenResponse {
-  access_token: string
-  refresh_token?: string
-  expires_in: number
-  token_type: string
-}
 
 export async function exchangeCodeForTokens(code: string): Promise<MicrosoftTokenResponse> {
   const { clientId, clientSecret, redirectUri } = getMicrosoftOAuthConfig()
@@ -173,21 +166,6 @@ async function getAuthenticatedHeaders(calendarId: string): Promise<HeadersInit>
 // CALENDAR CONNECTION
 // ============================================================================
 
-interface MicrosoftUserResponse {
-  id: string
-  displayName: string
-  mail: string
-  userPrincipalName: string
-}
-
-interface MicrosoftCalendarResponse {
-  id: string
-  name: string
-  color: string
-  isDefaultCalendar: boolean
-  allowedOnlineMeetingProviders?: string[]
-}
-
 export async function connectOutlookCalendar(userId: string, code: string) {
   // Exchange code for tokens
   const tokens = await exchangeCodeForTokens(code)
@@ -297,19 +275,6 @@ export async function connectOutlookCalendar(userId: string, code: string) {
 // BUSY TIMES
 // ============================================================================
 
-interface MicrosoftScheduleItem {
-  status: string
-  start: { dateTime: string; timeZone: string }
-  end: { dateTime: string; timeZone: string }
-}
-
-interface MicrosoftScheduleResponse {
-  value: Array<{
-    scheduleId: string
-    scheduleItems: MicrosoftScheduleItem[]
-  }>
-}
-
 export async function getOutlookBusyTimes(
   calendarId: string,
   timeMin: Date,
@@ -363,42 +328,6 @@ export async function getOutlookBusyTimes(
 // ============================================================================
 // EVENT CREATION
 // ============================================================================
-
-interface MicrosoftEventRequest {
-  subject: string
-  body?: {
-    contentType: string
-    content: string
-  }
-  start: {
-    dateTime: string
-    timeZone: string
-  }
-  end: {
-    dateTime: string
-    timeZone: string
-  }
-  location?: {
-    displayName: string
-  }
-  attendees?: Array<{
-    emailAddress: {
-      address: string
-      name?: string
-    }
-    type: string
-  }>
-  isOnlineMeeting?: boolean
-  onlineMeetingProvider?: string
-}
-
-interface MicrosoftEventResponse {
-  id: string
-  webLink: string
-  onlineMeeting?: {
-    joinUrl: string
-  }
-}
 
 export async function createOutlookCalendarEvent(
   params: CreateCalendarEventParams

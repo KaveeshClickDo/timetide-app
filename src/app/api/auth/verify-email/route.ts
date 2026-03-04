@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendWelcomeEmail } from '@/lib/email/client';
+import { sendWelcomeEmail } from '@/lib/integrations/email/client';
 import { z } from 'zod';
 
 const verifyEmailSchema = z.object({

@@ -1,22 +1,7 @@
 import prisma from '@/lib/prisma';
+import type { NotificationType, CreateNotificationParams } from '@/types/notification';
 
-export type NotificationType =
-  | 'BOOKING_CREATED'
-  | 'BOOKING_CONFIRMED'
-  | 'BOOKING_REJECTED'
-  | 'BOOKING_CANCELLED'
-  | 'BOOKING_RESCHEDULED'
-  | 'BOOKING_REMINDER'
-  | 'TEAM_MEMBER_ADDED'
-  | 'TEAM_INVITATION_RECEIVED';
-
-interface CreateNotificationParams {
-  userId: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  bookingId?: string;
-}
+export type { NotificationType };
 
 export async function createNotification(params: CreateNotificationParams): Promise<void> {
   await prisma.notification.create({

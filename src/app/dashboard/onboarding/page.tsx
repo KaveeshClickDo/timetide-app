@@ -62,27 +62,8 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   }
 })
 
-interface EventType {
-  id: string
-  title: string
-  slug: string
-  length: number
-  isActive: boolean
-}
-
-interface AvailabilitySlot {
-  id?: string
-  dayOfWeek: number
-  startTime: string
-  endTime: string
-}
-
-interface Schedule {
-  id: string
-  name: string
-  isDefault: boolean
-  slots: AvailabilitySlot[]
-}
+import type { EventTypeOnboarding } from '@/types/event-type'
+import type { AvailabilitySlot, Schedule } from '@/types/availability'
 
 export default function OnboardingPage() {
   return (
@@ -185,7 +166,7 @@ function OnboardingContent() {
   }, [userData, router])
 
   // Fetch event types
-  const { data: eventTypes = [] } = useQuery<EventType[]>({
+  const { data: eventTypes = [] } = useQuery<EventTypeOnboarding[]>({
     queryKey: ['eventTypes'],
     queryFn: async () => {
       const res = await fetch('/api/event-types')

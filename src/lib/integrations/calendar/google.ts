@@ -4,9 +4,12 @@
  */
 
 import { google, calendar_v3 } from 'googleapis';
-import prisma from '../prisma';
-import { BusyTime } from '../slots/calculator';
+import prisma from '../../prisma';
+import type { BusyTime } from '@/types/slots';
+import type { CreateCalendarEventParams, CreateCalendarEventResult } from '@/types/calendar';
 import { getOutlookBusyTimes } from './outlook';
+
+export type { CreateCalendarEventParams, CreateCalendarEventResult } from '@/types/calendar';
 
 // ============================================================================
 // OAUTH CLIENT
@@ -296,22 +299,6 @@ export async function getAllBusyTimes(
 // ============================================================================
 // EVENT CREATION
 // ============================================================================
-
-export interface CreateCalendarEventParams {
-  calendarId: string;
-  summary: string;
-  description?: string;
-  startTime: Date;
-  endTime: Date;
-  attendees: Array<{ email: string; name?: string }>;
-  location?: string;
-  conferenceData?: boolean; // Auto-create Google Meet link
-}
-
-export interface CreateCalendarEventResult {
-  eventId: string | null;
-  meetLink: string | null;
-}
 
 export async function createGoogleCalendarEvent(
   params: CreateCalendarEventParams

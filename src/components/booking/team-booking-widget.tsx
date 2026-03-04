@@ -37,28 +37,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, formatDuration, getInitials } from '@/lib/utils';
-
-interface TimeSlot {
-  time: string;
-  start: Date;
-  end: Date;
-  formattedTime: string;
-  assignedMemberId?: string;
-}
-
-interface BookingWindow {
-  type: 'ROLLING' | 'RANGE' | 'UNLIMITED';
-  start: string;
-  end: string | null;
-}
-
-interface TeamMember {
-  id: string;
-  name: string | null;
-  image: string | null;
-  timezone: string;
-  priority: number;
-}
+import type { TimeSlot, BookingWindow, BookingStep, SchedulingType } from '@/types/booking';
+import type { TeamMemberBooking } from '@/types/team';
+import type { Question } from '@/types/event-type';
 
 interface TeamBookingWidgetProps {
   team: {
@@ -74,17 +55,10 @@ interface TeamBookingWidgetProps {
     description: string | null;
     length: number;
     locationType: string;
-    schedulingType: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED' | null;
-    questions: Array<{
-      id: string;
-      type: string;
-      label: string;
-      required: boolean;
-      placeholder?: string;
-      options?: string[];
-    }>;
+    schedulingType: SchedulingType | null;
+    questions: Question[];
   };
-  members: TeamMember[];
+  members: TeamMemberBooking[];
   defaultTimezone: string;
   isEmbed?: boolean;
 }
@@ -112,8 +86,6 @@ const schedulingTypeLabels = {
   COLLECTIVE: 'Collective',
   MANAGED: 'Managed',
 };
-
-type BookingStep = 'calendar' | 'time' | 'details' | 'confirmation';
 
 export default function TeamBookingWidget({
   team,
@@ -709,7 +681,7 @@ export default function TeamBookingWidget({
                               },
                             })
                           }
-                          placeholder={question.placeholder}
+                          placeholder={question.placeholder ?? undefined}
                           required={question.required}
                         />
                       ) : question.type === 'TEXTAREA' ? (
@@ -726,7 +698,7 @@ export default function TeamBookingWidget({
                               },
                             })
                           }
-                          placeholder={question.placeholder}
+                          placeholder={question.placeholder ?? undefined}
                           required={question.required}
                         />
                       ) : question.type === 'SELECT' && question.options ? (

@@ -11,7 +11,7 @@
  * Usage:
  *   In your app initialization (e.g., instrumentation.ts or a custom server):
  *
- *   import { initWorkers } from '@/lib/queue/worker';
+ *   import { initWorkers } from '@/lib/infrastructure/queue/worker';
  *   await initWorkers();
  *
  * For Next.js, you can use the instrumentation.ts file:
@@ -19,7 +19,7 @@
  *   // instrumentation.ts
  *   export async function register() {
  *     if (process.env.NEXT_RUNTIME === 'nodejs') {
- *       const { initWorkers } = await import('@/lib/queue/worker');
+ *       const { initWorkers } = await import('@/lib/infrastructure/queue/worker');
  *       await initWorkers();
  *     }
  *   }

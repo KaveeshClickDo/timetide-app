@@ -11,9 +11,9 @@ import {
   SlotCalculator,
   mergeBusyTimes,
   CalculatedSlots,
-} from '@/lib/slots/calculator';
-import { getAllBusyTimes } from '@/lib/calendar/google';
-import { checkSlotsRateLimit } from '@/lib/queue';
+} from '@/lib/scheduling/slots/calculator';
+import { getAllBusyTimes } from '@/lib/integrations/calendar/google';
+import { checkSlotsRateLimit } from '@/lib/infrastructure/queue';
 
 export async function GET(request: NextRequest) {
   try {

@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { connectZoomAccount } from '@/lib/zoom';
+import { connectZoomAccount } from '@/lib/integrations/zoom';
 import { decodeOAuthState, buildRedirectUrl } from '@/lib/oauth-state';
 
 export async function GET(request: NextRequest) {

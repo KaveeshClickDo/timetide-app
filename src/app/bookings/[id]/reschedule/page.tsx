@@ -35,13 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { cn, formatDuration, getInitials } from '@/lib/utils'
-
-interface TimeSlot {
-  time: string
-  start: Date
-  end: Date
-  formattedTime: string
-}
+import type { TimeSlot } from '@/types/booking'
 
 const locationIcons = {
   GOOGLE_MEET: Video,

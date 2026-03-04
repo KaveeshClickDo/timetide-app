@@ -7,67 +7,11 @@
 
 import { Queue, Worker, Job } from 'bullmq';
 import { redis, isRedisAvailable } from './redis';
-import prisma from '../prisma';
+import prisma from '../../prisma';
 import crypto from 'crypto';
+import type { WebhookEventType, WebhookPayload, WebhookJobData } from '@/types/queue';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export type WebhookEventType =
-  | 'booking.created'
-  | 'booking.cancelled'
-  | 'booking.rescheduled'
-  | 'booking.confirmed'
-  | 'booking.rejected';
-
-export interface WebhookPayload {
-  event: WebhookEventType;
-  createdAt: string;
-  data: {
-    booking?: {
-      id: string;
-      uid: string;
-      status: string;
-      startTime: string;
-      endTime: string;
-      timezone: string;
-      location?: string | null;
-      meetingUrl?: string | null;
-      invitee: {
-        name: string;
-        email: string;
-        phone?: string | null;
-        notes?: string | null;
-      };
-      eventType: {
-        id: string;
-        title: string;
-        slug: string;
-        length: number;
-      };
-      host: {
-        id: string;
-        name: string | null;
-        email: string;
-      };
-      responses?: Record<string, unknown>;
-    };
-    previousStartTime?: string;
-    previousEndTime?: string;
-    cancellationReason?: string;
-    rejectionReason?: string;
-  };
-}
-
-export interface WebhookJobData {
-  webhookId: string;
-  deliveryId: string;
-  url: string;
-  secret?: string | null;
-  payload: WebhookPayload;
-  attempt: number;
-}
+export type { WebhookEventType, WebhookPayload, WebhookJobData } from '@/types/queue';
 
 // ============================================================================
 // Queue Configuration

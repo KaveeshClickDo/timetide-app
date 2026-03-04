@@ -46,78 +46,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
 import { AddToCalendar } from '@/components/add-to-calendar'
-
-interface TeamMember {
-  id: string
-  userId: string
-  name: string | null
-  email: string
-  image: string | null
-  timezone: string
-  priority: number
-}
-
-interface BookingDetails {
-  id: string
-  uid: string
-  startTime: string
-  endTime: string
-  timezone: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED' | 'SKIPPED'
-  inviteeName: string
-  inviteeEmail: string
-  inviteePhone?: string
-  inviteeNotes?: string
-  location?: string
-  meetingUrl?: string
-  responses?: Record<string, any>
-  cancellationReason?: string
-  cancelledAt?: string
-  createdAt: string
-  recurringGroupId?: string
-  recurringIndex?: number
-  recurringCount?: number
-  recurringBookings?: Array<{
-    id: string
-    uid: string
-    startTime: string
-    endTime: string
-    status: string
-    recurringIndex: number | null
-  }>
-  assignedUserId?: string
-  assignedUser?: {
-    id: string
-    name: string | null
-    email: string
-    image: string | null
-  }
-  eventType: {
-    id: string
-    title: string
-    description?: string
-    length: number
-    locationType: string
-    locationValue?: string
-    schedulingType?: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED'
-    teamId?: string
-    questions?: Array<{
-      id: string
-      type: string
-      label: string
-      required: boolean
-      placeholder?: string
-      options?: string[]
-    }>
-  }
-  host: {
-    id: string
-    name: string
-    email: string
-    image?: string
-    timezone: string
-  }
-}
+import type { BookingDetails } from '@/types/booking'
+import type { TeamMemberFlat } from '@/types/team'
 
 const statusConfig = {
   PENDING: {
@@ -330,7 +260,7 @@ export default function BookingDetailPage() {
     queryFn: async () => {
       const res = await fetch(`/api/bookings/${params.id}/assign`)
       if (!res.ok) return null
-      return res.json() as Promise<{ availableMembers: TeamMember[] }>
+      return res.json() as Promise<{ availableMembers: TeamMemberFlat[] }>
     },
     enabled: bookingData?.eventType?.schedulingType === 'MANAGED',
   })

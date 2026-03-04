@@ -9,10 +9,6 @@ import { Queue, Worker, Job } from 'bullmq';
 import { redis, isRedisAvailable } from './redis';
 import {
   sendEmail,
-  EmailOptions,
-  BookingEmailData,
-  RecurringBookingEmailData,
-  TeamEmailData,
   generateBookingConfirmedEmail,
   generateBookingCancelledEmail,
   generateBookingPendingEmail,
@@ -24,40 +20,11 @@ import {
   generateBulkConfirmedByHostEmail,
   generateTeamMemberAddedEmail,
   generateTeamInvitationEmail,
-} from '../email/client';
+} from '@/lib/integrations/email/client';
+import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
+import type { EmailJobType, EmailJobData } from '@/types/queue';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export type EmailJobType =
-  | 'booking_confirmed'
-  | 'booking_cancelled'
-  | 'booking_pending'
-  | 'booking_confirmed_by_host'
-  | 'booking_rejected'
-  | 'booking_reminder'
-  | 'booking_rescheduled'
-  | 'recurring_booking_confirmed'
-  | 'bulk_confirmed_by_host'
-  | 'team_member_added'
-  | 'team_invitation'
-  | 'custom';
-
-export interface EmailJobData {
-  type: EmailJobType;
-  to: string;
-  subject: string;
-  bookingData?: BookingEmailData;
-  recurringBookingData?: RecurringBookingEmailData;
-  teamData?: TeamEmailData & { expiresIn?: string; acceptUrl?: string };
-  isHost?: boolean;
-  reason?: string;
-  hoursUntil?: number;
-  customHtml?: string;
-  replyTo?: string;
-  oldTime?: { start: string; end: string };
-}
+export type { EmailJobType, EmailJobData } from '@/types/queue';
 
 // ============================================================================
 // Queue Configuration

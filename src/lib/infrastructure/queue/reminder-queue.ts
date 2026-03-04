@@ -10,18 +10,11 @@ import { addHours, subHours, format } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import { redis, isRedisAvailable } from './redis';
 import { queueReminderEmail } from './email-queue';
-import prisma from '../prisma';
-import { BookingEmailData } from '../email/client';
+import prisma from '../../prisma';
+import type { BookingEmailData } from '@/types/email';
+import type { ReminderJobData } from '@/types/queue';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface ReminderJobData {
-  bookingId: string;
-  bookingUid: string;
-  hoursUntil: number; // 24 or 1
-}
+export type { ReminderJobData } from '@/types/queue';
 
 // ============================================================================
 // Queue Configuration

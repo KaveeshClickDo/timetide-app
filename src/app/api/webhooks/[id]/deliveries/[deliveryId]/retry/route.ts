@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { retryWebhookDelivery } from '@/lib/queue';
+import { retryWebhookDelivery } from '@/lib/infrastructure/queue';
 
 /**
  * POST /api/webhooks/[id]/deliveries/[deliveryId]/retry

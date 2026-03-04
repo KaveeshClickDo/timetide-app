@@ -16,37 +16,23 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { getInitials } from '@/lib/utils';
+import type { TeamMemberPublic, TeamPublic } from '@/types/team';
+import type { SchedulingType } from '@/types/booking';
 
-interface TeamMember {
-  id: string;
-  name: string | null;
-  image: string | null;
-}
-
-interface EventType {
+interface TeamPageEventType {
   id: string;
   title: string;
   slug: string;
   description: string | null;
   length: number;
   locationType: string;
-  schedulingType: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED' | null;
-  assignedMembers: TeamMember[];
-}
-
-interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  logo: string | null;
-  memberCount: number;
-  members: TeamMember[];
+  schedulingType: SchedulingType | null;
+  assignedMembers: TeamMemberPublic[];
 }
 
 interface TeamData {
-  team: Team;
-  eventTypes: EventType[];
+  team: TeamPublic & { members: TeamMemberPublic[]; memberCount: number };
+  eventTypes: TeamPageEventType[];
 }
 
 const LOCATION_ICONS: Record<string, any> = {

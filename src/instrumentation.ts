@@ -11,7 +11,7 @@ export async function register() {
   // Only run on Node.js runtime (not Edge)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     try {
-      const { initWorkers } = await import('@/lib/queue/worker');
+      const { initWorkers } = await import('@/lib/infrastructure/queue/worker');
       await initWorkers();
     } catch (error) {
       // Log but don't crash - the app can still work without workers

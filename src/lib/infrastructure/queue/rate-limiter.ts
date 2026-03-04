@@ -6,29 +6,12 @@
  */
 
 import { redis, isRedisAvailable } from './redis';
+import type { RateLimitConfig, RateLimitResult } from '@/types/queue';
+
+export type { RateLimitConfig, RateLimitResult } from '@/types/queue';
 
 // In-memory fallback for when Redis is unavailable
 const memoryStore = new Map<string, { count: number; resetAt: number }>();
-
-export interface RateLimitConfig {
-  /** Maximum number of requests allowed in the window */
-  limit: number;
-  /** Time window in seconds */
-  windowSeconds: number;
-  /** Prefix for Redis keys */
-  prefix?: string;
-}
-
-export interface RateLimitResult {
-  /** Whether the request is allowed */
-  allowed: boolean;
-  /** Number of remaining requests in the current window */
-  remaining: number;
-  /** Unix timestamp when the rate limit resets */
-  resetAt: number;
-  /** Total limit for the window */
-  limit: number;
-}
 
 /**
  * Check rate limit for a given identifier

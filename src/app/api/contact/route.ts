@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { sendEmail } from '@/lib/email/client'
+import { sendEmail } from '@/lib/integrations/email/client'
 
 const contactSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

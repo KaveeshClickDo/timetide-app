@@ -1,14 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { Prisma } from '@/generated/prisma/client';
+import type { LogTeamActionParams } from '@/types/team';
 
-export interface LogTeamActionParams {
-  teamId: string;
-  userId: string;
-  action: string;
-  targetType?: string;
-  targetId?: string;
-  changes?: Record<string, unknown>;
-}
+export type { LogTeamActionParams } from '@/types/team';
 
 export async function logTeamAction(params: LogTeamActionParams): Promise<void> {
   try {

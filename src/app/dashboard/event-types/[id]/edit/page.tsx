@@ -46,6 +46,7 @@ import { cn } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { ProBadge } from '@/components/pro-badge'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
+import type { Question, QuestionInput } from '@/types/event-type'
 
 interface PageProps {
   params: { id: string }
@@ -76,15 +77,6 @@ const QUESTION_TYPES = [
   { value: 'PHONE', label: 'Phone Number' },
   { value: 'SELECT', label: 'Dropdown' },
 ]
-
-interface Question {
-  id?: string
-  type: string
-  label: string
-  required: boolean
-  placeholder?: string
-  options?: string[]
-}
 
 function LocationIntegrationWarning({ locationType, googleCalendar, outlookCalendar, teamsCapable, zoomConnected }: {
   locationType: string
@@ -194,7 +186,7 @@ export default function EditEventTypePage({ params }: PageProps) {
     recurringInterval: 7,
   })
 
-  const [questions, setQuestions] = useState<Question[]>([])
+  const [questions, setQuestions] = useState<(QuestionInput & { id?: string })[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
@@ -429,7 +421,7 @@ export default function EditEventTypePage({ params }: PageProps) {
     ])
   }
 
-  const updateQuestion = (index: number, updates: Partial<Question>) => {
+  const updateQuestion = (index: number, updates: Partial<QuestionInput & { id?: string }>) => {
     const updated = [...questions]
     updated[index] = { ...updated[index], ...updates }
     setQuestions(updated)

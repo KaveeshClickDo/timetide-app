@@ -10,8 +10,8 @@ import { formatInTimeZone } from 'date-fns-tz';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { cancelBookingSchema, confirmRejectBookingSchema } from '@/lib/validation/schemas';
-import { deleteGoogleCalendarEvent } from '@/lib/calendar/google';
-import { BookingEmailData, RecurringBookingEmailData } from '@/lib/email/client';
+import { deleteGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
+import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
 import {
   queueBookingCancellationEmails,
   queueBookingConfirmedByHostEmail,
@@ -22,9 +22,9 @@ import {
   triggerBookingConfirmedWebhook,
   triggerBookingRejectedWebhook,
   triggerBookingCancelledWebhook,
-} from '@/lib/queue';
+} from '@/lib/infrastructure/queue';
 import { createNotification, buildBookingNotification } from '@/lib/notifications';
-import { FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/recurring/utils';
+import { FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/scheduling/recurring/utils';
 
 interface RouteParams {
   params: { id: string };

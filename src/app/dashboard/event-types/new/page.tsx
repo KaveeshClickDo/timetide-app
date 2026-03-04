@@ -32,6 +32,7 @@ import { cn } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { ProBadge } from '@/components/pro-badge'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
+import type { QuestionInput } from '@/types/event-type'
 
 const LOCATION_TYPES = [
   { value: 'GOOGLE_MEET', label: 'Google Meet', icon: Video, description: 'Auto-generate meeting link' },
@@ -58,14 +59,6 @@ const QUESTION_TYPES = [
   { value: 'PHONE', label: 'Phone Number' },
   { value: 'SELECT', label: 'Dropdown' },
 ]
-
-interface Question {
-  type: string
-  label: string
-  required: boolean
-  placeholder?: string
-  options?: string[]
-}
 
 function GatedAddQuestion({ onAdd }: { onAdd: () => void }) {
   const { canAccess } = useFeatureGate('customQuestions')
@@ -407,7 +400,7 @@ export default function NewEventTypePage() {
     recurringInterval: 7,
   })
 
-  const [questions, setQuestions] = useState<Question[]>([])
+  const [questions, setQuestions] = useState<QuestionInput[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   const createMutation = useMutation({
@@ -500,7 +493,7 @@ export default function NewEventTypePage() {
     ])
   }
 
-  const updateQuestion = (index: number, updates: Partial<Question>) => {
+  const updateQuestion = (index: number, updates: Partial<QuestionInput>) => {
     const updated = [...questions]
     updated[index] = { ...updated[index], ...updates }
     setQuestions(updated)

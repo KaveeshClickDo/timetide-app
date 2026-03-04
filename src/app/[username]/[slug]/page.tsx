@@ -4,37 +4,8 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import BookingWidget from '@/components/booking/booking-widget'
 import Link from 'next/link'
-
-interface User {
-  id: string
-  name: string | null
-  username: string
-  image: string | null
-  timezone: string
-}
-
-interface Question {
-  id: string
-  type: string
-  label: string
-  required: boolean
-  placeholder: string | null
-  options: string[] | null
-}
-
-interface EventType {
-  id: string
-  title: string
-  description: string | null
-  length: number
-  locationType: string
-  seatsPerSlot?: number
-  allowsRecurring?: boolean
-  recurringMaxWeeks?: number
-  recurringFrequency?: string
-  recurringInterval?: number
-  questions?: Question[]
-}
+import type { UserProfile } from '@/types/user'
+import type { EventTypeDetail } from '@/types/event-type'
 
 export default function BookingPage() {
   const params = useParams()
@@ -44,7 +15,7 @@ export default function BookingPage() {
   const isEmbed = searchParams.get('embed') === 'true'
 
   // Fetch event type and user data
-  const { data, isLoading, error } = useQuery<{ user: User; eventType: EventType }>({
+  const { data, isLoading, error } = useQuery<{ user: UserProfile; eventType: EventTypeDetail }>({
     queryKey: ['public-event-type', username, slug],
     queryFn: async () => {
       const res = await fetch(`/api/public/event-types?username=${username}&slug=${slug}`)

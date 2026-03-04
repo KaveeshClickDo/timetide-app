@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { addTeamMemberSchema } from '@/lib/validation/schemas'
 import { createNotification, buildTeamNotification } from '@/lib/notifications'
-import { queueTeamMemberAddedEmail } from '@/lib/queue/email-queue'
+import { queueTeamMemberAddedEmail } from '@/lib/infrastructure/queue/email-queue'
 import { logTeamAction } from '@/lib/team-audit'
 
 interface RouteParams {

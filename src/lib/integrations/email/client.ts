@@ -4,6 +4,9 @@
  */
 
 import { Resend } from 'resend';
+import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
+
+export type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -18,13 +21,6 @@ function esc(str: string | null | undefined): string {
     .replace(/'/g, '&#39;');
 }
 
-export interface EmailOptions {
-  to: string | string[];
-  subject: string;
-  html: string;
-  text?: string;
-  replyTo?: string;
-}
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
@@ -54,24 +50,6 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
 // EMAIL TEMPLATES
 // ============================================================================
 
-export interface BookingEmailData {
-  hostName: string;
-  hostEmail: string;
-  hostUsername?: string;
-  inviteeName: string;
-  inviteeEmail: string;
-  eventTitle: string;
-  eventSlug?: string;
-  eventDescription?: string;
-  startTime: string; // Formatted string
-  endTime: string;
-  timezone: string;
-  location?: string;
-  meetingUrl?: string;
-  bookingUid: string;
-  notes?: string;
-  teamMembers?: Array<{ name: string; email: string }>; // For collective team events
-}
 
 const baseStyles = `
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -703,11 +681,6 @@ export function generateReminderEmail(
   `;
 }
 
-export interface RecurringBookingEmailData extends BookingEmailData {
-  recurringDates: Array<{ startTime: string; endTime: string }>;
-  totalOccurrences: number;
-  frequencyLabel?: string; // e.g. "every week", "every 2 weeks", "every month"
-}
 
 export function generateRecurringBookingConfirmedEmail(
   data: RecurringBookingEmailData,
@@ -1167,13 +1140,6 @@ export async function sendWelcomeEmail(
 // Team Emails
 // ============================================================================
 
-export interface TeamEmailData {
-  memberName: string;
-  teamName: string;
-  actorName: string;
-  role: string;
-  teamUrl: string;
-}
 
 export function generateTeamMemberAddedEmail(data: TeamEmailData): string {
   return `

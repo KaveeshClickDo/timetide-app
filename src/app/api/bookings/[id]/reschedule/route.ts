@@ -10,14 +10,14 @@ import { addMinutes } from 'date-fns';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { rescheduleBookingSchema } from '@/lib/validation/schemas';
-import { updateGoogleCalendarEvent } from '@/lib/calendar/google';
-import { updateOutlookCalendarEvent } from '@/lib/calendar/outlook';
-import { BookingEmailData } from '@/lib/email/client';
+import { updateGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
+import { updateOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
+import { BookingEmailData } from '@/lib/integrations/email/client';
 import {
   queueBookingRescheduledEmails,
   rescheduleBookingReminders,
   triggerBookingRescheduledWebhook,
-} from '@/lib/queue';
+} from '@/lib/infrastructure/queue';
 import { createNotification, buildBookingNotification } from '@/lib/notifications';
 
 interface RouteParams {

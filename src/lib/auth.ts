@@ -11,7 +11,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import prisma from './prisma';
 import { loginSchema } from './validation/schemas';
-import { sendWelcomeEmail } from './email/client';
+import { sendWelcomeEmail } from './integrations/email/client';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions['adapter'],

@@ -28,34 +28,7 @@ import {
 } from 'recharts'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { FeatureGatePage } from '@/components/feature-gate-page'
-
-interface AnalyticsData {
-  stats: {
-    totalBookings: number
-    thisMonthBookings: number
-    totalHours: number
-    uniqueGuests: number
-    cancellationRate: number
-  }
-  charts: {
-    bookingsOverTime: Array<{ date: string; label: string; bookings: number }>
-    popularEventTypes: Array<{ title: string; count: number }>
-    bookingTimes: Array<{ hour: number; label: string; bookings: number }>
-    statusDistribution: Array<{ status: string; count: number; color: string }>
-    leadTime: Array<{ label: string; bookings: number }>
-    dayOfWeek: Array<{ day: string; label: string; bookings: number }>
-    repeatGuests: Array<{ label: string; guests: number; color: string }>
-    topRepeatGuests: Array<{ name: string; email: string; bookings: number }>
-  }
-}
-
-type ChartKey = 'bookingsOverTime' | 'popularEventTypes' | 'bookingTimes' | 'statusDistribution' | 'leadTime' | 'dayOfWeek' | 'repeatGuests'
-
-interface ChartConfig {
-  key: ChartKey
-  title: string
-  description: string
-}
+import type { AnalyticsData, ChartKey, ChartConfig } from '@/types/analytics'
 
 const CHART_CONFIGS: ChartConfig[] = [
   { key: 'bookingsOverTime', title: 'Bookings Over Time', description: 'Your booking trends over the past 30 days' },

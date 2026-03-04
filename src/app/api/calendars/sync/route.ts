@@ -12,7 +12,7 @@ import {
   triggerUserCalendarSync,
   triggerCalendarSync,
   checkCalendarConflicts,
-} from '@/lib/queue';
+} from '@/lib/infrastructure/queue';
 
 /**
  * GET /api/calendars/sync

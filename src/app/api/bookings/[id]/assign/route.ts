@@ -9,15 +9,15 @@ import { formatInTimeZone } from 'date-fns-tz';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { z } from 'zod';
-import { queueBookingConfirmationEmails, scheduleBookingReminders } from '@/lib/queue';
-import { BookingEmailData } from '@/lib/email/client';
+import { queueBookingConfirmationEmails, scheduleBookingReminders } from '@/lib/infrastructure/queue';
+import { BookingEmailData } from '@/lib/integrations/email/client';
 import {
   createGoogleCalendarEvent,
   CreateCalendarEventParams,
   CreateCalendarEventResult,
-} from '@/lib/calendar/google';
-import { createOutlookCalendarEvent } from '@/lib/calendar/outlook';
-import { createZoomMeeting, hasZoomConnected } from '@/lib/zoom';
+} from '@/lib/integrations/calendar/google';
+import { createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
+import { createZoomMeeting, hasZoomConnected } from '@/lib/integrations/zoom';
 
 const assignMemberSchema = z.object({
   assignedUserId: z.string().min(1, 'Member ID is required'),

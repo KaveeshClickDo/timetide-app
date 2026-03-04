@@ -7,8 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { addDays, parseISO, startOfDay } from 'date-fns';
 import prisma from '@/lib/prisma';
-import { TeamSlotCalculator } from '@/lib/slots/team-calculator';
-import { checkSlotsRateLimit } from '@/lib/queue';
+import { TeamSlotCalculator } from '@/lib/scheduling/slots/team-calculator';
+import { checkSlotsRateLimit } from '@/lib/infrastructure/queue';
 import { z } from 'zod';
 
 const teamSlotsQuerySchema = z.object({

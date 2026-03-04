@@ -3,7 +3,10 @@
  * Handles OAuth and meeting creation via Zoom API
  */
 
-import prisma from '../prisma';
+import prisma from '../../prisma';
+import type { CreateZoomMeetingParams, CreateZoomMeetingResult } from '@/types/zoom';
+
+export type { CreateZoomMeetingParams, CreateZoomMeetingResult } from '@/types/zoom';
 
 // ============================================================================
 // OAUTH
@@ -196,22 +199,6 @@ async function getValidAccessToken(userId: string): Promise<string> {
 // ============================================================================
 // MEETING CREATION
 // ============================================================================
-
-export interface CreateZoomMeetingParams {
-  userId: string;
-  topic: string;
-  startTime: Date;
-  duration: number; // in minutes
-  timezone: string;
-  agenda?: string;
-}
-
-export interface CreateZoomMeetingResult {
-  meetingId: string;
-  meetingUrl: string;
-  joinUrl: string;
-  password?: string;
-}
 
 export async function createZoomMeeting(
   params: CreateZoomMeetingParams

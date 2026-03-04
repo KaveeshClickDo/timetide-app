@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { signIn } from 'next-auth/react'
+import { useSearchParams } from 'next/navigation'
 
 import Link from 'next/link'
 import Image from 'next/image'
@@ -12,8 +13,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Mail, Lock, User, Chrome, Loader2, CheckCircle2, CheckCircle } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 
-export default function SignUpPage() {
+function SignUpContent() {
   const { toast } = useToast()
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get('callbackUrl')
   const [isLoading, setIsLoading] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -53,7 +56,7 @@ export default function SignUpPage() {
 
   const handleOAuthSignIn = async (provider: 'google') => {
     setIsLoading(true)
-    await signIn(provider, { callbackUrl: '/dashboard/onboarding' })
+    await signIn(provider, { callbackUrl: callbackUrl || '/dashboard/onboarding' })
   }
 
   return (
@@ -127,7 +130,7 @@ export default function SignUpPage() {
                   Please verify your email address to complete your account setup. The link will expire in 24 hours.
                 </p>
                 <div className="flex flex-col gap-3">
-                  <Link href="/auth/signin" className="block">
+                  <Link href={callbackUrl ? `/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}` : '/auth/signin'} className="block">
                     <Button className="w-full bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-600 hover:to-ocean-700">
                       Go to Sign in
                     </Button>
@@ -239,7 +242,7 @@ export default function SignUpPage() {
               <p className="mt-6 text-center text-sm text-gray-600">
                 Already have an account?{' '}
                 <Link
-                  href="/auth/signin"
+                  href={callbackUrl ? `/auth/signin?callbackUrl=${encodeURIComponent(callbackUrl)}` : '/auth/signin'}
                   className="text-ocean-600 font-medium hover:underline"
                 >
                   Sign in
@@ -262,5 +265,13 @@ export default function SignUpPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense>
+      <SignUpContent />
+    </Suspense>
   )
 }

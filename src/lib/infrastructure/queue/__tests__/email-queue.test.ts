@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '../../email/client';
+import type { BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
 
 // ============================================================================
 // Mock all external dependencies
@@ -10,7 +10,7 @@ const { sendEmailMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock('../../email/client', () => ({
+vi.mock('@/lib/integrations/email/client', () => ({
   sendEmail: sendEmailMock,
   generateBookingConfirmedEmail: vi.fn().mockReturnValue('<html>confirmed</html>'),
   generateBookingCancelledEmail: vi.fn().mockReturnValue('<html>cancelled</html>'),

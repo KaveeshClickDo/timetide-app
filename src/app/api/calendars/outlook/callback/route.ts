@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { connectOutlookCalendar } from '@/lib/calendar/outlook'
+import { connectOutlookCalendar } from '@/lib/integrations/calendar/outlook'
 import { decodeOAuthState, buildRedirectUrl } from '@/lib/oauth-state'
 
 /**

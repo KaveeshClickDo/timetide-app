@@ -45,29 +45,7 @@ import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { useFeatureGate } from '@/hooks/use-feature-gate';
 import { FeatureGatePage } from '@/components/feature-gate-page';
-
-interface TeamMember {
-  id: string;
-  role: 'OWNER' | 'ADMIN' | 'MEMBER';
-  user: {
-    id: string;
-    name: string | null;
-    email: string;
-    image: string | null;
-  };
-}
-
-interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  logo: string | null;
-  members: TeamMember[];
-  _count: {
-    eventTypes: number;
-  };
-}
+import type { TeamListItem } from '@/types/team';
 
 export default function TeamsPage() {
   const router = useRouter();
@@ -81,7 +59,7 @@ export default function TeamsPage() {
   });
 
   // Fetch teams
-  const { data, isLoading, error } = useQuery<{ teams: Team[] }>({
+  const { data, isLoading, error } = useQuery<{ teams: TeamListItem[] }>({
     queryKey: ['teams'],
     queryFn: async () => {
       const res = await fetch('/api/teams');

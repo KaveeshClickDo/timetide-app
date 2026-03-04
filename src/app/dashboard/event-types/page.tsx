@@ -34,19 +34,7 @@ import { cn, formatDuration } from '@/lib/utils'
 import { EmbedCodeGenerator } from '@/components/embed-code-generator'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { UpgradeModal } from '@/components/upgrade-modal'
-
-interface EventType {
-  id: string
-  title: string
-  slug: string
-  description: string | null
-  length: number
-  locationType: string
-  isActive: boolean
-  _count: {
-    bookings: number
-  }
-}
+import type { EventTypeListItem } from '@/types/event-type'
 
 const locationLabels: Record<string, { label: string; icon: typeof Video }> = {
   GOOGLE_MEET: { label: 'Google Meet', icon: Video },
@@ -102,7 +90,7 @@ export default function EventTypesPage() {
   const username = session?.user?.username
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
-  const { data: eventTypes, isLoading } = useQuery<EventType[]>({
+  const { data: eventTypes, isLoading } = useQuery<EventTypeListItem[]>({
     queryKey: ['eventTypes'],
     queryFn: async () => {
       const res = await fetch('/api/event-types')

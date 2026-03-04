@@ -1,23 +1,9 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { Notification, NotificationsResponse } from '@/types/notification'
 
-export interface Notification {
-  id: string
-  userId: string
-  type: string
-  title: string
-  message: string
-  read: boolean
-  bookingId: string | null
-  createdAt: string
-}
-
-interface NotificationsResponse {
-  notifications: Notification[]
-  unreadCount: number
-  nextCursor: string | null
-}
+export type { Notification }
 
 export function useNotifications() {
   return useQuery<NotificationsResponse>({

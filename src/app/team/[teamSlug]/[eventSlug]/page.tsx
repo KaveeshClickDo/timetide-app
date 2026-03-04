@@ -4,47 +4,13 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import TeamBookingWidget from '@/components/booking/team-booking-widget';
 import Link from 'next/link';
-
-interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  logo: string | null;
-}
-
-interface Member {
-  id: string;
-  name: string | null;
-  image: string | null;
-  timezone: string;
-  priority: number;
-}
-
-interface Question {
-  id: string;
-  type: string;
-  label: string;
-  required: boolean;
-  placeholder: string | null;
-  options: string[] | null;
-}
-
-interface EventType {
-  id: string;
-  title: string;
-  description: string | null;
-  length: number;
-  locationType: string;
-  schedulingType: 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED' | null;
-  requiresConfirmation: boolean;
-  questions?: Question[];
-}
+import type { TeamPublic, TeamMemberBooking } from '@/types/team';
+import type { EventTypeDetail } from '@/types/event-type';
 
 interface TeamEventTypeData {
-  team: Team;
-  eventType: EventType;
-  members: Member[];
+  team: TeamPublic;
+  eventType: EventTypeDetail;
+  members: TeamMemberBooking[];
   defaultTimezone: string;
 }
 
@@ -119,7 +85,7 @@ export default function TeamBookingPage() {
           description: eventType.description,
           length: eventType.length,
           locationType: eventType.locationType,
-          schedulingType: eventType.schedulingType,
+          schedulingType: eventType.schedulingType ?? null,
           questions:
             eventType.questions?.map((q) => ({
               id: q.id,

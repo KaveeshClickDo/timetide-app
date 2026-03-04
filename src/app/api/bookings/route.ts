@@ -7,27 +7,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { addMinutes, addDays, parseISO, startOfDay } from 'date-fns';
-import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/recurring/utils';
+import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/scheduling/recurring/utils';
 import { formatInTimeZone } from 'date-fns-tz';
 import { nanoid } from 'nanoid';
 import prisma from '@/lib/prisma';
 import { type Prisma, BookingStatus } from '@/generated/prisma/client';
 import { authOptions } from '@/lib/auth';
 import { createBookingSchema } from '@/lib/validation/schemas';
-import { isSlotAvailable, mergeBusyTimes } from '@/lib/slots/calculator';
+import { isSlotAvailable, mergeBusyTimes } from '@/lib/scheduling/slots/calculator';
 import { createNotification, buildBookingNotification } from '@/lib/notifications';
-import { getAllBusyTimes } from '@/lib/calendar/google';
+import { getAllBusyTimes } from '@/lib/integrations/calendar/google';
 import {
   createGoogleCalendarEvent,
   CreateCalendarEventParams,
   CreateCalendarEventResult,
-} from '@/lib/calendar/google';
-import { createOutlookCalendarEvent } from '@/lib/calendar/outlook';
+} from '@/lib/integrations/calendar/google';
+import { createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
 import {
   createZoomMeeting,
   hasZoomConnected,
-} from '@/lib/zoom';
-import { BookingEmailData, RecurringBookingEmailData } from '@/lib/email/client';
+} from '@/lib/integrations/zoom';
+import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
 import {
   checkBookingRateLimit,
   queueBookingConfirmationEmails,
@@ -35,7 +35,7 @@ import {
   queueBookingPendingEmails,
   scheduleBookingReminders,
   triggerBookingCreatedWebhook,
-} from '@/lib/queue';
+} from '@/lib/infrastructure/queue';
 
 /**
  * GET /api/bookings

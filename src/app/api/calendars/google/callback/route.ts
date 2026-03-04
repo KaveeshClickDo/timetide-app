@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { connectGoogleCalendar } from '@/lib/calendar/google'
+import { connectGoogleCalendar } from '@/lib/integrations/calendar/google'
 import { decodeOAuthState, buildRedirectUrl } from '@/lib/oauth-state'
 
 /**

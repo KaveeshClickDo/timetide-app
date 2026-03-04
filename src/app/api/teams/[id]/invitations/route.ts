@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createTeamInvitationSchema } from '@/lib/validation/schemas'
-import { queueTeamInvitationEmail } from '@/lib/queue/email-queue'
+import { queueTeamInvitationEmail } from '@/lib/infrastructure/queue/email-queue'
 import { logTeamAction } from '@/lib/team-audit'
 
 interface RouteParams {

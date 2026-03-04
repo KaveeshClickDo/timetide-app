@@ -21,35 +21,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
-import { FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/recurring/utils'
-
-interface SeriesBooking {
-  id: string
-  uid: string
-  startTime: string
-  endTime: string
-  status: string
-  recurringIndex: number | null
-  recurringCount: number | null
-  timezone: string
-}
-
-interface SeriesData {
-  groupId: string
-  bookings: SeriesBooking[]
-  eventType: {
-    title: string
-    slug: string
-    length: number
-    locationType: string
-    description: string | null
-  }
-  inviteeName: string
-  inviteeEmail: string
-  totalOccurrences: number
-  recurringFrequency?: string
-  recurringInterval?: number
-}
+import { FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/scheduling/recurring/utils'
+import type { SeriesBooking, SeriesData } from '@/types/booking'
 
 const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   PENDING: {

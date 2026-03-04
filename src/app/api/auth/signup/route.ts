@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { signUpSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
 import { randomBytes } from 'crypto'
-import { sendEmailVerificationEmail } from '@/lib/email/client'
+import { sendEmailVerificationEmail } from '@/lib/integrations/email/client'
 
 export async function POST(request: Request) {
   try {

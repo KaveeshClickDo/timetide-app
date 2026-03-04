@@ -39,37 +39,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
 import { AddToCalendar } from '@/components/add-to-calendar'
-
-interface BookingDetails {
-  id: string
-  uid: string
-  startTime: string
-  endTime: string
-  timezone: string
-  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REJECTED' | 'COMPLETED' | 'SKIPPED'
-  inviteeName: string
-  inviteeEmail: string
-  inviteePhone?: string
-  inviteeNotes?: string
-  location?: string
-  meetingUrl?: string
-  responses?: Record<string, any>
-  cancellationReason?: string
-  cancelledAt?: string
-  createdAt: string
-  eventType: {
-    id: string
-    title: string
-    description?: string
-    length: number
-    locationType: string
-    locationValue?: string
-  }
-  host: {
-    name: string
-    image?: string
-  }
-}
+import type { BookingDetails } from '@/types/booking'
 
 const statusConfig = {
   PENDING: {

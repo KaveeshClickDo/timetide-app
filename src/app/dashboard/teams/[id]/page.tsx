@@ -874,6 +874,9 @@ export default function TeamDetailPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-gray-700">{invitation.email}</span>
                           <Badge variant="outline">{roleLabels[invitation.role]}</Badge>
+                          {new Date(invitation.expiresAt) < new Date() && (
+                            <Badge variant="destructive" className="text-xs">Expired</Badge>
+                          )}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
                           Invited {formatDistanceToNow(new Date(invitation.createdAt), { addSuffix: true })}

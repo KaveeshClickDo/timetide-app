@@ -25,7 +25,7 @@ function AcceptInvitationContent() {
 
   const [invitationInfo, setInvitationInfo] = useState<InvitationInfo | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
-  const [acceptStatus, setAcceptStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [acceptStatus, setAcceptStatus] = useState<'idle' | 'loading' | 'success' | 'error' | 'stale_session'>('idle');
   const [acceptMessage, setAcceptMessage] = useState('');
   const [teamId, setTeamId] = useState<string | null>(null);
 
@@ -72,6 +72,11 @@ function AcceptInvitationContent() {
         const data = await res.json();
 
         if (!res.ok) {
+          // Stale session — show sign-in/sign-up buttons instead of error
+          if (res.status === 401) {
+            setAcceptStatus('stale_session');
+            return;
+          }
           setAcceptStatus('error');
           setAcceptMessage(data.error || 'Failed to accept invitation');
           return;
@@ -149,8 +154,8 @@ function AcceptInvitationContent() {
     );
   }
 
-  // Not authenticated — show invitation details with sign-in/sign-up options
-  if (sessionStatus === 'unauthenticated' && invitationInfo) {
+  // Not authenticated (or stale session) — show invitation details with sign-in/sign-up options
+  if ((sessionStatus === 'unauthenticated' || acceptStatus === 'stale_session') && invitationInfo) {
     return (
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">

@@ -6,6 +6,13 @@ export default withAuth(
     const token = req.nextauth.token
     const path = req.nextUrl.pathname
 
+    // Admin routes: require ADMIN role (or impersonating admin)
+    if (path.startsWith('/admin')) {
+      if (token?.role !== 'ADMIN' && !token?.originalAdminId) {
+        return NextResponse.redirect(new URL('/dashboard', req.url))
+      }
+    }
+
     // If user is authenticated but email not verified, redirect to verification page
     // (emailVerified is false only for credential users who haven't verified)
     if (
@@ -40,7 +47,7 @@ export default withAuth(
 
         // Protected routes that require authentication
         // Check token.id (not just !!token) so invalidated tokens {} are rejected
-        if (path.startsWith('/dashboard')) {
+        if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
           return !!token?.id
         }
 
@@ -54,6 +61,8 @@ export default withAuth(
             '/api/webhooks',
             '/api/teams',
             '/api/calendars',
+            '/api/admin',
+            '/api/tickets',
           ]
 
           // Only require auth for explicitly protected routes

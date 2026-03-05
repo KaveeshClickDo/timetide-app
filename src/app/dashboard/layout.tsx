@@ -20,6 +20,8 @@ import {
   ChevronDown,
   Plus,
   CreditCard,
+  HelpCircle,
+  Shield,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -38,6 +40,7 @@ import { NotificationDropdown } from '@/components/notification-dropdown'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { UpgradeModal } from '@/components/upgrade-modal'
 import { PwaInstallBanner } from '@/components/pwa-install-banner'
+import { ImpersonationBanner } from '@/components/impersonation-banner'
 
 const navigation: { name: string; href: string; icon: typeof Calendar; gateFeature?: keyof PlanLimits }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
@@ -46,6 +49,7 @@ const navigation: { name: string; href: string; icon: typeof Calendar; gateFeatu
   { name: 'Webhooks', href: '/dashboard/webhooks', icon: Webhook, gateFeature: 'maxWebhooks' },
   { name: 'Teams', href: '/dashboard/teams', icon: Users, gateFeature: 'teams' },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, gateFeature: 'analytics' },
+  { name: 'Support', href: '/dashboard/support', icon: HelpCircle },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
@@ -108,6 +112,8 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ImpersonationBanner />
+
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -232,6 +238,17 @@ export default function DashboardLayout({
                     View Public Page
                   </Link>
                 </DropdownMenuItem>
+                {user?.role === 'ADMIN' && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin">
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => signOut({ callbackUrl: '/' })}

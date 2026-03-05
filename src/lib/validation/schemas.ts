@@ -350,6 +350,34 @@ export const updateWebhookSchema = z.object({
 });
 
 // ============================================================================
+// SUPPORT TICKETS
+// ============================================================================
+
+export const createTicketSchema = z.object({
+  subject: z.string().min(5, 'Subject must be at least 5 characters').max(200),
+  message: z.string().min(20, 'Message must be at least 20 characters').max(5000),
+  category: z.string().max(50).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+});
+
+export const ticketReplySchema = z.object({
+  message: z.string().min(1, 'Message is required').max(5000),
+});
+
+export const updateTicketSchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  adminNotes: z.string().max(5000).optional().nullable(),
+  assignedAdminId: z.string().optional().nullable(),
+});
+
+export const adminUpdateUserSchema = z.object({
+  plan: z.enum(['FREE', 'PRO', 'TEAM']).optional(),
+  isDisabled: z.boolean().optional(),
+  role: z.enum(['USER', 'ADMIN']).optional(),
+});
+
+// ============================================================================
 // TYPE EXPORTS
 // ============================================================================
 
@@ -369,3 +397,7 @@ export type AddTeamMemberInput = z.infer<typeof addTeamMemberSchema>;
 export type GetSlotsQuery = z.infer<typeof getSlotsQuerySchema>;
 export type CreateWebhookInput = z.infer<typeof createWebhookSchema>;
 export type UpdateWebhookInput = z.infer<typeof updateWebhookSchema>;
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+export type TicketReplyInput = z.infer<typeof ticketReplySchema>;
+export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
+export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;

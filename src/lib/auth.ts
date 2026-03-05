@@ -104,6 +104,52 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, account, trigger, session }) {
       // Handle session updates
       if (trigger === 'update' && session) {
+        // Handle impersonation start
+        if (session.impersonateUserId && token.role === 'ADMIN') {
+          const targetUser = await prisma.user.findUnique({
+            where: { id: session.impersonateUserId },
+            select: { id: true, username: true, name: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, role: true, onboardingCompleted: true, emailVerified: true, password: true },
+          });
+          if (targetUser) {
+            token.originalAdminId = token.id as string;
+            token.impersonatingUserId = targetUser.id;
+            token.id = targetUser.id;
+            token.username = targetUser.username ?? undefined;
+            token.name = targetUser.name;
+            token.timezone = targetUser.timezone;
+            token.timezoneAutoDetect = targetUser.timezoneAutoDetect;
+            token.bio = targetUser.bio ?? undefined;
+            token.plan = targetUser.plan;
+            token.role = targetUser.role;
+            token.onboardingCompleted = targetUser.onboardingCompleted;
+            token.emailVerified = !!targetUser.emailVerified || !targetUser.password;
+            return token;
+          }
+        }
+
+        // Handle impersonation exit
+        if (session.exitImpersonation && token.originalAdminId) {
+          const adminUser = await prisma.user.findUnique({
+            where: { id: token.originalAdminId },
+            select: { id: true, username: true, name: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, role: true, onboardingCompleted: true, emailVerified: true, password: true },
+          });
+          if (adminUser) {
+            token.id = adminUser.id;
+            token.username = adminUser.username ?? undefined;
+            token.name = adminUser.name;
+            token.timezone = adminUser.timezone;
+            token.timezoneAutoDetect = adminUser.timezoneAutoDetect;
+            token.bio = adminUser.bio ?? undefined;
+            token.plan = adminUser.plan;
+            token.role = adminUser.role;
+            token.onboardingCompleted = adminUser.onboardingCompleted;
+            token.emailVerified = !!adminUser.emailVerified || !adminUser.password;
+            delete token.originalAdminId;
+            delete token.impersonatingUserId;
+            return token;
+          }
+        }
+
         const updated = { ...token, ...session.user }
         // NextAuth uses token.picture for session.user.image
         if (session.user?.image !== undefined) {
@@ -117,7 +163,7 @@ export const authOptions: NextAuthOptions = {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, emailVerified: true, password: true, onboardingCompleted: true },
+          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true },
         });
 
         token.username = dbUser?.username ?? undefined;
@@ -125,10 +171,21 @@ export const authOptions: NextAuthOptions = {
         token.timezoneAutoDetect = dbUser?.timezoneAutoDetect ?? true;
         token.bio = dbUser?.bio ?? undefined;
         token.plan = dbUser?.plan ?? 'FREE';
+        token.role = dbUser?.role ?? 'USER';
         token.onboardingCompleted = dbUser?.onboardingCompleted ?? false;
         // Only require email verification for credential users (have password)
         token.emailVerified = !!dbUser?.emailVerified || !dbUser?.password;
         token.lastVerified = Date.now();
+
+        // Auto-assign ADMIN role based on ADMIN_EMAILS env variable
+        const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+        if (user.email && adminEmails.includes(user.email.toLowerCase()) && dbUser?.role !== 'ADMIN') {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: 'ADMIN' },
+          });
+          token.role = 'ADMIN';
+        }
       }
 
       // Periodically verify user still exists in DB (every 5 minutes)
@@ -136,9 +193,11 @@ export const authOptions: NextAuthOptions = {
       const lastVerified = (token.lastVerified as number) ?? 0;
 
       if (token.id && Date.now() - lastVerified > VERIFY_INTERVAL) {
+        // During impersonation, verify the original admin still exists
+        const verifyUserId = (token.originalAdminId || token.id) as string;
         const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { id: true, plan: true, emailVerified: true, password: true, onboardingCompleted: true },
+          where: { id: verifyUserId },
+          select: { id: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true },
         });
 
         if (!dbUser) {
@@ -146,10 +205,13 @@ export const authOptions: NextAuthOptions = {
           return {} as typeof token;
         }
 
-        // Sync fields in case they changed
-        token.plan = dbUser.plan ?? 'FREE';
-        token.onboardingCompleted = dbUser.onboardingCompleted ?? false;
-        token.emailVerified = !!dbUser.emailVerified || !dbUser.password;
+        // Sync fields in case they changed (skip during impersonation to avoid overwriting)
+        if (!token.impersonatingUserId) {
+          token.plan = dbUser.plan ?? 'FREE';
+          token.role = dbUser.role ?? 'USER';
+          token.onboardingCompleted = dbUser.onboardingCompleted ?? false;
+          token.emailVerified = !!dbUser.emailVerified || !dbUser.password;
+        }
         token.lastVerified = Date.now();
       }
 
@@ -164,7 +226,12 @@ export const authOptions: NextAuthOptions = {
         session.user.timezoneAutoDetect = token.timezoneAutoDetect as boolean;
         session.user.bio = token.bio as string | undefined;
         session.user.plan = token.plan as string;
+        session.user.role = token.role as string;
         session.user.emailVerified = token.emailVerified as boolean;
+        if (token.impersonatingUserId) {
+          session.user.impersonating = true;
+          session.user.originalAdminId = token.originalAdminId as string;
+        }
       }
       return session;
     },
@@ -268,7 +335,10 @@ declare module 'next-auth' {
       timezoneAutoDetect: boolean;
       bio?: string;
       plan: string;
+      role: string;
       emailVerified: boolean;
+      impersonating?: boolean;
+      originalAdminId?: string;
     };
   }
 
@@ -289,11 +359,14 @@ declare module 'next-auth/jwt' {
     timezoneAutoDetect: boolean;
     bio?: string;
     plan: string;
+    role: string;
     onboardingCompleted: boolean;
     emailVerified: boolean;
     lastVerified?: number;
     accessToken?: string;
     refreshToken?: string;
     provider?: string;
+    impersonatingUserId?: string;
+    originalAdminId?: string;
   }
 }

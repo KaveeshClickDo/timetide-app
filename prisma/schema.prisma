@@ -28,6 +28,8 @@ model User {
   bio           String?   // Short bio for public profile
   onboardingCompleted Boolean @default(false)
   plan                UserPlan @default(FREE)
+  role                UserRole @default(USER)
+  isDisabled          Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -43,6 +45,10 @@ model User {
   webhooks             Webhook[]
   zoomCredential       ZoomCredential?
   notifications        Notification[]
+  supportTickets       SupportTicket[]        @relation("UserTickets")
+  assignedTickets      SupportTicket[]        @relation("AdminAssignedTickets")
+  ticketMessages       SupportTicketMessage[] @relation("TicketMessages")
+  adminAuditLogs       AdminAuditLog[]        @relation("AdminAuditLogs")
 
   @@index([email])
   @@index([username])
@@ -52,6 +58,11 @@ enum UserPlan {
   FREE
   PRO
   TEAM
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
 model Account {
@@ -701,4 +712,83 @@ model Notification {
 
   @@index([userId, read])
   @@index([userId, createdAt])
+}
+
+// ============================================================================
+// SUPPORT TICKETS
+// ============================================================================
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id              String         @id @default(cuid())
+  userId          String
+  subject         String
+  message         String         @db.Text
+  status          TicketStatus   @default(OPEN)
+  priority        TicketPriority @default(MEDIUM)
+  category        String?
+  adminNotes      String?        @db.Text
+  assignedAdminId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user          User                   @relation("UserTickets", fields: [userId], references: [id], onDelete: Cascade)
+  assignedAdmin User?                  @relation("AdminAssignedTickets", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  messages      SupportTicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([assignedAdminId])
+  @@index([createdAt])
+}
+
+model SupportTicketMessage {
+  id           String  @id @default(cuid())
+  ticketId     String
+  senderId     String
+  message      String  @db.Text
+  isAdminReply Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User          @relation("TicketMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([senderId])
+}
+
+// ============================================================================
+// ADMIN AUDIT LOG
+// ============================================================================
+
+model AdminAuditLog {
+  id         String  @id @default(cuid())
+  adminId    String
+  action     String
+  targetType String?
+  targetId   String?
+  details    Json?
+
+  createdAt DateTime @default(now())
+
+  admin User @relation("AdminAuditLogs", fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([action])
+  @@index([createdAt])
 }

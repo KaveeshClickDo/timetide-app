@@ -72,7 +72,7 @@ export const authOptions: NextAuthOptions = {
 
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 7 * 24 * 60 * 60, // 7 days
   },
 
   pages: {
@@ -232,6 +232,8 @@ export const authOptions: NextAuthOptions = {
           session.user.impersonating = true;
           session.user.originalAdminId = token.originalAdminId as string;
         }
+        // Expose token issued time so client can show session expiry warning
+        session.user.tokenIssuedAt = token.iat as number;
       }
       return session;
     },
@@ -337,6 +339,7 @@ declare module 'next-auth' {
       plan: string;
       role: string;
       emailVerified: boolean;
+      tokenIssuedAt?: number;
       impersonating?: boolean;
       originalAdminId?: string;
     };

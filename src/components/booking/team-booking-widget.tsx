@@ -279,19 +279,30 @@ export default function TeamBookingWidget({
   };
 
   // Confirmation step
+  const isPending = bookingResult?.status === 'PENDING';
+
   if (step === 'confirmation' && bookingResult) {
     return (
       <div className={isEmbed ? 'max-w-lg mx-auto py-6 px-4' : 'max-w-lg mx-auto py-12 px-4'}>
         <Card>
           <CardContent className="pt-8 pb-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            <div className={cn(
+              'w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6',
+              isPending ? 'bg-amber-100' : 'bg-green-100'
+            )}>
+              {isPending ? (
+                <Clock className="h-8 w-8 text-amber-600" />
+              ) : (
+                <CheckCircle2 className="h-8 w-8 text-green-600" />
+              )}
             </div>
             <h1 className="text-2xl font-heading font-bold text-gray-900 mb-2">
-              You&apos;re booked!
+              {isPending ? 'Booking Requested' : 'You\u0027re booked!'}
             </h1>
             <p className="text-gray-600 mb-6">
-              A calendar invitation has been sent to {formData.email}
+              {isPending
+                ? `Your booking is pending confirmation by ${team.name}. You'll receive an email once it's confirmed.`
+                : `A calendar invitation has been sent to ${formData.email}`}
             </p>
 
             <div className="bg-gray-50 rounded-xl p-4 text-left mb-6">

@@ -23,6 +23,7 @@ import {
   CreateCalendarEventResult,
 } from '@/lib/integrations/calendar/google';
 import { createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
+import { buildCalendarEventIdsUpdate, type CalendarEventIds } from '@/lib/integrations/calendar/event-ids';
 import {
   createZoomMeeting,
   hasZoomConnected,
@@ -401,15 +402,18 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Use the first assigned member as host (all members participate)
+        // Use the meeting organizer as host if set, otherwise first assigned member
+        const organizerMember = eventType.meetingOrganizerUserId
+          ? assignedMembers.find(m => m.user.id === eventType.meetingOrganizerUserId)
+          : null;
+        const hostMember = organizerMember || assignedMembers[0];
         selectedHost = {
-          id: assignedMembers[0].user.id,
-          name: assignedMembers[0].user.name,
-          email: assignedMembers[0].user.email,
-          username: assignedMembers[0].user.username,
-          timezone: assignedMembers[0].user.timezone,
+          id: hostMember.user.id,
+          name: hostMember.user.name,
+          email: hostMember.user.email,
+          username: hostMember.user.username,
+          timezone: hostMember.user.timezone,
         };
-        // For collective, the assigned user is effectively all members (host handles it)
       } else if (eventType.schedulingType === 'MANAGED') {
         // For MANAGED: booking is created but assignment happens later by host/admin
         // Use the event type owner as the initial host
@@ -702,39 +706,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
-    // CALENDAR EVENTS — create one per booking
+    // CALENDAR EVENTS — create on ALL connected calendars
     // ========================================================================
     const hostTimezone = selectedHost.timezone || 'UTC';
 
     // For team events with a designated meeting organizer, use their account for calendar/meeting links
     const meetingAccountUserId = eventType.meetingOrganizerUserId || selectedHost.id;
 
-    let calendarForEvent = await prisma.calendar.findFirst({
-      where: {
-        userId: meetingAccountUserId,
-        isPrimary: true,
-        isEnabled: true,
-      },
+    // Fetch ALL enabled calendars for the meeting account
+    const allCalendars = await prisma.calendar.findMany({
+      where: { userId: meetingAccountUserId, isEnabled: true },
     });
 
-    let needsConferenceData = false;
-
+    // Determine which calendar generates the meeting link (conferenceData)
+    // Google Meet → Google calendar, Teams → Outlook calendar, others → no conferenceData
+    let meetingLinkCalendarId: string | null = null;
     if (eventType.locationType === 'GOOGLE_MEET') {
-      const googleCalendar = await prisma.calendar.findFirst({
-        where: { userId: meetingAccountUserId, provider: 'GOOGLE', isEnabled: true },
-      });
-      if (googleCalendar) {
-        calendarForEvent = googleCalendar;
-        needsConferenceData = true;
-      }
+      const googleCal = allCalendars.find(c => c.provider === 'GOOGLE');
+      if (googleCal) meetingLinkCalendarId = googleCal.id;
     } else if (eventType.locationType === 'TEAMS') {
-      const outlookCalendar = await prisma.calendar.findFirst({
-        where: { userId: meetingAccountUserId, provider: 'OUTLOOK', isEnabled: true },
-      });
-      if (outlookCalendar) {
-        calendarForEvent = outlookCalendar;
-        needsConferenceData = true;
-      }
+      const outlookCal = allCalendars.find(c => c.provider === 'OUTLOOK');
+      if (outlookCal) meetingLinkCalendarId = outlookCal.id;
     }
 
     // Build attendees list based on scheduling type
@@ -753,43 +745,70 @@ export async function POST(request: NextRequest) {
       calendarAttendees.push({ email: selectedHost.email!, name: selectedHost.name ?? undefined });
     }
 
-    // Create calendar events for each booking
+    // Create calendar events for each booking on ALL connected calendars
+    // Sort so the meeting-link calendar is processed first (to capture meetLink for others)
+    const sortedCalendars = [...allCalendars].sort((a, b) => {
+      const aIsMeetingLink = a.id === meetingLinkCalendarId ? 0 : 1;
+      const bIsMeetingLink = b.id === meetingLinkCalendarId ? 0 : 1;
+      return aIsMeetingLink - bIsMeetingLink;
+    });
+
     for (const booking of createdBookings) {
-      if (calendarForEvent) {
+      const calendarEventIds: CalendarEventIds = {};
+      let meetingUrl: string | null = null;
+
+      for (const cal of sortedCalendars) {
         try {
           const occSuffix = recurring ? ` (${createdBookings.indexOf(booking) + 1}/${occurrenceCount})` : '';
+          // Only request conferenceData from the calendar that generates the meeting link
+          const needsConference = cal.id === meetingLinkCalendarId;
           const eventParams: CreateCalendarEventParams = {
-            calendarId: calendarForEvent.id,
+            calendarId: cal.id,
             summary: `${eventType.title} with ${name}${occSuffix}`,
             description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}${recurring ? `\nRecurring: Week ${createdBookings.indexOf(booking) + 1} of ${occurrenceCount}` : ''}`,
             startTime: booking.startTime,
             endTime: booking.endTime,
             attendees: calendarAttendees,
-            location,
-            conferenceData: needsConferenceData,
+            location: meetingUrl || location, // Use meeting URL as location for secondary calendars
+            conferenceData: needsConference,
           };
 
           let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
 
-          if (calendarForEvent.provider === 'GOOGLE') {
+          if (cal.provider === 'GOOGLE') {
             result = await createGoogleCalendarEvent(eventParams);
-          } else if (calendarForEvent.provider === 'OUTLOOK') {
+          } else if (cal.provider === 'OUTLOOK') {
             result = await createOutlookCalendarEvent(eventParams);
           }
 
           if (result.eventId) {
-            await prisma.booking.update({
-              where: { id: booking.id },
-              data: {
-                calendarEventId: result.eventId,
-                meetingUrl: result.meetLink || undefined,
-              },
-            });
-            booking.meetingUrl = result.meetLink || null;
+            calendarEventIds[cal.provider as 'GOOGLE' | 'OUTLOOK'] = result.eventId;
+          }
+          // Capture meeting link from the provider that generates it
+          if (result.meetLink && needsConference) {
+            meetingUrl = result.meetLink;
           }
         } catch (error) {
-          console.error(`Failed to create calendar event for booking ${booking.id}:`, error);
+          console.error(`Failed to create ${cal.provider} calendar event for booking ${booking.id}:`, error);
         }
+      }
+
+      // Update booking with all calendar event IDs and meeting URL
+      if (Object.keys(calendarEventIds).length > 0 || meetingUrl) {
+        const updateData: Record<string, unknown> = {};
+        if (Object.keys(calendarEventIds).length > 0) {
+          const idsUpdate = buildCalendarEventIdsUpdate(calendarEventIds);
+          updateData.calendarEventId = idsUpdate.calendarEventId;
+          updateData.calendarEventIds = idsUpdate.calendarEventIds;
+        }
+        if (meetingUrl) {
+          updateData.meetingUrl = meetingUrl;
+        }
+        await prisma.booking.update({
+          where: { id: booking.id },
+          data: updateData,
+        });
+        booking.meetingUrl = meetingUrl || null;
       }
 
       // Create Zoom meeting if needed

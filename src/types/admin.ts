@@ -37,7 +37,7 @@ export interface AdminUserListItem {
 export interface AdminUserDetail extends AdminUserListItem {
   timezone: string
   onboardingCompleted: boolean
-  emailVerified: Date | null
+  emailVerified: string | null
   eventTypes: {
     id: string
     title: string

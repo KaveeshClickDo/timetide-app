@@ -25,6 +25,7 @@ export interface AdminUserListItem {
   plan: string
   role: string
   isDisabled: boolean
+  emailVerified: string | null
   createdAt: string
   _count: {
     bookingsAsHost: number

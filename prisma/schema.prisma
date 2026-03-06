@@ -258,8 +258,9 @@ model EventType {
   successRedirectUrl  String?
 
   // Team Settings
-  schedulingType       SchedulingType? // For team events
-  lastAssignedMemberId String?         // For round-robin: tracks last assigned member
+  schedulingType         SchedulingType? // For team events
+  lastAssignedMemberId   String?         // For round-robin: tracks last assigned member
+  meetingOrganizerUserId String?         // For team events: whose account generates meeting links
 
   // Status
   isActive         Boolean  @default(true)

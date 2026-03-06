@@ -21,6 +21,15 @@ function esc(str: string | null | undefined): string {
     .replace(/'/g, '&#39;');
 }
 
+/** Get the appropriate time/timezone values based on whether the recipient is the host */
+function getEmailTimes(data: BookingEmailData, isHost: boolean) {
+  return {
+    startTime: isHost && data.hostStartTime ? data.hostStartTime : data.startTime,
+    endTime: isHost && data.hostEndTime ? data.hostEndTime : data.endTime,
+    timezone: isHost && data.hostTimezone ? data.hostTimezone : data.timezone,
+  };
+}
+
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
   try {
@@ -76,6 +85,7 @@ export function generateBookingConfirmedEmail(
 ): string {
   const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/bookings/${data.bookingUid}`;
   const addToCalendarUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/bookings/${data.bookingUid}/calendar`;
+  const t = getEmailTimes(data, isHost);
 
   return `
     <!DOCTYPE html>
@@ -102,12 +112,12 @@ export function generateBookingConfirmedEmail(
 
           <div class="detail-row">
             <span class="detail-label">📅 When</span>
-            <span class="detail-value">${esc(data.startTime)} - ${esc(data.endTime)}</span>
+            <span class="detail-value">${esc(t.startTime)} - ${esc(t.endTime)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${esc(data.timezone)}</span>
+            <span class="detail-value">${esc(t.timezone)}</span>
           </div>
 
           ${data.location ? `
@@ -177,6 +187,8 @@ export function generateBookingCancelledEmail(
   isHost: boolean,
   reason?: string
 ): string {
+  const t = getEmailTimes(data, isHost);
+
   return `
     <!DOCTYPE html>
     <html>
@@ -204,7 +216,7 @@ export function generateBookingCancelledEmail(
           <div class="detail-row">
             <span class="detail-label">📅 Was</span>
             <span class="detail-value" style="text-decoration: line-through; color: #94a3b8;">
-              ${esc(data.startTime)} - ${esc(data.endTime)}
+              ${esc(t.startTime)} - ${esc(t.endTime)}
             </span>
           </div>
 
@@ -242,6 +254,7 @@ export function generateBookingRescheduledEmail(
   isHost: boolean
 ): string {
   const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/bookings/${data.bookingUid}`;
+  const t = getEmailTimes(data, isHost);
 
   return `
     <!DOCTYPE html>
@@ -274,7 +287,7 @@ export function generateBookingRescheduledEmail(
 
           <div style="background: #d1fae5; padding: 12px; border-radius: 8px;">
             <p style="margin: 0; font-size: 14px; color: #065f46;">
-              <strong>New time:</strong> ${esc(data.startTime)} - ${esc(data.endTime)}
+              <strong>New time:</strong> ${esc(t.startTime)} - ${esc(t.endTime)}
             </p>
           </div>
 
@@ -282,7 +295,7 @@ export function generateBookingRescheduledEmail(
 
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${esc(data.timezone)}</span>
+            <span class="detail-value">${esc(t.timezone)}</span>
           </div>
 
           ${data.meetingUrl ? `
@@ -313,6 +326,7 @@ export function generateBookingPendingEmail(
   isHost: boolean
 ): string {
   const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${isHost ? 'dashboard/bookings/' + data.bookingUid : 'bookings/' + data.bookingUid}`;
+  const t = getEmailTimes(data, isHost);
 
   return `
     <!DOCTYPE html>
@@ -339,12 +353,12 @@ export function generateBookingPendingEmail(
 
           <div class="detail-row">
             <span class="detail-label">📅 When</span>
-            <span class="detail-value">${esc(data.startTime)} - ${esc(data.endTime)}</span>
+            <span class="detail-value">${esc(t.startTime)} - ${esc(t.endTime)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${esc(data.timezone)}</span>
+            <span class="detail-value">${esc(t.timezone)}</span>
           </div>
 
           ${data.location ? `
@@ -687,8 +701,10 @@ export function generateRecurringBookingConfirmedEmail(
   isHost: boolean
 ): string {
   const manageUrl = `${process.env.NEXT_PUBLIC_APP_URL}/${isHost ? 'dashboard' : 'bookings/' + data.bookingUid}`;
+  const t = getEmailTimes(data, isHost);
+  const dates = isHost && data.hostRecurringDates ? data.hostRecurringDates : data.recurringDates;
 
-  const dateRows = data.recurringDates
+  const dateRows = dates
     .map((d, i) => `
       <tr>
         <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px;">${i + 1}</td>
@@ -741,7 +757,7 @@ export function generateRecurringBookingConfirmedEmail(
 
           <div class="detail-row">
             <span class="detail-label">🌍 Timezone</span>
-            <span class="detail-value">${esc(data.timezone)}</span>
+            <span class="detail-value">${esc(t.timezone)}</span>
           </div>
 
           ${data.location ? `

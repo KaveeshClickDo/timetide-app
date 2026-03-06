@@ -47,6 +47,11 @@ const createTeamEventTypeSchema = z.object({
   schedulingType: schedulingTypeSchema,
   questions: z.array(eventTypeQuestionSchema).optional(),
   memberIds: z.array(z.string()).optional(), // Team members to assign
+  meetingOrganizerUserId: z.string().optional(), // Whose account generates meeting links
+  allowsRecurring: z.boolean().default(false),
+  recurringMaxWeeks: z.number().int().min(2).max(24).optional(),
+  recurringFrequency: z.string().optional(),
+  recurringInterval: z.number().int().min(1).max(90).optional(),
 });
 
 /**
@@ -156,7 +161,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const eventFeatureDenied = checkEventTypeFeatures(plan, result.data as Record<string, unknown>);
     if (eventFeatureDenied) return eventFeatureDenied;
 
-    const { questions, memberIds, ...eventTypeData } = result.data;
+    const { questions, memberIds, meetingOrganizerUserId, ...eventTypeData } = result.data;
 
     // Check slug uniqueness within team
     const existingSlug = await prisma.eventType.findFirst({
@@ -181,6 +186,7 @@ export async function POST(request: Request, { params }: RouteParams) {
           ...eventTypeData,
           userId: session.user.id, // Creator
           teamId: params.id,
+          meetingOrganizerUserId: meetingOrganizerUserId || undefined,
           periodStartDate: eventTypeData.periodStartDate
             ? new Date(eventTypeData.periodStartDate)
             : undefined,

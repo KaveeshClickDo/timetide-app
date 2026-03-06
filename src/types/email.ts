@@ -20,6 +20,9 @@ export interface BookingEmailData {
   startTime: string
   endTime: string
   timezone: string
+  hostStartTime?: string
+  hostEndTime?: string
+  hostTimezone?: string
   location?: string
   meetingUrl?: string
   bookingUid: string
@@ -29,6 +32,7 @@ export interface BookingEmailData {
 
 export interface RecurringBookingEmailData extends BookingEmailData {
   recurringDates: Array<{ startTime: string; endTime: string }>
+  hostRecurringDates?: Array<{ startTime: string; endTime: string }>
   totalOccurrences: number
   frequencyLabel?: string
 }

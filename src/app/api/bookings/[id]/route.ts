@@ -342,6 +342,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         }
 
         // Send one bulk confirmed email with all dates
+        const bulkHostTimezone = booking.host.timezone || booking.timezone;
         const recurringEmailData: RecurringBookingEmailData = {
           hostName: booking.host.name ?? 'Host',
           hostEmail: booking.host.email!,
@@ -354,12 +355,19 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           startTime: formatInTimeZone(pendingBookings[0].startTime, pendingBookings[0].timezone, 'EEEE, MMMM d, yyyy h:mm a'),
           endTime: formatInTimeZone(pendingBookings[0].endTime, pendingBookings[0].timezone, 'h:mm a'),
           timezone: booking.timezone,
+          hostStartTime: formatInTimeZone(pendingBookings[0].startTime, bulkHostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
+          hostEndTime: formatInTimeZone(pendingBookings[0].endTime, bulkHostTimezone, 'h:mm a'),
+          hostTimezone: bulkHostTimezone,
           location: booking.location ?? undefined,
           meetingUrl: booking.meetingUrl ?? undefined,
           bookingUid: pendingBookings[0].uid,
           recurringDates: pendingBookings.map(pb => ({
             startTime: formatInTimeZone(pb.startTime, pb.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
             endTime: formatInTimeZone(pb.endTime, pb.timezone, 'h:mm a'),
+          })),
+          hostRecurringDates: pendingBookings.map(pb => ({
+            startTime: formatInTimeZone(pb.startTime, bulkHostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
+            endTime: formatInTimeZone(pb.endTime, bulkHostTimezone, 'h:mm a'),
           })),
           totalOccurrences: pendingBookings.length,
           frequencyLabel: booking.recurringFrequency
@@ -503,6 +511,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       : undefined;
 
     // Prepare email data
+    const patchHostTimezone = booking.host.timezone || booking.timezone;
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
       hostEmail: booking.host.email!,
@@ -519,6 +528,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       ),
       endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
       timezone: booking.timezone,
+      hostStartTime: formatInTimeZone(booking.startTime, patchHostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
+      hostEndTime: formatInTimeZone(booking.endTime, patchHostTimezone, 'h:mm a'),
+      hostTimezone: patchHostTimezone,
       location: booking.location ?? undefined,
       meetingUrl: booking.meetingUrl ?? undefined,
       bookingUid: booking.uid,
@@ -728,6 +740,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         : undefined;
 
       // Send one cancellation email for the series
+      const bulkCancelHostTz = booking.host.timezone || booking.timezone;
       const emailData: BookingEmailData = {
         hostName: booking.host.name ?? 'Host',
         hostEmail: booking.host.email!,
@@ -742,6 +755,11 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
           : `${futureBookings.length} sessions (${formatInTimeZone(futureBookings[0].startTime, futureBookings[0].timezone, 'MMM d')} - ${formatInTimeZone(futureBookings[futureBookings.length - 1].startTime, futureBookings[futureBookings.length - 1].timezone, 'MMM d, yyyy')})`,
         endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
         timezone: booking.timezone,
+        hostStartTime: futureBookings.length === 1
+          ? formatInTimeZone(futureBookings[0].startTime, bulkCancelHostTz, 'EEEE, MMMM d, yyyy h:mm a')
+          : `${futureBookings.length} sessions (${formatInTimeZone(futureBookings[0].startTime, bulkCancelHostTz, 'MMM d')} - ${formatInTimeZone(futureBookings[futureBookings.length - 1].startTime, bulkCancelHostTz, 'MMM d, yyyy')})`,
+        hostEndTime: formatInTimeZone(booking.endTime, bulkCancelHostTz, 'h:mm a'),
+        hostTimezone: bulkCancelHostTz,
         bookingUid: booking.uid,
         teamMembers: bulkCancelTeamMembers,
       };
@@ -809,6 +827,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       : undefined;
 
     // Send cancellation emails
+    const cancelHostTz = booking.host.timezone || booking.timezone;
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
       hostEmail: booking.host.email!,
@@ -825,6 +844,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       ),
       endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
       timezone: booking.timezone,
+      hostStartTime: formatInTimeZone(booking.startTime, cancelHostTz, 'EEEE, MMMM d, yyyy h:mm a'),
+      hostEndTime: formatInTimeZone(booking.endTime, cancelHostTz, 'h:mm a'),
+      hostTimezone: cancelHostTz,
       bookingUid: booking.uid,
       teamMembers: cancelTeamMembers,
     };

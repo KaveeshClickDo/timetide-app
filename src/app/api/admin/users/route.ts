@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
         where,
         select: {
           id: true, email: true, name: true, username: true, image: true,
-          plan: true, role: true, isDisabled: true, createdAt: true,
+          plan: true, role: true, isDisabled: true, emailVerified: true, createdAt: true,
           _count: { select: { bookingsAsHost: true, eventTypes: true, teamMemberships: true } },
         },
         orderBy: { [sortBy]: sortOrder },

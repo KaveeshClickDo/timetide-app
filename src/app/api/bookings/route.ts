@@ -638,7 +638,9 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     // CREATE BOOKINGS (single or recurring)
     // ========================================================================
-    const bookingStatus = eventType.requiresConfirmation ? 'PENDING' : 'CONFIRMED';
+    // MANAGED team events should always start as PENDING until a member is assigned
+    const isManagedUnassigned = eventType.schedulingType === 'MANAGED' && !assignedUserId;
+    const bookingStatus = (eventType.requiresConfirmation || isManagedUnassigned) ? 'PENDING' : 'CONFIRMED';
     const createdBookings: Array<{
       id: string;
       uid: string;
@@ -702,9 +704,14 @@ export async function POST(request: NextRequest) {
     // ========================================================================
     // CALENDAR EVENTS — create one per booking
     // ========================================================================
+    const hostTimezone = selectedHost.timezone || 'UTC';
+
+    // For team events with a designated meeting organizer, use their account for calendar/meeting links
+    const meetingAccountUserId = eventType.meetingOrganizerUserId || selectedHost.id;
+
     let calendarForEvent = await prisma.calendar.findFirst({
       where: {
-        userId: selectedHost.id,
+        userId: meetingAccountUserId,
         isPrimary: true,
         isEnabled: true,
       },
@@ -714,7 +721,7 @@ export async function POST(request: NextRequest) {
 
     if (eventType.locationType === 'GOOGLE_MEET') {
       const googleCalendar = await prisma.calendar.findFirst({
-        where: { userId: selectedHost.id, provider: 'GOOGLE', isEnabled: true },
+        where: { userId: meetingAccountUserId, provider: 'GOOGLE', isEnabled: true },
       });
       if (googleCalendar) {
         calendarForEvent = googleCalendar;
@@ -722,7 +729,7 @@ export async function POST(request: NextRequest) {
       }
     } else if (eventType.locationType === 'TEAMS') {
       const outlookCalendar = await prisma.calendar.findFirst({
-        where: { userId: selectedHost.id, provider: 'OUTLOOK', isEnabled: true },
+        where: { userId: meetingAccountUserId, provider: 'OUTLOOK', isEnabled: true },
       });
       if (outlookCalendar) {
         calendarForEvent = outlookCalendar;
@@ -788,14 +795,14 @@ export async function POST(request: NextRequest) {
       // Create Zoom meeting if needed
       if (eventType.locationType === 'ZOOM') {
         try {
-          const hasZoom = await hasZoomConnected(selectedHost.id);
+          const hasZoom = await hasZoomConnected(meetingAccountUserId);
           if (hasZoom) {
             const zoomMeeting = await createZoomMeeting({
-              userId: selectedHost.id,
+              userId: meetingAccountUserId,
               topic: `${eventType.title} with ${name}`,
               startTime: booking.startTime,
               duration: eventType.length,
-              timezone,
+              timezone: hostTimezone,
               agenda: notes || `Booked via TimeTide with ${name} (${email})`,
             });
 
@@ -840,6 +847,9 @@ export async function POST(request: NextRequest) {
       startTime: formatInTimeZone(startDate, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
       endTime: formatInTimeZone(createdBookings[0].endTime, timezone, 'h:mm a'),
       timezone,
+      hostStartTime: formatInTimeZone(startDate, hostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
+      hostEndTime: formatInTimeZone(createdBookings[0].endTime, hostTimezone, 'h:mm a'),
+      hostTimezone,
       location,
       meetingUrl: meetingUrl ?? undefined,
       bookingUid: primaryBooking.uid,
@@ -858,6 +868,10 @@ export async function POST(request: NextRequest) {
         recurringDates: createdBookings.map(b => ({
           startTime: formatInTimeZone(b.startTime, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
           endTime: formatInTimeZone(b.endTime, timezone, 'h:mm a'),
+        })),
+        hostRecurringDates: createdBookings.map(b => ({
+          startTime: formatInTimeZone(b.startTime, hostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
+          endTime: formatInTimeZone(b.endTime, hostTimezone, 'h:mm a'),
         })),
       };
       queueRecurringBookingConfirmationEmails(recurringEmailData).catch(console.error);

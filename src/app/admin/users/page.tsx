@@ -101,11 +101,18 @@ export default function AdminUsersPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (user) => (
-        <Badge className={cn('text-[10px]', user.isDisabled ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700')}>
-          {user.isDisabled ? 'Disabled' : 'Active'}
-        </Badge>
-      ),
+      render: (user) => {
+        const status = user.isDisabled
+          ? { label: 'Disabled', color: 'bg-red-100 text-red-700' }
+          : !user.emailVerified
+            ? { label: 'Unverified', color: 'bg-yellow-100 text-yellow-700' }
+            : { label: 'Active', color: 'bg-green-100 text-green-700' }
+        return (
+          <Badge className={cn('text-[10px]', status.color)}>
+            {status.label}
+          </Badge>
+        )
+      },
     },
     {
       key: 'stats',

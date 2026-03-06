@@ -216,6 +216,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         : undefined;
 
       // Send one summary email for the first occurrence
+      const bulkRescheduleHostTz = booking.host.timezone || booking.timezone;
       const emailData: BookingEmailData = {
         hostName: booking.host.name ?? 'Host',
         hostEmail: booking.host.email!,
@@ -226,6 +227,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         startTime: `${futureBookings.length} sessions rescheduled`,
         endTime: '',
         timezone: booking.timezone,
+        hostStartTime: `${futureBookings.length} sessions rescheduled`,
+        hostEndTime: '',
+        hostTimezone: bulkRescheduleHostTz,
         bookingUid: booking.uid,
         teamMembers: bulkTeamMembers,
       };
@@ -415,6 +419,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       : undefined;
 
     // Prepare email data with new times
+    const rescheduleHostTz = booking.host.timezone || booking.timezone;
     const emailData: BookingEmailData = {
       hostName: booking.host.name ?? 'Host',
       hostEmail: booking.host.email!,
@@ -429,6 +434,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       ),
       endTime: formatInTimeZone(newEnd, booking.timezone, 'h:mm a'),
       timezone: booking.timezone,
+      hostStartTime: formatInTimeZone(newStart, rescheduleHostTz, 'EEEE, MMMM d, yyyy h:mm a'),
+      hostEndTime: formatInTimeZone(newEnd, rescheduleHostTz, 'h:mm a'),
+      hostTimezone: rescheduleHostTz,
       location: booking.location ?? undefined,
       meetingUrl: booking.meetingUrl ?? undefined,
       bookingUid: booking.uid,

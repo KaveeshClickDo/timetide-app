@@ -7,7 +7,7 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import {
   ArrowLeft, Calendar, Users, Globe, Shield, Ban, Eye,
-  CheckCircle2, XCircle, Loader2,
+  CheckCircle2, XCircle, Loader2, Trash2,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -52,6 +52,7 @@ export default function AdminUserDetailPage() {
   const { toast } = useToast()
   const [showDisableDialog, setShowDisableDialog] = useState(false)
   const [showImpersonateDialog, setShowImpersonateDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   const { data: user, isLoading } = useQuery<AdminUserDetail>({
     queryKey: ['admin-user', id],
@@ -93,6 +94,24 @@ export default function AdminUserDetailPage() {
     onSuccess: async (data) => {
       await updateSession({ impersonateUserId: data.userId })
       window.location.href = '/dashboard'
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: 'destructive' })
+    },
+  })
+
+  const deleteUser = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to delete user')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      toast({ title: 'User deleted successfully' })
+      router.push('/admin/users')
     },
     onError: (err: Error) => {
       toast({ title: err.message, variant: 'destructive' })
@@ -152,6 +171,16 @@ export default function AdminUserDetailPage() {
                 <><Ban className="h-4 w-4 mr-1" /> Disable</>
               )}
             </Button>
+            {user.role !== 'ADMIN' && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteDialog(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            )}
           </div>
         }
       />
@@ -213,14 +242,20 @@ export default function AdminUserDetailPage() {
               <div>
                 <p className="text-xs text-gray-500 mb-1">Status</p>
                 <div className="flex items-center gap-2">
-                  <Badge className={cn('text-[10px]', user.isDisabled ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700')}>
-                    {user.isDisabled ? 'Disabled' : 'Active'}
+                  <Badge className={cn('text-[10px]',
+                    user.isDisabled
+                      ? 'bg-red-100 text-red-700'
+                      : !user.emailVerified
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : 'bg-green-100 text-green-700'
+                  )}>
+                    {user.isDisabled ? 'Disabled' : !user.emailVerified ? 'Unverified' : 'Active'}
                   </Badge>
-                  {user.onboardingCompleted ? (
-                    <Badge className="bg-blue-100 text-blue-700 text-[10px]">Onboarded</Badge>
-                  ) : (
-                    <Badge className="bg-yellow-100 text-yellow-700 text-[10px]">Pending Onboarding</Badge>
-                  )}
+                  <Badge className={cn('text-[10px]',
+                    user.onboardingCompleted ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                  )}>
+                    {user.onboardingCompleted ? 'Onboarded' : 'Pending Onboarding'}
+                  </Badge>
                 </div>
               </div>
               <div>
@@ -403,6 +438,32 @@ export default function AdminUserDetailPage() {
               className="bg-indigo-600 hover:bg-indigo-700"
             >
               Start Impersonation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete User Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User Permanently</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{user.name || user.email}</strong> and all their data
+              (event types, bookings, calendar connections, team memberships).
+              This action cannot be undone. The user can sign up again as a new account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                deleteUser.mutate()
+                setShowDeleteDialog(false)
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete Permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

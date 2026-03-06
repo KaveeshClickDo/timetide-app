@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, addDays } from 'date-fns'
 import {
@@ -15,42 +15,23 @@ import {
   Plus,
   Trash2,
   GripVertical,
-  Save,
-  Power,
-  AlertCircle,
   Calendar,
   Users,
-  AlertTriangle,
-  Check,
-  ExternalLink,
   RefreshCw,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Switch } from '@/components/ui/switch'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
-import { cn } from '@/lib/utils'
+import { cn, getInitials } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { ProBadge } from '@/components/pro-badge'
-import { useIntegrationStatus } from '@/hooks/use-integration-status'
-import type { Question, QuestionInput } from '@/types/event-type'
-
-interface PageProps {
-  params: { id: string }
-}
+import type { TeamMemberWithRole } from '@/types/team'
+import type { QuestionInput } from '@/types/event-type'
 
 const LOCATION_TYPES = [
   { value: 'GOOGLE_MEET', label: 'Google Meet', icon: Video, description: 'Auto-generate meeting link' },
@@ -78,105 +59,35 @@ const QUESTION_TYPES = [
   { value: 'SELECT', label: 'Dropdown' },
 ]
 
-function LocationIntegrationWarning({ locationType, googleCalendar, outlookCalendar, teamsCapable, zoomConnected }: {
-  locationType: string
-  googleCalendar: any
-  outlookCalendar: any
-  teamsCapable: boolean
-  zoomConnected: boolean
-}) {
-  const needsGoogle = locationType === 'GOOGLE_MEET' && !googleCalendar
-  const needsOutlook = locationType === 'TEAMS' && !outlookCalendar
-  const needsZoom = locationType === 'ZOOM' && !zoomConnected
-
-  // Outlook connected but account doesn't support Teams meetings
-  const teamsUnsupported = locationType === 'TEAMS' && outlookCalendar && !teamsCapable
-
-  const isConnected =
-    (locationType === 'GOOGLE_MEET' && googleCalendar) ||
-    (locationType === 'TEAMS' && outlookCalendar && teamsCapable) ||
-    (locationType === 'ZOOM' && zoomConnected)
-
-  if (!needsGoogle && !needsOutlook && !needsZoom && !isConnected && !teamsUnsupported) return null
-
-  if (teamsUnsupported) {
-    return (
-      <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200">
-        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-medium text-amber-800">
-            Teams meetings not supported
-          </p>
-          <p className="text-xs text-amber-700">
-            Your Outlook account doesn&apos;t support creating Teams meeting links. A Microsoft 365 work or school account is required for this feature.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  if (isConnected) {
-    return (
-      <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-        <Check className="h-4 w-4 text-green-600 flex-shrink-0" />
-        <p className="text-sm text-green-800">
-          {locationType === 'GOOGLE_MEET' && 'Google Calendar connected — Meet links will be auto-generated.'}
-          {locationType === 'TEAMS' && 'Outlook Calendar connected — Teams links will be auto-generated.'}
-          {locationType === 'ZOOM' && 'Zoom connected — meeting links will be auto-generated.'}
-        </p>
-      </div>
-    )
-  }
-
-  const serviceName = needsGoogle ? 'Google Calendar' : needsOutlook ? 'Outlook Calendar' : 'Zoom'
-
-  return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
-      <div className="flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-medium text-amber-800">
-            {serviceName} not connected
-          </p>
-          <p className="text-xs text-amber-700">
-            Meeting links won&apos;t be auto-generated without this integration.
-          </p>
-        </div>
-      </div>
-      <Link href="/dashboard/settings" target="_blank">
-        <Button type="button" variant="outline" size="sm" className="flex-shrink-0 text-xs">
-          <ExternalLink className="h-3 w-3 mr-1" />
-          Connect
-        </Button>
-      </Link>
-    </div>
-  )
-}
-
-export default function EditEventTypePage({ params }: PageProps) {
+export default function NewTeamEventTypePage() {
+  const params = useParams()
   const router = useRouter()
-  const { toast } = useToast()
   const queryClient = useQueryClient()
-  const { googleCalendar, outlookCalendar, teamsCapable, zoomConnected } = useIntegrationStatus()
+  const { toast } = useToast()
+  const teamId = params.id as string
 
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [questions, setQuestions] = useState<QuestionInput[]>([])
   const [formData, setFormData] = useState({
     title: '',
+    slug: '',
     description: '',
-    duration: 30,
+    length: 30,
     locationType: 'GOOGLE_MEET',
     customLocation: '',
+    schedulingType: 'COLLECTIVE' as 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED',
+    memberIds: [] as string[],
+    meetingOrganizerUserId: '' as string,
+    periodType: 'ROLLING' as 'ROLLING' | 'RANGE' | 'UNLIMITED',
+    periodDays: 30,
+    periodStartDate: format(new Date(), 'yyyy-MM-dd'),
+    periodEndDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
     bufferTimeBefore: 0,
     bufferTimeAfter: 0,
     minimumNotice: 60,
     maxBookingsPerDay: 0,
     requiresConfirmation: false,
-    isActive: true,
-    // Booking window settings
-    periodType: 'ROLLING' as 'ROLLING' | 'RANGE' | 'UNLIMITED',
-    periodDays: 30,
-    periodStartDate: format(new Date(), 'yyyy-MM-dd'),
-    periodEndDate: format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-    // Group booking settings
+    // Group booking
     isGroupBooking: false,
     seatsPerSlot: 1,
     // Recurring
@@ -190,258 +101,203 @@ export default function EditEventTypePage({ params }: PageProps) {
     successRedirectUrl: '',
   })
 
-  const [questions, setQuestions] = useState<(QuestionInput & { id?: string })[]>([])
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [hasChanges, setHasChanges] = useState(false)
-  const isInitializedRef = useRef(false)
-
   // Feature gates
   const customQuestionsGate = useFeatureGate('customQuestions')
   const groupBookingGate = useFeatureGate('groupBooking')
+  const recurringGate = useFeatureGate('recurringBooking')
   const bufferGate = useFeatureGate('bufferTimes')
   const bookingLimitGate = useFeatureGate('bookingLimits')
-  const recurringGate = useFeatureGate('recurringBooking')
 
-  // Fetch event type
-  const { data: eventTypeData, isLoading } = useQuery({
-    queryKey: ['eventType', params.id],
+  // Fetch team details for members list
+  const { data: teamData, isLoading: isTeamLoading } = useQuery<{ team: { id: string; name: string; slug: string; members: TeamMemberWithRole[] } }>({
+    queryKey: ['team', teamId],
     queryFn: async () => {
-      const res = await fetch(`/api/event-types/${params.id}`)
-      if (!res.ok) throw new Error('Failed to fetch event type')
+      const res = await fetch(`/api/teams/${teamId}`)
+      if (!res.ok) throw new Error('Failed to fetch team')
       return res.json()
     },
   })
 
-  // Initialize form when data loads
-  useEffect(() => {
-    if (eventTypeData?.eventType) {
-      isInitializedRef.current = false
-      const et = eventTypeData.eventType
-      setFormData({
-        title: et.title,
-        description: et.description || '',
-        duration: et.length,
-        locationType: et.locationType,
-        customLocation: et.locationValue || '',
-        bufferTimeBefore: et.bufferTimeBefore,
-        bufferTimeAfter: et.bufferTimeAfter,
-        minimumNotice: et.minimumNotice,
-        maxBookingsPerDay: et.maxBookingsPerDay || 0,
-        requiresConfirmation: et.requiresConfirmation,
-        isActive: et.isActive,
-        // Booking window settings
-        periodType: et.periodType || 'ROLLING',
-        periodDays: et.periodDays || 30,
-        periodStartDate: et.periodStartDate
-          ? format(new Date(et.periodStartDate), 'yyyy-MM-dd')
-          : format(new Date(), 'yyyy-MM-dd'),
-        periodEndDate: et.periodEndDate
-          ? format(new Date(et.periodEndDate), 'yyyy-MM-dd')
-          : format(addDays(new Date(), 30), 'yyyy-MM-dd'),
-        // Group booking settings
-        isGroupBooking: (et.seatsPerSlot || 1) > 1,
-        seatsPerSlot: et.seatsPerSlot || 1,
-        // Recurring
-        allowsRecurring: et.allowsRecurring || false,
-        recurringMaxWeeks: et.recurringMaxWeeks || 12,
-        recurringFrequency: et.recurringFrequency || 'weekly',
-        recurringInterval: et.recurringInterval || 7,
-        slotInterval: et.slotInterval || 0,
-        hideNotes: et.hideNotes || false,
-        successRedirectUrl: et.successRedirectUrl || '',
-      })
-
-      if (et.questions && et.questions.length > 0) {
-        setQuestions(et.questions.map((q: any) => ({
-          id: q.id,
-          type: q.type,
-          label: q.label,
-          required: q.required,
-          placeholder: q.placeholder || '',
-          options: q.options || [],
-        })))
-        setShowAdvanced(true)
+  // Fetch integration connection status for team members
+  const { data: integrationData } = useQuery<{
+    members: Array<{
+      memberId: string
+      userId: string
+      name: string | null
+      email: string
+      image: string | null
+      integrations: {
+        googleCalendar: boolean
+        outlookCalendar: boolean
+        zoom: boolean
       }
-    }
-  }, [eventTypeData])
+    }>
+  }>({
+    queryKey: ['team-member-integrations', teamId],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${teamId}/members/integrations`)
+      if (!res.ok) throw new Error('Failed to fetch integrations')
+      return res.json()
+    },
+  })
 
-  // Track changes — skip the first trigger caused by initial data population
-  useEffect(() => {
-    if (!eventTypeData?.eventType) return
-    if (!isInitializedRef.current) {
-      isInitializedRef.current = true
-      return
-    }
-    setHasChanges(true)
-  }, [formData, questions])
+  // Helper to check if a member has the required integration for the selected location
+  const getMemberConnectionStatus = (memberId: string) => {
+    const member = integrationData?.members?.find((m) => m.memberId === memberId)
+    if (!member) return { connected: false, label: 'Unknown' }
 
-  // Update mutation
-  const updateMutation = useMutation({
+    switch (formData.locationType) {
+      case 'GOOGLE_MEET':
+        return { connected: member.integrations.googleCalendar, label: 'Google Calendar' }
+      case 'TEAMS':
+        return { connected: member.integrations.outlookCalendar, label: 'Outlook' }
+      case 'ZOOM':
+        return { connected: member.integrations.zoom, label: 'Zoom' }
+      default:
+        return { connected: true, label: '' }
+    }
+  }
+
+  const isVideoConferenceLocation = ['GOOGLE_MEET', 'TEAMS', 'ZOOM'].includes(formData.locationType)
+
+  const createMutation = useMutation({
     mutationFn: async () => {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         title: formData.title,
+        slug: formData.slug,
         description: formData.description || undefined,
-        length: formData.duration,
+        length: formData.length,
         locationType: formData.locationType,
         locationValue: formData.customLocation || undefined,
+        schedulingType: formData.schedulingType,
+        memberIds: formData.memberIds,
+        meetingOrganizerUserId: formData.meetingOrganizerUserId || undefined,
+        periodType: formData.periodType,
         bufferTimeBefore: formData.bufferTimeBefore,
         bufferTimeAfter: formData.bufferTimeAfter,
         minimumNotice: formData.minimumNotice,
         requiresConfirmation: formData.requiresConfirmation,
-        isActive: formData.isActive,
-        // Booking window settings
-        periodType: formData.periodType,
       }
 
-      // Add period-specific fields based on type
       if (formData.periodType === 'ROLLING') {
         payload.periodDays = formData.periodDays
-        payload.periodStartDate = null
-        payload.periodEndDate = null
       } else if (formData.periodType === 'RANGE') {
         payload.periodStartDate = new Date(formData.periodStartDate).toISOString()
         payload.periodEndDate = new Date(formData.periodEndDate).toISOString()
-        payload.periodDays = null
-      } else {
-        // UNLIMITED
-        payload.periodDays = null
-        payload.periodStartDate = null
-        payload.periodEndDate = null
       }
 
       if (formData.maxBookingsPerDay > 0) {
         payload.maxBookingsPerDay = formData.maxBookingsPerDay
       }
 
-      // Include seatsPerSlot for group bookings
+      // Group booking
       if (formData.isGroupBooking && formData.seatsPerSlot > 1) {
         payload.seatsPerSlot = formData.seatsPerSlot
-      } else {
-        payload.seatsPerSlot = 1
       }
 
-      // Recurring setting
-      payload.allowsRecurring = formData.allowsRecurring
+      // Recurring
       if (formData.allowsRecurring) {
+        payload.allowsRecurring = true
         payload.recurringMaxWeeks = formData.recurringMaxWeeks || 12
         payload.recurringFrequency = formData.recurringFrequency || 'weekly'
         if (formData.recurringFrequency === 'custom') {
           payload.recurringInterval = formData.recurringInterval || 7
-        } else {
-          payload.recurringInterval = null
         }
-      } else {
-        payload.recurringMaxWeeks = null
-        payload.recurringFrequency = null
-        payload.recurringInterval = null
       }
 
       // Additional settings
       payload.hideNotes = formData.hideNotes
       if (formData.slotInterval > 0) {
         payload.slotInterval = formData.slotInterval
-      } else {
-        payload.slotInterval = null
       }
       if (formData.successRedirectUrl.trim()) {
         payload.successRedirectUrl = formData.successRedirectUrl.trim()
-      } else {
-        payload.successRedirectUrl = null
       }
 
+      // Questions
       if (questions.length > 0) {
-        payload.questions = questions.map(({ id, ...q }) => q)
-      } else {
-        payload.questions = []
+        payload.questions = questions
       }
 
-      const res = await fetch(`/api/event-types/${params.id}`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/teams/${teamId}/event-types`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const error = await res.json()
-        throw new Error(error.error || 'Failed to update')
+        throw new Error(error.error || 'Failed to create event type')
       }
       return res.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['eventType', params.id] })
-      queryClient.invalidateQueries({ queryKey: ['eventTypes'] })
-      setHasChanges(false)
-      toast({
-        title: 'Event type updated!',
-        description: 'Your changes have been saved.',
-      })
+      queryClient.invalidateQueries({ queryKey: ['team-event-types', teamId] })
+      toast({ title: 'Event type created successfully' })
+      router.push(`/dashboard/teams/${teamId}/event-types`)
     },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to update',
-        variant: 'destructive',
-      })
+    onError: (error: Error) => {
+      toast({ title: error.message, variant: 'destructive' })
     },
   })
 
-  // Delete mutation
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/event-types/${params.id}`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) throw new Error('Failed to delete')
-      return res.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['eventTypes'] })
-      toast({
-        title: 'Event type deleted',
-        description: 'The event type has been removed.',
-      })
-      router.push('/dashboard/event-types')
-    },
-    onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to delete event type.',
-        variant: 'destructive',
-      })
-    },
-  })
-
-  // Toggle active mutation
-  const toggleActiveMutation = useMutation({
-    mutationFn: async (isActive: boolean) => {
-      const res = await fetch(`/api/event-types/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive }),
-      })
-      if (!res.ok) throw new Error('Failed to update')
-      return res.json()
-    },
-    onSuccess: (_, isActive) => {
-      queryClient.invalidateQueries({ queryKey: ['eventType', params.id] })
-      queryClient.invalidateQueries({ queryKey: ['eventTypes'] })
-      toast({
-        title: isActive ? 'Event type enabled' : 'Event type disabled',
-        description: isActive 
-          ? 'This event type is now accepting bookings.'
-          : 'This event type will not accept new bookings.',
-      })
-    },
-  })
-
-  const addQuestion = () => {
-    setQuestions([
-      ...questions,
-      { type: 'TEXT', label: '', required: false },
-    ])
+  const handleTitleChange = (title: string) => {
+    setFormData({
+      ...formData,
+      title,
+      slug: title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, ''),
+    })
   }
 
-  const updateQuestion = (index: number, updates: Partial<QuestionInput & { id?: string }>) => {
+  const toggleMemberSelection = (memberId: string) => {
+    setFormData((prev) => {
+      const isRemoving = prev.memberIds.includes(memberId)
+      const newMemberIds = isRemoving
+        ? prev.memberIds.filter((id) => id !== memberId)
+        : [...prev.memberIds, memberId]
+
+      let newOrganizer = prev.meetingOrganizerUserId
+      if (isRemoving && prev.meetingOrganizerUserId) {
+        // If removing the organizer, find their userId and reset
+        const removedMember = integrationData?.members?.find((m) => m.memberId === memberId)
+        if (removedMember && removedMember.userId === prev.meetingOrganizerUserId) {
+          // Set to first remaining member's userId
+          const firstRemaining = integrationData?.members?.find((m) => newMemberIds.includes(m.memberId))
+          newOrganizer = firstRemaining?.userId || ''
+        }
+      } else if (!isRemoving && !prev.meetingOrganizerUserId) {
+        // First member selected — auto-set as organizer
+        const addedMember = integrationData?.members?.find((m) => m.memberId === memberId)
+        if (addedMember) newOrganizer = addedMember.userId
+      }
+
+      return { ...prev, memberIds: newMemberIds, meetingOrganizerUserId: newOrganizer }
+    })
+  }
+
+  const toggleSelectAll = () => {
+    const allMemberIds = activeMembers.map((m) => m.id)
+    const allSelected = allMemberIds.length > 0 && allMemberIds.every((id) => formData.memberIds.includes(id))
+
+    if (allSelected) {
+      setFormData((prev) => ({ ...prev, memberIds: [], meetingOrganizerUserId: '' }))
+    } else {
+      const firstMember = integrationData?.members?.find((m) => allMemberIds.includes(m.memberId))
+      setFormData((prev) => ({
+        ...prev,
+        memberIds: allMemberIds,
+        meetingOrganizerUserId: prev.meetingOrganizerUserId || firstMember?.userId || '',
+      }))
+    }
+  }
+
+  const addQuestion = () => {
+    setQuestions([...questions, { type: 'TEXT', label: '', required: false }])
+  }
+
+  const updateQuestion = (index: number, updates: Partial<QuestionInput>) => {
     const updated = [...questions]
     updated[index] = { ...updated[index], ...updates }
     setQuestions(updated)
@@ -454,95 +310,59 @@ export default function EditEventTypePage({ params }: PageProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.title.trim()) {
-      toast({
-        title: 'Title required',
-        description: 'Please enter a title for your event type.',
-        variant: 'destructive',
-      })
+      toast({ title: 'Title required', description: 'Please enter a title.', variant: 'destructive' })
       return
     }
-    updateMutation.mutate()
+    if (!formData.slug.trim()) {
+      toast({ title: 'Slug required', description: 'Please enter a URL slug.', variant: 'destructive' })
+      return
+    }
+    if (formData.memberIds.length === 0) {
+      toast({ title: 'Members required', description: 'Select at least one team member.', variant: 'destructive' })
+      return
+    }
+    createMutation.mutate()
   }
 
-  const handleDelete = () => {
-    setShowDeleteDialog(false)
-    deleteMutation.mutate()
-  }
-
-  if (isLoading) {
+  if (isTeamLoading) {
     return (
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />
-        </div>
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-ocean-500" />
       </div>
     )
   }
 
-  if (!eventTypeData?.eventType) {
+  if (!teamData?.team) {
     return (
-      <div className="max-w-3xl mx-auto">
-        <Card>
-          <CardContent className="py-12 text-center">
-            <AlertCircle className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Event type not found
-            </h3>
-            <Link href="/dashboard/event-types">
-              <Button variant="outline">Back to Event Types</Button>
-            </Link>
-          </CardContent>
-        </Card>
+      <div className="max-w-4xl mx-auto text-center py-12">
+        <p className="text-red-600">Failed to load team. Please try again.</p>
+        <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard/teams')}>
+          Back to Teams
+        </Button>
       </div>
     )
   }
+
+  const team = teamData.team
+  const activeMembers = team.members.filter((m) => m.isActive)
 
   return (
     <div className="max-w-3xl mx-auto">
       {/* Header */}
       <div className="mb-8">
         <Link
-          href="/dashboard/event-types"
+          href={`/dashboard/teams/${teamId}/event-types`}
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Event Types
+          Back to {team.name} Event Types
         </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-heading font-bold text-gray-900">
-              Edit Event Type
-            </h1>
-            <p className="text-gray-600 mt-1">
-              {eventTypeData.eventType._count.bookings} total bookings
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Active Toggle */}
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={formData.isActive}
-                onCheckedChange={(checked) => {
-                  setFormData({ ...formData, isActive: checked })
-                  toggleActiveMutation.mutate(checked)
-                }}
-              />
-              <Label className="text-sm font-normal">
-                {formData.isActive ? 'Active' : 'Inactive'}
-              </Label>
-            </div>
-            {/* Delete Button */}
-            <Button
-              variant="outline"
-              className="text-red-600 hover:text-red-700 hover:border-red-300"
-              onClick={() => setShowDeleteDialog(true)}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-          </div>
-        </div>
+        <h1 className="text-3xl font-heading font-bold text-gray-900">
+          Create Team Event Type
+        </h1>
+        <p className="text-gray-600 mt-1">
+          Create a new event type for {team.name}
+        </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -551,7 +371,7 @@ export default function EditEventTypePage({ params }: PageProps) {
           <CardHeader>
             <CardTitle>Basic Information</CardTitle>
             <CardDescription>
-              Set up the basic details for your event type.
+              Set up the basic details for your team event type.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -560,19 +380,33 @@ export default function EditEventTypePage({ params }: PageProps) {
               <Input
                 id="title"
                 value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="e.g., 30 Minute Meeting"
+                onChange={(e) => handleTitleChange(e.target.value)}
+                placeholder="e.g., Team Consultation"
               />
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="slug">URL Slug *</Label>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">/team/{team.slug}/</span>
+                <Input
+                  id="slug"
+                  value={formData.slug}
+                  onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                  placeholder="team-consultation"
+                  pattern="^[a-z0-9-]+$"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <textarea
+              <Textarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[80px]"
-                placeholder="A brief description of this meeting type..."
+                placeholder="A brief description of this event type..."
+                rows={3}
               />
             </div>
 
@@ -583,10 +417,10 @@ export default function EditEventTypePage({ params }: PageProps) {
                   <button
                     key={d.value}
                     type="button"
-                    onClick={() => setFormData({ ...formData, duration: d.value })}
+                    onClick={() => setFormData({ ...formData, length: d.value })}
                     className={cn(
                       'px-4 py-2 rounded-lg border text-sm font-medium transition-colors',
-                      formData.duration === d.value
+                      formData.length === d.value
                         ? 'border-ocean-500 bg-ocean-50 text-ocean-700'
                         : 'border-gray-200 hover:border-gray-300'
                     )}
@@ -599,6 +433,116 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardContent>
         </Card>
 
+        {/* Scheduling Type */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Scheduling Type</CardTitle>
+            <CardDescription>
+              How should bookings be distributed among team members?
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {[
+              { value: 'ROUND_ROBIN', label: 'Round Robin', description: 'Rotates between team members to balance workload' },
+              { value: 'COLLECTIVE', label: 'Collective', description: 'All assigned members must be available for the booking' },
+              { value: 'MANAGED', label: 'Managed', description: 'Admin assigns members manually to each booking' },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setFormData({ ...formData, schedulingType: option.value as typeof formData.schedulingType })}
+                className={cn(
+                  'flex items-center gap-4 p-4 rounded-lg border text-left transition-all w-full',
+                  formData.schedulingType === option.value
+                    ? 'border-ocean-500 bg-ocean-50 ring-2 ring-ocean-500/20'
+                    : 'border-gray-200 hover:border-gray-300'
+                )}
+              >
+                <div
+                  className={cn(
+                    'w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0',
+                    formData.schedulingType === option.value
+                      ? 'border-ocean-500'
+                      : 'border-gray-300'
+                  )}
+                >
+                  {formData.schedulingType === option.value && (
+                    <div className="w-2 h-2 rounded-full bg-ocean-500" />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">{option.label}</p>
+                  <p className="text-sm text-gray-500">{option.description}</p>
+                </div>
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Assign Members */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Assign Members
+            </CardTitle>
+            <CardDescription>
+              Select team members who will handle bookings for this event type.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {activeMembers.length > 1 && (
+              <label className="flex items-center gap-3 p-3 mb-2 rounded-lg cursor-pointer transition-colors border border-gray-200 hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={activeMembers.length > 0 && activeMembers.every((m) => formData.memberIds.includes(m.id))}
+                  onChange={toggleSelectAll}
+                  className="h-4 w-4 rounded border-gray-300 text-ocean-600"
+                />
+                <span className="text-sm font-medium text-gray-700">Select All</span>
+                <span className="text-xs text-gray-400">({activeMembers.length} members)</span>
+              </label>
+            )}
+            <div className="space-y-2">
+              {activeMembers.map((member) => (
+                <label
+                  key={member.id}
+                  className={cn(
+                    'flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors',
+                    formData.memberIds.includes(member.id)
+                      ? 'bg-ocean-50 border border-ocean-200'
+                      : 'border border-gray-200 hover:bg-gray-50'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={formData.memberIds.includes(member.id)}
+                    onChange={() => toggleMemberSelection(member.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-ocean-600"
+                  />
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={member.user.image || undefined} />
+                    <AvatarFallback className="text-xs">
+                      {getInitials(member.user.name || member.user.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {member.user.name || 'Unnamed'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{member.user.email}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            {formData.memberIds.length === 0 && (
+              <p className="text-xs text-amber-600 mt-2">
+                Select at least one member to handle bookings
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Location */}
         <Card>
           <CardHeader>
@@ -607,58 +551,35 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3">
-              {LOCATION_TYPES.map((loc) => {
-                const isTeamsDisabled = loc.value === 'TEAMS' && outlookCalendar && !teamsCapable
-                return (
-                  <button
-                    key={loc.value}
-                    type="button"
-                    disabled={isTeamsDisabled}
-                    onClick={() => !isTeamsDisabled && setFormData({ ...formData, locationType: loc.value })}
+              {LOCATION_TYPES.map((loc) => (
+                <button
+                  key={loc.value}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, locationType: loc.value })}
+                  className={cn(
+                    'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
+                    formData.locationType === loc.value
+                      ? 'border-ocean-500 bg-ocean-50 ring-2 ring-ocean-500/20'
+                      : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <div
                     className={cn(
-                      'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
-                      isTeamsDisabled
-                        ? 'border-gray-200 opacity-50 cursor-not-allowed'
-                        : formData.locationType === loc.value
-                          ? 'border-ocean-500 bg-ocean-50 ring-2 ring-ocean-500/20'
-                          : 'border-gray-200 hover:border-gray-300'
+                      'w-10 h-10 rounded-lg flex items-center justify-center',
+                      formData.locationType === loc.value
+                        ? 'bg-ocean-500 text-white'
+                        : 'bg-gray-100 text-gray-500'
                     )}
                   >
-                    <div
-                      className={cn(
-                        'w-10 h-10 rounded-lg flex items-center justify-center',
-                        isTeamsDisabled
-                          ? 'bg-gray-100 text-gray-400'
-                          : formData.locationType === loc.value
-                            ? 'bg-ocean-500 text-white'
-                            : 'bg-gray-100 text-gray-500'
-                      )}
-                    >
-                      <loc.icon className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className={cn('font-medium', isTeamsDisabled ? 'text-gray-400' : 'text-gray-900')}>{loc.label}</p>
-                        {isTeamsDisabled && (
-                          <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
-                            Requires M365 work account
-                          </span>
-                        )}
-                      </div>
-                      <p className={cn('text-sm', isTeamsDisabled ? 'text-gray-400' : 'text-gray-500')}>{loc.description}</p>
-                    </div>
-                  </button>
-                )
-              })}
+                    <loc.icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{loc.label}</p>
+                    <p className="text-sm text-gray-500">{loc.description}</p>
+                  </div>
+                </button>
+              ))}
             </div>
-
-            <LocationIntegrationWarning
-              locationType={formData.locationType}
-              googleCalendar={googleCalendar}
-              outlookCalendar={outlookCalendar}
-              teamsCapable={teamsCapable}
-              zoomConnected={zoomConnected}
-            />
 
             {(formData.locationType === 'IN_PERSON' || formData.locationType === 'CUSTOM') && (
               <div className="space-y-2 pt-4">
@@ -668,9 +589,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                 <Input
                   id="customLocation"
                   value={formData.customLocation}
-                  onChange={(e) =>
-                    setFormData({ ...formData, customLocation: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, customLocation: e.target.value })}
                   placeholder={
                     formData.locationType === 'IN_PERSON'
                       ? '123 Main St, City, Country'
@@ -682,6 +601,86 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardContent>
         </Card>
 
+        {/* Meeting Organizer - only for video conference locations with assigned members */}
+        {isVideoConferenceLocation && formData.memberIds.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Video className="h-5 w-5" />
+                Meeting Organizer
+              </CardTitle>
+              <CardDescription>
+                Choose whose account will generate the meeting link. They must have the selected platform connected.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {formData.memberIds.map((memberId) => {
+                  const member = activeMembers.find((m) => m.id === memberId)
+                  const integration = integrationData?.members?.find((m) => m.memberId === memberId)
+                  const status = getMemberConnectionStatus(memberId)
+                  if (!member) return null
+
+                  return (
+                    <label
+                      key={memberId}
+                      className={cn(
+                        'flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors',
+                        formData.meetingOrganizerUserId === integration?.userId
+                          ? 'bg-ocean-50 border border-ocean-200'
+                          : 'border border-gray-200 hover:bg-gray-50'
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="meetingOrganizer"
+                        checked={formData.meetingOrganizerUserId === integration?.userId}
+                        onChange={() => setFormData({ ...formData, meetingOrganizerUserId: integration?.userId || '' })}
+                        className="h-4 w-4 border-gray-300 text-ocean-600"
+                      />
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={member.user.image || undefined} />
+                        <AvatarFallback className="text-xs">
+                          {getInitials(member.user.name || member.user.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">
+                          {member.user.name || 'Unnamed'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{member.user.email}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                          status.connected
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        )}
+                      >
+                        {status.connected ? 'Connected' : 'Not connected'}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+              {formData.meetingOrganizerUserId && (() => {
+                const selectedMemberId = integrationData?.members?.find(
+                  (m) => m.userId === formData.meetingOrganizerUserId
+                )?.memberId
+                const status = selectedMemberId ? getMemberConnectionStatus(selectedMemberId) : null
+                return status && !status.connected ? (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-sm text-amber-800">
+                      The selected organizer hasn&apos;t connected {status.label}. No meeting link will be auto-generated for bookings.
+                    </p>
+                  </div>
+                ) : null
+              })()}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Booking Window */}
         <Card>
           <CardHeader>
@@ -690,34 +689,20 @@ export default function EditEventTypePage({ params }: PageProps) {
               Booking Window
             </CardTitle>
             <CardDescription>
-              Control when invitees can book appointments with you.
+              Control when invitees can book appointments.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3">
               {[
-                {
-                  value: 'ROLLING',
-                  label: 'Rolling Window',
-                  description: 'Allow booking for the next X days from today',
-                },
-                {
-                  value: 'RANGE',
-                  label: 'Date Range',
-                  description: 'Only allow booking within specific dates',
-                },
-                {
-                  value: 'UNLIMITED',
-                  label: 'Unlimited',
-                  description: 'No date restrictions (use with caution)',
-                },
+                { value: 'ROLLING', label: 'Rolling Window', description: 'Allow booking for the next X days from today' },
+                { value: 'RANGE', label: 'Date Range', description: 'Only allow booking within specific dates' },
+                { value: 'UNLIMITED', label: 'Unlimited', description: 'No date restrictions (use with caution)' },
               ].map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() =>
-                    setFormData({ ...formData, periodType: option.value as any })
-                  }
+                  onClick={() => setFormData({ ...formData, periodType: option.value as typeof formData.periodType })}
                   className={cn(
                     'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
                     formData.periodType === option.value
@@ -745,7 +730,6 @@ export default function EditEventTypePage({ params }: PageProps) {
               ))}
             </div>
 
-            {/* ROLLING: Show days input */}
             {formData.periodType === 'ROLLING' && (
               <div className="pt-4 border-t">
                 <Label>Number of days into the future</Label>
@@ -771,7 +755,6 @@ export default function EditEventTypePage({ params }: PageProps) {
               </div>
             )}
 
-            {/* RANGE: Show start/end date pickers */}
             {formData.periodType === 'RANGE' && (
               <div className="pt-4 border-t space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -781,9 +764,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                       type="date"
                       value={formData.periodStartDate}
                       min={format(new Date(), 'yyyy-MM-dd')}
-                      onChange={(e) =>
-                        setFormData({ ...formData, periodStartDate: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, periodStartDate: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -792,9 +773,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                       type="date"
                       value={formData.periodEndDate}
                       min={formData.periodStartDate}
-                      onChange={(e) =>
-                        setFormData({ ...formData, periodEndDate: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, periodEndDate: e.target.value })}
                     />
                   </div>
                 </div>
@@ -804,13 +783,11 @@ export default function EditEventTypePage({ params }: PageProps) {
               </div>
             )}
 
-            {/* UNLIMITED: Show warning */}
             {formData.periodType === 'UNLIMITED' && (
               <div className="pt-4 border-t">
                 <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
                   <p className="text-sm text-amber-800">
                     Unlimited booking window allows invitees to book any date in the future.
-                    This may result in bookings far into the future.
                   </p>
                 </div>
               </div>
@@ -825,15 +802,14 @@ export default function EditEventTypePage({ params }: PageProps) {
               <div className="space-y-1">
                 <p className="font-medium text-gray-900">Require Confirmation</p>
                 <p className="text-sm text-gray-500">
-                  Bookings will be held as pending until you manually confirm or decline them.
+                  Bookings will be held as pending until manually confirmed or declined.
                 </p>
               </div>
-              <Switch
-                id="requiresConfirmation"
+              <input
+                type="checkbox"
                 checked={formData.requiresConfirmation}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, requiresConfirmation: checked })
-                }
+                onChange={(e) => setFormData({ ...formData, requiresConfirmation: e.target.checked })}
+                className="h-5 w-5 rounded border-gray-300 text-ocean-600"
               />
             </div>
           </CardContent>
@@ -879,9 +855,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                       <Label className="text-xs">Required</Label>
                       <select
                         value={question.required ? 'yes' : 'no'}
-                        onChange={(e) =>
-                          updateQuestion(index, { required: e.target.value === 'yes' })
-                        }
+                        onChange={(e) => updateQuestion(index, { required: e.target.value === 'yes' })}
                         className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm"
                       >
                         <option value="no">Optional</option>
@@ -924,7 +898,12 @@ export default function EditEventTypePage({ params }: PageProps) {
               </div>
             ))}
 
-            <Button type="button" variant="outline" onClick={addQuestion} disabled={!customQuestionsGate.canAccess}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={addQuestion}
+              disabled={!customQuestionsGate.canAccess}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Add Question
               {!customQuestionsGate.canAccess && <span className="ml-1 text-[10px] text-ocean-600 font-semibold">PRO</span>}
@@ -946,7 +925,7 @@ export default function EditEventTypePage({ params }: PageProps) {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between p-4 rounded-lg border">
-              <div className="space-y-1 min-w-0 mr-4">
+              <div className="space-y-1">
                 <p className="font-medium text-gray-900">Enable Group Booking</p>
                 <p className="text-sm text-gray-500">
                   Multiple attendees can book the same slot (e.g., workshops, webinars, office hours)
@@ -974,7 +953,6 @@ export default function EditEventTypePage({ params }: PageProps) {
                 />
               </button>
             </div>
-
             {formData.isGroupBooking && groupBookingGate.canAccess && (
               <div className="pt-4 border-t space-y-4">
                 <div className="space-y-2">
@@ -995,11 +973,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                     />
                     <span className="text-gray-500">attendees</span>
                   </div>
-                  <p className="text-xs text-gray-500">
-                    Up to {formData.seatsPerSlot} people can book each available time slot
-                  </p>
                 </div>
-
                 <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
                   <p className="text-sm text-blue-800">
                     <strong>Use cases:</strong> Group classes, webinars, office hours, workshops, or any event where multiple guests can attend the same session.
@@ -1019,7 +993,7 @@ export default function EditEventTypePage({ params }: PageProps) {
               <ProBadge feature="recurringBooking" />
             </CardTitle>
             <CardDescription>
-              Allow invitees to book recurring sessions.
+              Allow invitees to book weekly recurring sessions.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1051,9 +1025,11 @@ export default function EditEventTypePage({ params }: PageProps) {
             {formData.allowsRecurring && (
               <div className="p-4 rounded-lg border space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Frequency</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Frequency
+                  </label>
                   <select
-                    value={formData.recurringFrequency || 'weekly'}
+                    value={formData.recurringFrequency}
                     onChange={(e) => setFormData({ ...formData, recurringFrequency: e.target.value })}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-ocean-500 focus:ring-ocean-500"
                   >
@@ -1065,21 +1041,25 @@ export default function EditEventTypePage({ params }: PageProps) {
                 </div>
                 {formData.recurringFrequency === 'custom' && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Repeat every (days)</label>
+                    <label className="text-sm font-medium text-gray-700">
+                      Repeat every (days)
+                    </label>
                     <input
                       type="number"
                       min={1}
                       max={90}
-                      value={formData.recurringInterval || 7}
+                      value={formData.recurringInterval}
                       onChange={(e) => setFormData({ ...formData, recurringInterval: Number(e.target.value) })}
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-ocean-500 focus:ring-ocean-500"
                     />
                   </div>
                 )}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-gray-700">Maximum sessions per series</label>
+                  <label className="text-sm font-medium text-gray-700">
+                    Maximum sessions per series
+                  </label>
                   <select
-                    value={formData.recurringMaxWeeks || 12}
+                    value={formData.recurringMaxWeeks}
                     onChange={(e) => setFormData({ ...formData, recurringMaxWeeks: Number(e.target.value) })}
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-ocean-500 focus:ring-ocean-500"
                   >
@@ -1087,7 +1067,9 @@ export default function EditEventTypePage({ params }: PageProps) {
                       <option key={w} value={w}>{w} sessions</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500">Invitees can book up to this many occurrences (2-24)</p>
+                  <p className="text-xs text-gray-500">
+                    Invitees can book up to this many occurrences (2-24)
+                  </p>
                 </div>
               </div>
             )}
@@ -1125,15 +1107,12 @@ export default function EditEventTypePage({ params }: PageProps) {
                   <Input
                     type="number"
                     min={0}
+                    max={120}
                     value={formData.bufferTimeBefore}
                     disabled={!bufferGate.canAccess}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })
-                    }
+                    onChange={(e) => setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })}
                   />
-                  <p className="text-xs text-gray-500">
-                    Free time before each meeting
-                  </p>
+                  <p className="text-xs text-gray-500">Free time before each meeting</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
@@ -1143,16 +1122,14 @@ export default function EditEventTypePage({ params }: PageProps) {
                   <Input
                     type="number"
                     min={0}
+                    max={120}
                     value={formData.bufferTimeAfter}
                     disabled={!bufferGate.canAccess}
-                    onChange={(e) =>
-                      setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })
-                    }
+                    onChange={(e) => setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-gray-500">Free time after each meeting</p>
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Minimum Notice (minutes)</Label>
@@ -1160,13 +1137,9 @@ export default function EditEventTypePage({ params }: PageProps) {
                     type="number"
                     min={0}
                     value={formData.minimumNotice}
-                    onChange={(e) =>
-                      setFormData({ ...formData, minimumNotice: parseInt(e.target.value) || 0 })
-                    }
+                    onChange={(e) => setFormData({ ...formData, minimumNotice: parseInt(e.target.value) || 0 })}
                   />
-                  <p className="text-xs text-gray-500">
-                    How far in advance must bookings be made
-                  </p>
+                  <p className="text-xs text-gray-500">How far in advance must bookings be made</p>
                 </div>
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2">
@@ -1176,14 +1149,10 @@ export default function EditEventTypePage({ params }: PageProps) {
                   <Input
                     type="number"
                     min={0}
+                    max={100}
                     value={formData.maxBookingsPerDay}
                     disabled={!bookingLimitGate.canAccess}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        maxBookingsPerDay: parseInt(e.target.value) || 0,
-                      })
-                    }
+                    onChange={(e) => setFormData({ ...formData, maxBookingsPerDay: parseInt(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-gray-500">0 = unlimited</p>
                 </div>
@@ -1232,65 +1201,32 @@ export default function EditEventTypePage({ params }: PageProps) {
                   Redirect invitees to this URL after successful booking. Leave empty for default confirmation page.
                 </p>
               </div>
-
             </CardContent>
           )}
         </Card>
 
         {/* Submit */}
-        <div className="flex items-center justify-between">
-          <Link href="/dashboard/event-types">
+        <div className="flex items-center justify-end gap-4">
+          <Link href={`/dashboard/teams/${teamId}/event-types`}>
             <Button type="button" variant="outline">
               Cancel
             </Button>
           </Link>
-          <Button 
-            type="submit" 
-            disabled={updateMutation.isPending || !hasChanges}
+          <Button
+            type="submit"
+            disabled={createMutation.isPending || formData.memberIds.length === 0}
           >
-            {updateMutation.isPending ? (
+            {createMutation.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
+                Creating...
               </>
             ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
+              'Create Event Type'
             )}
           </Button>
         </div>
       </form>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the event type "{eventTypeData.eventType.title}" and all
-              associated bookings. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                'Delete'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

@@ -117,3 +117,43 @@ export async function PATCH(
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })
   }
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { error, session } = await requireAdmin()
+  if (error) return error
+
+  try {
+    const { id } = await params
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { email: true, role: true },
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+
+    if (user.role === 'ADMIN') {
+      return NextResponse.json({ error: 'Cannot delete an admin user' }, { status: 403 })
+    }
+
+    await prisma.user.delete({ where: { id } })
+
+    await logAdminAction({
+      adminId: session!.user.id,
+      action: 'DELETE_USER',
+      targetType: 'User',
+      targetId: id,
+      details: { userEmail: user.email },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Admin user delete error:', error)
+    return NextResponse.json({ error: 'Failed to delete user' }, { status: 500 })
+  }
+}

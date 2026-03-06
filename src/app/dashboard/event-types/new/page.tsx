@@ -289,6 +289,50 @@ function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFo
           <p className="text-xs text-gray-500">0 = unlimited</p>
         </div>
       </div>
+
+      <div className="space-y-2">
+        <Label>Slot Interval (minutes)</Label>
+        <Input
+          type="number"
+          min={0}
+          max={720}
+          value={formData.slotInterval}
+          onChange={(e) =>
+            setFormData({ ...formData, slotInterval: parseInt(e.target.value) || 0 })
+          }
+        />
+        <p className="text-xs text-gray-500">
+          Custom interval between available slots. 0 = use event duration as interval.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between p-4 rounded-lg border">
+        <div className="space-y-1">
+          <p className="font-medium text-gray-900">Hide Notes Field</p>
+          <p className="text-sm text-gray-500">
+            Hide the additional notes field from the booking form.
+          </p>
+        </div>
+        <input
+          type="checkbox"
+          checked={formData.hideNotes}
+          onChange={(e) => setFormData({ ...formData, hideNotes: e.target.checked })}
+          className="h-5 w-5 rounded border-gray-300 text-ocean-600"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Success Redirect URL</Label>
+        <Input
+          type="url"
+          value={formData.successRedirectUrl}
+          onChange={(e) => setFormData({ ...formData, successRedirectUrl: e.target.value })}
+          placeholder="https://example.com/thank-you"
+        />
+        <p className="text-xs text-gray-500">
+          Redirect invitees to this URL after successful booking. Leave empty for default confirmation page.
+        </p>
+      </div>
     </CardContent>
   )
 }
@@ -398,6 +442,10 @@ export default function NewEventTypePage() {
     recurringMaxWeeks: 12,
     recurringFrequency: 'weekly' as string,
     recurringInterval: 7,
+    // Additional settings
+    slotInterval: 0,
+    hideNotes: false,
+    successRedirectUrl: '',
   })
 
   const [questions, setQuestions] = useState<QuestionInput[]>([])
@@ -451,6 +499,15 @@ export default function NewEventTypePage() {
         if (formData.recurringFrequency === 'custom') {
           payload.recurringInterval = formData.recurringInterval || 7
         }
+      }
+
+      // Additional settings
+      payload.hideNotes = formData.hideNotes
+      if (formData.slotInterval > 0) {
+        payload.slotInterval = formData.slotInterval
+      }
+      if (formData.successRedirectUrl.trim()) {
+        payload.successRedirectUrl = formData.successRedirectUrl.trim()
       }
 
       // Only include questions if any exist

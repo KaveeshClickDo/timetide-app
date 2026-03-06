@@ -111,7 +111,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       'isActive', 'requiresConfirmation', 'allowsRecurring', 'recurringMaxWeeks', 'recurringFrequency', 'recurringInterval',
       'minimumNotice', 'bufferTimeBefore', 'bufferTimeAfter', 'maxBookingsPerDay',
       'scheduleId', 'color', 'periodType', 'periodDays', 'periodStartDate',
-      'periodEndDate', 'seatsPerSlot',
+      'periodEndDate', 'seatsPerSlot', 'slotInterval', 'hideNotes', 'successRedirectUrl',
     ] as const
     const updateData: Record<string, unknown> = {}
     for (const field of allowedFields) {

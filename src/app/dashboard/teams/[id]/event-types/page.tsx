@@ -36,6 +36,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
+import { EmbedCodeGenerator } from '@/components/embed-code-generator';
 import type { TeamMemberWithRole } from '@/types/team';
 import type { TeamEventType, EventTypeAssignment } from '@/types/event-type';
 
@@ -241,6 +242,16 @@ export default function TeamEventTypesPage() {
                           <Calendar className="h-4 w-4" />
                           {eventType._count.bookings} bookings
                         </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 mt-4">
+                        <EmbedCodeGenerator
+                          username=""
+                          eventSlug={eventType.slug}
+                          eventTitle={eventType.title}
+                          basePath={`/team/${team.slug}`}
+                        />
                       </div>
 
                       {/* Assigned Members */}

@@ -20,6 +20,7 @@ interface EmbedCodeGeneratorProps {
   eventSlug: string
   eventTitle: string
   userImage?: string | null
+  basePath?: string
 }
 
 type EmbedType = 'inline' | 'popup-widget' | 'popup-text'
@@ -104,6 +105,7 @@ export function EmbedCodeGenerator({
   eventSlug,
   eventTitle,
   userImage,
+  basePath,
 }: EmbedCodeGeneratorProps) {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -118,7 +120,9 @@ export function EmbedCodeGenerator({
   const [textColor, setTextColor] = useState('#0ea5e9')
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-  const bookingUrl = `${baseUrl}/${username}/${eventSlug}`
+  const bookingUrl = basePath
+    ? `${baseUrl}${basePath}/${eventSlug}`
+    : `${baseUrl}/${username}/${eventSlug}`
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen)

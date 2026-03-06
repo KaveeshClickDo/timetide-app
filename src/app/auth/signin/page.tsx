@@ -33,6 +33,20 @@ export default function SignInPage() {
       } else {
         setCallbackUrl('/dashboard')
       }
+
+      // Show toast if redirected due to session timeout
+      const reason = params.get('reason')
+      if (reason === 'idle') {
+        toast({
+          title: 'Session timed out',
+          description: 'You were signed out due to inactivity. Please sign in again.',
+        })
+      } else if (reason === 'expired') {
+        toast({
+          title: 'Session expired',
+          description: 'Your session has expired. Please sign in again.',
+        })
+      }
     } catch (e) {
       setCallbackUrl('/dashboard')
     }

@@ -41,6 +41,8 @@ import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { UpgradeModal } from '@/components/upgrade-modal'
 import { PwaInstallBanner } from '@/components/pwa-install-banner'
 import { ImpersonationBanner } from '@/components/impersonation-banner'
+import { SessionExpiryWarning } from '@/components/session-expiry-warning'
+import { useIdleTimeout } from '@/hooks/use-idle-timeout'
 
 const navigation: { name: string; href: string; icon: typeof Calendar; gateFeature?: keyof PlanLimits }[] = [
   { name: 'Bookings', href: '/dashboard', icon: Calendar },
@@ -87,6 +89,9 @@ export default function DashboardLayout({
 
   const { canAccess: canCreateEvent } = useFeatureGate('maxEventTypes', eventTypes?.length ?? 0)
 
+  // Auto-logout after 30 minutes of inactivity
+  useIdleTimeout()
+
   // Auto-update timezone if auto-detect is enabled and browser timezone differs
   useEffect(() => {
     if (!user || !user.timezoneAutoDetect) return
@@ -113,6 +118,7 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       <ImpersonationBanner />
+      <SessionExpiryWarning />
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (

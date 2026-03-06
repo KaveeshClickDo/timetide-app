@@ -27,6 +27,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
+import { Switch } from '@/components/ui/switch'
 import { cn, getInitials } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { ProBadge } from '@/components/pro-badge'
@@ -805,11 +806,10 @@ export default function NewTeamEventTypePage() {
                   Bookings will be held as pending until manually confirmed or declined.
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <Switch
+                id="requiresConfirmation"
                 checked={formData.requiresConfirmation}
-                onChange={(e) => setFormData({ ...formData, requiresConfirmation: e.target.checked })}
-                className="h-5 w-5 rounded border-gray-300 text-ocean-600"
+                onCheckedChange={(checked) => setFormData({ ...formData, requiresConfirmation: checked })}
               />
             </div>
           </CardContent>

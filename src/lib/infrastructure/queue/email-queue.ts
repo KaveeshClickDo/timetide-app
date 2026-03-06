@@ -333,24 +333,41 @@ export async function queueBookingCancellationEmails(
  */
 export async function queueBookingPendingEmails(data: BookingEmailData): Promise<void> {
   // Queue email to invitee
+  const inviteeHostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
   await queueEmail({
     type: 'booking_pending',
     to: data.inviteeEmail,
-    subject: `Pending: ${data.eventTitle} with ${data.hostName} - Awaiting Confirmation`,
+    subject: `Pending: ${data.eventTitle} with ${inviteeHostLabel} - Awaiting Confirmation`,
     bookingData: data,
     isHost: false,
     replyTo: data.hostEmail,
   });
 
-  // Queue email to host
-  await queueEmail({
-    type: 'booking_pending',
-    to: data.hostEmail,
-    subject: `Action Required: New booking request from ${data.inviteeName}`,
-    bookingData: data,
-    isHost: true,
-    replyTo: data.inviteeEmail,
-  });
+  // Queue email to each team member (for collective events)
+  if (data.teamMembers && data.teamMembers.length > 0) {
+    for (const member of data.teamMembers) {
+      await queueEmail({
+        type: 'booking_pending',
+        to: member.email,
+        subject: `Action Required: New booking request from ${data.inviteeName}`,
+        bookingData: data,
+        isHost: true,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  } else {
+    // Single host
+    await queueEmail({
+      type: 'booking_pending',
+      to: data.hostEmail,
+      subject: `Action Required: New booking request from ${data.inviteeName}`,
+      bookingData: data,
+      isHost: true,
+      replyTo: data.inviteeEmail,
+    });
+  }
 }
 
 /**

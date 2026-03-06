@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { ProBadge } from '@/components/pro-badge'
@@ -872,14 +873,12 @@ export default function NewEventTypePage() {
                   Bookings will be held as pending until you manually confirm or decline them.
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <Switch
                 id="requiresConfirmation"
                 checked={formData.requiresConfirmation}
-                onChange={(e) =>
-                  setFormData({ ...formData, requiresConfirmation: e.target.checked })
+                onCheckedChange={(checked) =>
+                  setFormData({ ...formData, requiresConfirmation: checked })
                 }
-                className="h-5 w-5 rounded border-gray-300 text-ocean-600"
               />
             </div>
           </CardContent>

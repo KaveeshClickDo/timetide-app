@@ -12,6 +12,7 @@ import { authOptions } from '@/lib/auth';
 import { rescheduleBookingSchema } from '@/lib/validation/schemas';
 import { updateGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
 import { updateOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
+import { updateAllCalendarEvents } from '@/lib/integrations/calendar/event-ids';
 import { BookingEmailData } from '@/lib/integrations/email/client';
 import {
   queueBookingRescheduledEmails,
@@ -168,12 +169,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         }
       }
 
-      // Find calendar for updates
-      const calendar = await prisma.calendar.findFirst({
-        where: { userId: booking.hostId, isEnabled: true },
-        orderBy: { isPrimary: 'desc' },
-      });
-
       // Apply shifts to all future bookings
       for (const fb of futureBookings) {
         const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
@@ -189,18 +184,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           },
         });
 
-        // Update calendar event
-        if (fb.calendarEventId && calendar) {
-          try {
-            if (calendar.provider === 'GOOGLE') {
-              await updateGoogleCalendarEvent(calendar.id, fb.calendarEventId, { startTime: shiftedStart, endTime: shiftedEnd });
-            } else if (calendar.provider === 'OUTLOOK') {
-              await updateOutlookCalendarEvent(calendar.id, fb.calendarEventId, { startTime: shiftedStart, endTime: shiftedEnd });
-            }
-          } catch (calendarError) {
-            console.warn('Failed to update calendar event for occurrence:', calendarError);
-          }
-        }
+        // Update calendar events on all calendars
+        await updateAllCalendarEvents(
+          booking.hostId,
+          fb.calendarEventId,
+          fb.calendarEventIds,
+          { startTime: shiftedStart, endTime: shiftedEnd }
+        );
 
         // Reschedule reminders
         rescheduleBookingReminders(fb.id, fb.uid, shiftedStart).catch(console.error);
@@ -371,43 +361,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    // Update calendar event if exists
-    if (booking.calendarEventId) {
-      // Find the calendar that owns this event (could be Google or Outlook)
-      const calendar = await prisma.calendar.findFirst({
-        where: {
-          userId: booking.hostId,
-          isEnabled: true,
-        },
-        orderBy: { isPrimary: 'desc' },
-      });
-
-      if (calendar) {
-        try {
-          if (calendar.provider === 'GOOGLE') {
-            await updateGoogleCalendarEvent(
-              calendar.id,
-              booking.calendarEventId,
-              {
-                startTime: newStart,
-                endTime: newEnd,
-              }
-            );
-          } else if (calendar.provider === 'OUTLOOK') {
-            await updateOutlookCalendarEvent(
-              calendar.id,
-              booking.calendarEventId,
-              {
-                startTime: newStart,
-                endTime: newEnd,
-              }
-            );
-          }
-        } catch (calendarError) {
-          console.warn('Failed to update calendar event:', calendarError);
-        }
-      }
-    }
+    // Update calendar events on all calendars
+    await updateAllCalendarEvents(
+      booking.hostId,
+      booking.calendarEventId,
+      booking.calendarEventIds,
+      { startTime: newStart, endTime: newEnd }
+    );
 
     // Build teamMembers for email
     const teamMembersForEmail = booking.eventType.schedulingType === 'COLLECTIVE'

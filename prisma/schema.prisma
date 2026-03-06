@@ -412,7 +412,8 @@ model Booking {
   meetingUrl    String?
   
   // Calendar
-  calendarEventId String?     // ID in connected calendar
+  calendarEventId  String?    // Legacy: single calendar event ID (deprecated)
+  calendarEventIds Json?      // Multi-calendar: { "GOOGLE": "eventId", "OUTLOOK": "eventId" }
   
   // Team
   assignedUserId  String?     // For round-robin team events

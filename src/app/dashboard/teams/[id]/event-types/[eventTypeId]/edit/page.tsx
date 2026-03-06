@@ -960,11 +960,10 @@ export default function EditTeamEventTypePage() {
                   Bookings will be held as pending until manually confirmed or declined.
                 </p>
               </div>
-              <input
-                type="checkbox"
+              <Switch
+                id="requiresConfirmation"
                 checked={formData.requiresConfirmation}
-                onChange={(e) => setFormData({ ...formData, requiresConfirmation: e.target.checked })}
-                className="h-5 w-5 rounded border-gray-300 text-ocean-600"
+                onCheckedChange={(checked) => setFormData({ ...formData, requiresConfirmation: checked })}
               />
             </div>
           </CardContent>

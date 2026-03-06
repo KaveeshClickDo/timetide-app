@@ -11,6 +11,8 @@ import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { cancelBookingSchema, confirmRejectBookingSchema } from '@/lib/validation/schemas';
 import { deleteGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
+import { deleteOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
+import { deleteAllCalendarEvents } from '@/lib/integrations/calendar/event-ids';
 import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
 import {
   queueBookingCancellationEmails,
@@ -208,15 +210,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       });
 
       if (action === 'skip') {
-        // Delete calendar event
-        if (skipBooking.calendarEventId) {
-          const cal = await prisma.calendar.findFirst({
-            where: { userId: skipBooking.hostId, isPrimary: true, provider: 'GOOGLE' },
-          });
-          if (cal) {
-            deleteGoogleCalendarEvent(cal.id, skipBooking.calendarEventId).catch(console.error);
-          }
-        }
+        // Delete calendar events from all calendars
+        deleteAllCalendarEvents(
+          skipBooking.hostId,
+          skipBooking.calendarEventId,
+          skipBooking.calendarEventIds
+        );
         // Cancel reminders
         cancelBookingReminders(skipBooking.uid).catch(console.error);
       } else {
@@ -260,7 +259,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
             slug: true,
             length: true,
             description: true,
+            locationType: true,
             schedulingType: true,
+            meetingOrganizerUserId: true,
             teamMemberAssignments: {
               where: { isActive: true },
               select: {
@@ -311,6 +312,14 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           status: 'PENDING',
         },
         orderBy: { startTime: 'asc' },
+        select: {
+          id: true, uid: true, startTime: true, endTime: true, timezone: true,
+          calendarEventId: true, calendarEventIds: true,
+          recurringFrequency: true, inviteeName: true, inviteeEmail: true,
+          hostId: true, eventTypeId: true, location: true, meetingUrl: true,
+          inviteePhone: true, inviteeNotes: true, responses: true,
+          recurringGroupId: true, status: true,
+        },
       });
 
       if (pendingBookings.length === 0) {
@@ -404,14 +413,10 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           },
         }).catch(console.error);
       } else {
-        // Reject: delete calendar events for all pending bookings
-        const primaryCalendar = await prisma.calendar.findFirst({
-          where: { userId: booking.hostId, isPrimary: true, provider: 'GOOGLE' },
-        });
+        // Reject: delete calendar events from all calendars for all pending bookings
+        const bulkRejectCalendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
         for (const pb of pendingBookings) {
-          if (pb.calendarEventId && primaryCalendar) {
-            deleteGoogleCalendarEvent(primaryCalendar.id, pb.calendarEventId).catch(console.error);
-          }
+          deleteAllCalendarEvents(bulkRejectCalendarOwnerId, pb.calendarEventId, pb.calendarEventIds);
         }
         // Build teamMembers for rejected email
         const bulkRejectTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
@@ -573,23 +578,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       // Trigger webhook
       triggerBookingConfirmedWebhook(booking.hostId, webhookBookingData).catch(console.error);
     } else {
-      // Delete calendar event if rejecting
-      if (booking.calendarEventId) {
-        const primaryCalendar = await prisma.calendar.findFirst({
-          where: {
-            userId: booking.hostId,
-            isPrimary: true,
-            provider: 'GOOGLE',
-          },
-        });
-
-        if (primaryCalendar) {
-          await deleteGoogleCalendarEvent(
-            primaryCalendar.id,
-            booking.calendarEventId
-          );
-        }
-      }
+      // Delete calendar events from all calendars if rejecting
+      const rejectCalOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
+      await deleteAllCalendarEvents(rejectCalOwnerId, booking.calendarEventId, booking.calendarEventIds, { sync: true });
       queueBookingRejectedEmail(emailData, reason).catch(console.error);
       // Trigger webhook
       triggerBookingRejectedWebhook(booking.hostId, webhookBookingData, reason).catch(console.error);
@@ -645,7 +636,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
             slug: true,
             length: true,
             description: true,
+            locationType: true,
             schedulingType: true,
+            meetingOrganizerUserId: true,
             teamMemberAssignments: {
               where: { isActive: true },
               select: {
@@ -717,16 +710,10 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         },
       });
 
-      // Delete calendar events and cancel reminders for all
+      // Delete calendar events from all calendars and cancel reminders
+      const bulkCalendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
       for (const fb of futureBookings) {
-        if (fb.calendarEventId) {
-          const cal = await prisma.calendar.findFirst({
-            where: { userId: fb.hostId, isPrimary: true, provider: 'GOOGLE' },
-          });
-          if (cal) {
-            deleteGoogleCalendarEvent(cal.id, fb.calendarEventId).catch(console.error);
-          }
-        }
+        deleteAllCalendarEvents(bulkCalendarOwnerId, fb.calendarEventId, fb.calendarEventIds);
         cancelBookingReminders(fb.uid).catch(console.error);
       }
 
@@ -799,23 +786,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    // Delete calendar event
-    if (booking.calendarEventId) {
-      const primaryCalendar = await prisma.calendar.findFirst({
-        where: {
-          userId: booking.hostId,
-          isPrimary: true,
-          provider: 'GOOGLE',
-        },
-      });
-
-      if (primaryCalendar) {
-        await deleteGoogleCalendarEvent(
-          primaryCalendar.id,
-          booking.calendarEventId
-        );
-      }
-    }
+    // Delete calendar events from all calendars
+    const calendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
+    await deleteAllCalendarEvents(calendarOwnerId, booking.calendarEventId, booking.calendarEventIds, { sync: true });
 
     // Build teamMembers for email
     const cancelTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'

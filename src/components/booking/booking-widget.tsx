@@ -378,7 +378,7 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
             </div>
 
             <div className="flex flex-col gap-3">
-              {bookingData.meetingUrl && (
+              {!isPending && bookingData.meetingUrl && (
                 <a
                   href={bookingData.meetingUrl}
                   target="_blank"

@@ -340,7 +340,7 @@ export default function TeamBookingWidget({
             </div>
 
             <div className="flex flex-col gap-3">
-              {bookingResult.meetingUrl && (
+              {!isPending && bookingResult.meetingUrl && (
                 <a
                   href={bookingResult.meetingUrl}
                   target="_blank"

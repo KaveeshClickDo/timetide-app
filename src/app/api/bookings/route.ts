@@ -761,7 +761,8 @@ export async function POST(request: NextRequest) {
         try {
           const occSuffix = recurring ? ` (${createdBookings.indexOf(booking) + 1}/${occurrenceCount})` : '';
           // Only request conferenceData from the calendar that generates the meeting link
-          const needsConference = cal.id === meetingLinkCalendarId;
+          // Skip conferenceData for PENDING bookings — link shared only after confirmation
+          const needsConference = cal.id === meetingLinkCalendarId && bookingStatus !== 'PENDING';
           const eventParams: CreateCalendarEventParams = {
             calendarId: cal.id,
             summary: `${eventType.title} with ${name}${occSuffix}`,
@@ -811,8 +812,8 @@ export async function POST(request: NextRequest) {
         booking.meetingUrl = meetingUrl || null;
       }
 
-      // Create Zoom meeting if needed
-      if (eventType.locationType === 'ZOOM') {
+      // Create Zoom meeting if needed (skip for pending bookings — link shared after confirmation)
+      if (eventType.locationType === 'ZOOM' && bookingStatus !== 'PENDING') {
         try {
           const hasZoom = await hasZoomConnected(meetingAccountUserId);
           if (hasZoom) {

@@ -143,15 +143,20 @@ export function generateBookingConfirmedEmail(
             <span class="detail-label">👥 Hosts</span>
             <span class="detail-value">${data.teamMembers.map(m => esc(m.name)).join(', ')}</span>
           </div>
-          ` : `
+          ` : isHost ? `
           <div class="detail-row">
-            <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
-            <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
+            <span class="detail-label">👤 Invitee</span>
+            <span class="detail-value">${esc(data.inviteeName)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">✉️ Email</span>
-            <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
+            <span class="detail-value">${esc(data.inviteeEmail)}</span>
+          </div>
+          ` : `
+          <div class="detail-row">
+            <span class="detail-label">👤 Host</span>
+            <span class="detail-value">${esc(data.hostName)}</span>
           </div>
           `}
 
@@ -370,15 +375,27 @@ export function generateBookingPendingEmail(
 
           <div class="divider"></div>
 
+          ${data.teamMembers && data.teamMembers.length > 0 && !isHost ? `
           <div class="detail-row">
-            <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
-            <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
+            <span class="detail-label">👥 Hosts</span>
+            <span class="detail-value">${data.teamMembers.map(m => esc(m.name)).join(', ')}</span>
+          </div>
+          ` : isHost ? `
+          <div class="detail-row">
+            <span class="detail-label">👤 Invitee</span>
+            <span class="detail-value">${esc(data.inviteeName)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">✉️ Email</span>
-            <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
+            <span class="detail-value">${esc(data.inviteeEmail)}</span>
           </div>
+          ` : `
+          <div class="detail-row">
+            <span class="detail-label">👤 Host</span>
+            <span class="detail-value">${esc(data.hostName)}</span>
+          </div>
+          `}
 
           ${data.notes ? `
           <div class="divider"></div>
@@ -397,7 +414,7 @@ export function generateBookingPendingEmail(
         ` : `
         <div style="text-align: center; margin: 32px 0; padding: 16px; background: #fef3c7; border-radius: 8px;">
           <p style="color: #92400e; margin: 0;">
-            ⏳ This booking is pending confirmation by ${esc(data.hostName)}. You will receive another email once it's confirmed.
+            ⏳ This booking is pending confirmation${data.teamMembers && data.teamMembers.length > 0 ? '' : ` by ${esc(data.hostName)}`}. You will receive another email once it's confirmed.
           </p>
         </div>
         <div style="text-align: center; margin: 24px 0;">
@@ -778,15 +795,22 @@ export function generateRecurringBookingConfirmedEmail(
 
           <div class="divider"></div>
 
+          ${isHost ? `
           <div class="detail-row">
-            <span class="detail-label">👤 ${isHost ? 'Invitee' : 'Host'}</span>
-            <span class="detail-value">${isHost ? esc(data.inviteeName) : esc(data.hostName)}</span>
+            <span class="detail-label">👤 Invitee</span>
+            <span class="detail-value">${esc(data.inviteeName)}</span>
           </div>
 
           <div class="detail-row">
             <span class="detail-label">✉️ Email</span>
-            <span class="detail-value">${isHost ? esc(data.inviteeEmail) : esc(data.hostEmail)}</span>
+            <span class="detail-value">${esc(data.inviteeEmail)}</span>
           </div>
+          ` : `
+          <div class="detail-row">
+            <span class="detail-label">👤 Host</span>
+            <span class="detail-value">${esc(data.hostName)}</span>
+          </div>
+          `}
 
           ${data.notes ? `
           <div class="divider"></div>

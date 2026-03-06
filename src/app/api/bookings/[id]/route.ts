@@ -10,9 +10,10 @@ import { formatInTimeZone } from 'date-fns-tz';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { cancelBookingSchema, confirmRejectBookingSchema } from '@/lib/validation/schemas';
-import { deleteGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
-import { deleteOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
-import { deleteAllCalendarEvents } from '@/lib/integrations/calendar/event-ids';
+import { deleteGoogleCalendarEvent, createGoogleCalendarEvent, type CreateCalendarEventResult } from '@/lib/integrations/calendar/google';
+import { deleteOutlookCalendarEvent, createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
+import { deleteAllCalendarEvents, parseCalendarEventIds, buildCalendarEventIdsUpdate } from '@/lib/integrations/calendar/event-ids';
+import { createZoomMeeting, hasZoomConnected } from '@/lib/integrations/zoom';
 import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
 import {
   queueBookingCancellationEmails,
@@ -569,6 +570,118 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
         email: booking.host.email!,
       },
     };
+
+    // On confirm: generate meeting link now (was deferred during booking creation for pending bookings)
+    if (action === 'confirm' && !booking.meetingUrl) {
+      try {
+        const meetingAccountUserId = booking.eventType.meetingOrganizerUserId || booking.hostId;
+        const locationType = booking.eventType.locationType;
+        let generatedMeetingUrl: string | null = null;
+
+        if (locationType === 'ZOOM') {
+          const hasZoom = await hasZoomConnected(meetingAccountUserId);
+          if (hasZoom) {
+            const zoomMeeting = await createZoomMeeting({
+              userId: meetingAccountUserId,
+              topic: `${booking.eventType.title} with ${booking.inviteeName}`,
+              startTime: booking.startTime,
+              duration: booking.eventType.length,
+              timezone: booking.host.timezone || booking.timezone,
+              agenda: `Booked via TimeTide with ${booking.inviteeName} (${booking.inviteeEmail})`,
+            });
+            generatedMeetingUrl = zoomMeeting.joinUrl;
+          }
+        } else if (locationType === 'GOOGLE_MEET' || locationType === 'TEAMS') {
+          // Delete old calendar events (without conferenceData) and re-create with meeting link
+          const ids = parseCalendarEventIds(booking.calendarEventId, booking.calendarEventIds);
+          const calendars = await prisma.calendar.findMany({
+            where: { userId: meetingAccountUserId, isEnabled: true },
+          });
+
+          const targetProvider = locationType === 'GOOGLE_MEET' ? 'GOOGLE' : 'OUTLOOK';
+
+          // Sort so meeting-link calendar processes first
+          const sortedCals = [...calendars].sort((a, b) => {
+            if (a.provider === targetProvider) return -1;
+            if (b.provider === targetProvider) return 1;
+            return 0;
+          });
+
+          const newCalendarEventIds: Record<string, string> = {};
+
+          for (const cal of sortedCals) {
+            const oldEventId = ids[cal.provider as 'GOOGLE' | 'OUTLOOK'];
+
+            // Delete old event (if exists)
+            if (oldEventId) {
+              try {
+                if (cal.provider === 'GOOGLE') await deleteGoogleCalendarEvent(cal.id, oldEventId);
+                else if (cal.provider === 'OUTLOOK') await deleteOutlookCalendarEvent(cal.id, oldEventId);
+              } catch { /* ignore deletion errors */ }
+            }
+
+            // Re-create with conferenceData on the meeting-link calendar
+            const isMeetingLinkCal = cal.provider === targetProvider;
+            const meetingInfo = generatedMeetingUrl ? `\nMeeting: ${generatedMeetingUrl}` : '';
+            let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
+
+            try {
+              if (cal.provider === 'GOOGLE') {
+                result = await createGoogleCalendarEvent({
+                  calendarId: cal.id,
+                  summary: `${booking.eventType.title} with ${booking.inviteeName}`,
+                  description: `Booked via TimeTide\n\nInvitee: ${booking.inviteeName} (${booking.inviteeEmail})${meetingInfo}`,
+                  startTime: booking.startTime,
+                  endTime: booking.endTime,
+                  attendees: [{ email: booking.inviteeEmail, name: booking.inviteeName }],
+                  location: generatedMeetingUrl || booking.location || undefined,
+                  conferenceData: isMeetingLinkCal,
+                });
+              } else if (cal.provider === 'OUTLOOK') {
+                result = await createOutlookCalendarEvent({
+                  calendarId: cal.id,
+                  summary: `${booking.eventType.title} with ${booking.inviteeName}`,
+                  description: `Booked via TimeTide\n\nInvitee: ${booking.inviteeName} (${booking.inviteeEmail})${meetingInfo}`,
+                  startTime: booking.startTime,
+                  endTime: booking.endTime,
+                  attendees: [{ email: booking.inviteeEmail, name: booking.inviteeName }],
+                  location: generatedMeetingUrl || booking.location || undefined,
+                  conferenceData: isMeetingLinkCal,
+                });
+              }
+            } catch (calError) {
+              console.error(`Failed to re-create ${cal.provider} calendar event on confirm:`, calError);
+              continue;
+            }
+
+            if (result.eventId) {
+              newCalendarEventIds[cal.provider] = result.eventId;
+            }
+            if (result.meetLink && !generatedMeetingUrl) {
+              generatedMeetingUrl = result.meetLink;
+            }
+          }
+
+          // Update calendar event IDs
+          if (Object.keys(newCalendarEventIds).length > 0) {
+            await prisma.booking.update({
+              where: { id: booking.id },
+              data: buildCalendarEventIdsUpdate(newCalendarEventIds as Record<'GOOGLE' | 'OUTLOOK', string>),
+            });
+          }
+        }
+
+        if (generatedMeetingUrl) {
+          await prisma.booking.update({
+            where: { id: booking.id },
+            data: { meetingUrl: generatedMeetingUrl },
+          });
+          emailData.meetingUrl = generatedMeetingUrl;
+        }
+      } catch (error) {
+        console.error('Failed to create meeting link on confirm:', error);
+      }
+    }
 
     // Send appropriate email, schedule reminders, and trigger webhooks
     if (action === 'confirm') {

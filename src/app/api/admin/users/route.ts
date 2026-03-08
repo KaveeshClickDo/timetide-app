@@ -35,6 +35,8 @@ export async function GET(req: NextRequest) {
         select: {
           id: true, email: true, name: true, username: true, image: true,
           plan: true, role: true, isDisabled: true, emailVerified: true, createdAt: true,
+          password: true,
+          accounts: { select: { provider: true } },
           _count: { select: { bookingsAsHost: true, eventTypes: true, teamMemberships: true } },
         },
         orderBy: { [sortBy]: sortOrder },
@@ -44,7 +46,13 @@ export async function GET(req: NextRequest) {
       prisma.user.count({ where }),
     ])
 
-    return NextResponse.json({ users, total, page, pageSize })
+    const safeUsers = users.map(({ password, accounts, ...user }) => ({
+      ...user,
+      hasPassword: !!password,
+      authProviders: accounts.map((a) => a.provider),
+    }))
+
+    return NextResponse.json({ users: safeUsers, total, page, pageSize })
   } catch (error) {
     console.error('Admin users list error:', error)
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })

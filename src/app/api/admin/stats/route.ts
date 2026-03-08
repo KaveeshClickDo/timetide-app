@@ -41,7 +41,9 @@ export async function GET() {
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, email: true, name: true, username: true, image: true,
-          plan: true, role: true, isDisabled: true, createdAt: true,
+          plan: true, role: true, isDisabled: true, emailVerified: true, createdAt: true,
+          password: true,
+          accounts: { select: { provider: true } },
           _count: { select: { bookingsAsHost: true, eventTypes: true, teamMemberships: true } },
         },
       }),
@@ -67,7 +69,11 @@ export async function GET() {
       activeTeams,
       openTickets,
       planDistribution: planDistribution.map((p) => ({ plan: p.plan, count: p._count.plan })),
-      recentSignups,
+      recentSignups: recentSignups.map(({ password, accounts, ...u }) => ({
+        ...u,
+        hasPassword: !!password,
+        authProviders: accounts.map((a) => a.provider),
+      })),
       recentBookings,
     })
   } catch (error) {

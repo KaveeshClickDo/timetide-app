@@ -98,6 +98,19 @@ export const authOptions: NextAuthOptions = {
       // by middleware after the JWT session is created.
       // NOTE: Do NOT return a URL string here — it short-circuits JWT
       // creation in NextAuth v4, causing a redirect loop.
+
+      // When an OAuth provider (e.g. Google) links to an existing credential user,
+      // the PrismaAdapter doesn't update emailVerified. Since the OAuth provider
+      // already verified email ownership, mark it as verified now.
+      // Also clear any password that was set before verification — the person
+      // who set it never proved they own this email, so it's untrusted.
+      if (user.email) {
+        await prisma.user.updateMany({
+          where: { email: user.email, emailVerified: null },
+          data: { emailVerified: new Date(), password: null },
+        });
+      }
+
       return true;
     },
 
@@ -150,12 +163,19 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        const updated = { ...token, ...session.user }
+        // Only allow safe fields to be updated via session.update()
+        // Never allow role, plan, emailVerified, id, or other sensitive fields
+        const allowedFields = ['name', 'username', 'timezone', 'timezoneAutoDetect', 'bio', 'image', 'onboardingCompleted'] as const
+        for (const field of allowedFields) {
+          if (session.user?.[field] !== undefined) {
+            (token as Record<string, unknown>)[field] = session.user[field]
+          }
+        }
         // NextAuth uses token.picture for session.user.image
         if (session.user?.image !== undefined) {
-          updated.picture = session.user.image
+          token.picture = session.user.image
         }
-        return updated
+        return token
       }
 
       if (user) {
@@ -197,10 +217,10 @@ export const authOptions: NextAuthOptions = {
         const verifyUserId = (token.originalAdminId || token.id) as string;
         const dbUser = await prisma.user.findUnique({
           where: { id: verifyUserId },
-          select: { id: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true },
+          select: { id: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true, isDisabled: true },
         });
 
-        if (!dbUser) {
+        if (!dbUser || dbUser.isDisabled) {
           // Return empty token to force session invalidation
           return {} as typeof token;
         }

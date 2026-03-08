@@ -102,11 +102,14 @@ export default function AdminUsersPage() {
       key: 'status',
       header: 'Status',
       render: (user) => {
+        const isOAuthOnly = user.authProviders.length > 0 && !user.hasPassword
         const status = user.isDisabled
           ? { label: 'Disabled', color: 'bg-red-100 text-red-700' }
-          : !user.emailVerified
-            ? { label: 'Unverified', color: 'bg-yellow-100 text-yellow-700' }
-            : { label: 'Active', color: 'bg-green-100 text-green-700' }
+          : isOAuthOnly
+            ? { label: 'Google', color: 'bg-blue-100 text-blue-700' }
+            : !user.emailVerified
+              ? { label: 'Unverified', color: 'bg-yellow-100 text-yellow-700' }
+              : { label: 'Active', color: 'bg-green-100 text-green-700' }
         return (
           <Badge className={cn('text-[10px]', status.color)}>
             {status.label}

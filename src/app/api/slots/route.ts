@@ -128,11 +128,15 @@ export async function GET(request: NextRequest) {
     }
 
     // CRITICAL: Fetch ALL bookings for this host (across all event types) to prevent double booking
+    // Also check bookings where this user is a collective team member attendee
     const allHostBookings = await prisma.booking.findMany({
       where: {
-        hostId: eventType.userId, // Check all bookings for this host, not just this event type
+        OR: [
+          { hostId: eventType.userId },
+          { assignedUserId: eventType.userId },
+          { attendees: { some: { userId: eventType.userId } } },
+        ],
         status: { in: ['PENDING', 'CONFIRMED'] },
-        // Include bookings that end in the future (even if they started in the past)
         endTime: {
           gte: now,
         },

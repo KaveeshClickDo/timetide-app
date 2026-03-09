@@ -308,6 +308,7 @@ export async function POST(request: NextRequest) {
               OR: [
                 { hostId: member.user.id },
                 { assignedUserId: member.user.id },
+                { attendees: { some: { userId: member.user.id } } },
               ],
               status: { in: ['PENDING', 'CONFIRMED'] },
               startTime: { lt: endDate },
@@ -369,6 +370,7 @@ export async function POST(request: NextRequest) {
               OR: [
                 { hostId: member.user.id },
                 { assignedUserId: member.user.id },
+                { attendees: { some: { userId: member.user.id } } },
               ],
               status: { in: ['PENDING', 'CONFIRMED'] },
               startTime: { lt: endDate },
@@ -437,16 +439,17 @@ export async function POST(request: NextRequest) {
     );
 
     // CRITICAL: Check ALL bookings for this host (across all event types) to prevent double booking
+    // Also check bookings where this user is a collective team member attendee
     const existingBookings = await prisma.booking.findMany({
       where: {
-        hostId: selectedHost.id, // Check all bookings for this host, not just this event type
-        status: { in: ['PENDING', 'CONFIRMED'] },
         OR: [
-          {
-            startTime: { lt: endDate },
-            endTime: { gt: startDate },
-          },
+          { hostId: selectedHost.id },
+          { assignedUserId: selectedHost.id },
+          { attendees: { some: { userId: selectedHost.id } } },
         ],
+        status: { in: ['PENDING', 'CONFIRMED'] },
+        startTime: { lt: endDate },
+        endTime: { gt: startDate },
       },
     });
 
@@ -692,6 +695,24 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Create BookingAttendee records for collective team members (non-host)
+    // This ensures availability checks catch all members, preventing double-booking
+    if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
+      const nonHostMembers = eventType.teamMemberAssignments.filter(
+        a => a.teamMember.user.id !== selectedHost.id
+      );
+      for (const booking of createdBookings) {
+        await prisma.bookingAttendee.createMany({
+          data: nonHostMembers.map(a => ({
+            bookingId: booking.id,
+            email: a.teamMember.user.email!,
+            name: a.teamMember.user.name ?? undefined,
+            userId: a.teamMember.user.id,
+          })),
+        });
+      }
+    }
+
     // Update round-robin state for team events (once)
     if (shouldUpdateRoundRobinState && assignedUserId && eventType.teamId) {
       const assignedMemberRecord = eventType.teamMemberAssignments.find(
@@ -834,6 +855,67 @@ export async function POST(request: NextRequest) {
           }
         } catch (error) {
           console.error(`Failed to create Zoom meeting for booking ${booking.id}:`, error);
+        }
+      }
+    }
+
+    // ========================================================================
+    // CALENDAR EVENTS — create on collective members' calendars (Option A)
+    // ========================================================================
+    if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
+      const nonHostMembers = eventType.teamMemberAssignments.filter(
+        a => a.teamMember.user.id !== meetingAccountUserId
+      );
+
+      for (const member of nonHostMembers) {
+        const memberCalendars = await prisma.calendar.findMany({
+          where: { userId: member.teamMember.user.id, isEnabled: true },
+        });
+        if (memberCalendars.length === 0) continue;
+
+        for (const booking of createdBookings) {
+          const memberCalEventIds: CalendarEventIds = {};
+          const occSuffix = recurring ? ` (${createdBookings.indexOf(booking) + 1}/${occurrenceCount})` : '';
+
+          for (const cal of memberCalendars) {
+            try {
+              const eventParams: CreateCalendarEventParams = {
+                calendarId: cal.id,
+                summary: `${eventType.title} with ${name}${occSuffix}`,
+                description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}`,
+                startTime: booking.startTime,
+                endTime: booking.endTime,
+                attendees: calendarAttendees,
+                location: booking.meetingUrl || location,
+                conferenceData: false,
+              };
+
+              let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
+              if (cal.provider === 'GOOGLE') {
+                result = await createGoogleCalendarEvent(eventParams);
+              } else if (cal.provider === 'OUTLOOK') {
+                result = await createOutlookCalendarEvent(eventParams);
+              }
+              if (result.eventId) {
+                memberCalEventIds[cal.provider as 'GOOGLE' | 'OUTLOOK'] = result.eventId;
+              }
+            } catch (error) {
+              console.error(`Failed to create ${cal.provider} calendar event for member ${member.teamMember.user.id}:`, error);
+            }
+          }
+
+          // Store member's calendar event IDs in their BookingAttendee record
+          if (Object.keys(memberCalEventIds).length > 0) {
+            await prisma.bookingAttendee.updateMany({
+              where: {
+                bookingId: booking.id,
+                userId: member.teamMember.user.id,
+              },
+              data: {
+                calendarEventIds: memberCalEventIds,
+              },
+            });
+          }
         }
       }
     }

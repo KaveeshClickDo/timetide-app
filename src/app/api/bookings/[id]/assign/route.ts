@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { addMinutes } from 'date-fns';
 import { formatInTimeZone } from 'date-fns-tz';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
@@ -12,6 +13,7 @@ import { z } from 'zod';
 import { queueBookingConfirmationEmails, scheduleBookingReminders } from '@/lib/infrastructure/queue';
 import { BookingEmailData } from '@/lib/integrations/email/client';
 import {
+  getAllBusyTimes,
   createGoogleCalendarEvent,
   CreateCalendarEventParams,
   CreateCalendarEventResult,
@@ -19,6 +21,7 @@ import {
 import { createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
 import { createZoomMeeting, hasZoomConnected } from '@/lib/integrations/zoom';
 import { buildCalendarEventIdsUpdate, type CalendarEventIds } from '@/lib/integrations/calendar/event-ids';
+import { mergeBusyTimes, isSlotAvailable } from '@/lib/scheduling/slots/calculator';
 
 const assignMemberSchema = z.object({
   assignedUserId: z.string().min(1, 'Member ID is required'),
@@ -376,18 +379,70 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // Get available members (filter for active members)
-    const availableMembers = booking.eventType.teamMemberAssignments
-      .filter((a) => a.teamMember.isActive)
-      .map((a) => ({
-        id: a.teamMember.user.id,
-        teamMemberId: a.teamMember.id,
-        name: a.teamMember.user.name,
-        email: a.teamMember.user.email,
-        image: a.teamMember.user.image,
-        timezone: a.teamMember.user.timezone,
-        priority: a.teamMember.priority,
-      }));
+    // Get available members with availability status at the booking's time slot
+    const activeMembers = booking.eventType.teamMemberAssignments
+      .filter((a) => a.teamMember.isActive);
+
+    const availableMembers = await Promise.all(
+      activeMembers.map(async (a) => {
+        const memberId = a.teamMember.user.id;
+        let isAvailable = true;
+
+        try {
+          // Check calendar busy times
+          let busyTimes: { start: Date; end: Date }[] = [];
+          try {
+            busyTimes = await getAllBusyTimes(
+              memberId,
+              addMinutes(booking.startTime, -60),
+              addMinutes(booking.endTime, 60)
+            );
+          } catch {
+            // Calendar not connected
+          }
+
+          // Check DB bookings (host, assigned, or collective attendee)
+          const memberBookings = await prisma.booking.findMany({
+            where: {
+              OR: [
+                { hostId: memberId },
+                { assignedUserId: memberId },
+                { attendees: { some: { userId: memberId } } },
+              ],
+              status: { in: ['PENDING', 'CONFIRMED'] },
+              startTime: { lt: booking.endTime },
+              endTime: { gt: booking.startTime },
+              id: { not: booking.id }, // Exclude this booking itself
+            },
+            select: { startTime: true, endTime: true },
+          });
+
+          const allBusy = mergeBusyTimes([
+            ...busyTimes,
+            ...memberBookings.map(b => ({ start: b.startTime, end: b.endTime })),
+          ]);
+
+          isAvailable = isSlotAvailable(
+            { start: booking.startTime, end: booking.endTime },
+            allBusy,
+            0, 0
+          );
+        } catch {
+          // If availability check fails, still show the member
+        }
+
+        return {
+          id: memberId,
+          teamMemberId: a.teamMember.id,
+          name: a.teamMember.user.name,
+          email: a.teamMember.user.email,
+          image: a.teamMember.user.image,
+          timezone: a.teamMember.user.timezone,
+          priority: a.teamMember.priority,
+          isAvailable,
+        };
+      })
+    );
 
     return NextResponse.json({
       booking: {

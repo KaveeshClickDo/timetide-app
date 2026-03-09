@@ -192,6 +192,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           { startTime: shiftedStart, endTime: shiftedEnd }
         );
 
+        // Update collective members' calendar events
+        const fbAttendees = await prisma.bookingAttendee.findMany({
+          where: { bookingId: fb.id, userId: { not: null } },
+        });
+        for (const att of fbAttendees) {
+          if (att.userId && att.calendarEventIds) {
+            updateAllCalendarEvents(att.userId, null, att.calendarEventIds, {
+              startTime: shiftedStart,
+              endTime: shiftedEnd,
+            }).catch(console.error);
+          }
+        }
+
         // Reschedule reminders
         rescheduleBookingReminders(fb.id, fb.uid, shiftedStart).catch(console.error);
       }
@@ -368,6 +381,19 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       booking.calendarEventIds,
       { startTime: newStart, endTime: newEnd }
     );
+
+    // Update collective members' calendar events
+    const rescheduleAttendees = await prisma.bookingAttendee.findMany({
+      where: { bookingId: booking.id, userId: { not: null } },
+    });
+    for (const att of rescheduleAttendees) {
+      if (att.userId && att.calendarEventIds) {
+        updateAllCalendarEvents(att.userId, null, att.calendarEventIds, {
+          startTime: newStart,
+          endTime: newEnd,
+        }).catch(console.error);
+      }
+    }
 
     // Build teamMembers for email
     const teamMembersForEmail = booking.eventType.schedulingType === 'COLLECTIVE'

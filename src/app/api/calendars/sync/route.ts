@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
         name: true,
         provider: true,
         isEnabled: true,
-        isPrimary: true,
         syncStatus: true,
         lastSyncedAt: true,
         lastSyncError: true,
@@ -47,10 +46,7 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: [
-        { isPrimary: 'desc' },
-        { createdAt: 'asc' },
-      ],
+      orderBy: { createdAt: 'asc' },
     });
 
     // Calculate overall sync health
@@ -77,7 +73,6 @@ export async function GET(request: NextRequest) {
         name: c.name,
         provider: c.provider,
         isEnabled: c.isEnabled,
-        isPrimary: c.isPrimary,
         syncStatus: c.syncStatus,
         lastSyncedAt: c.lastSyncedAt,
         lastSyncError: c.lastSyncError,

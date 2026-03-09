@@ -114,11 +114,6 @@ export async function connectGoogleCalendar(userId: string, code: string) {
     return calendar;
   }
 
-  // Check if user has any existing calendars
-  const hasExistingCalendars = await prisma.calendar.count({
-    where: { userId },
-  });
-
   // Create new calendar
   const calendar = await prisma.calendar.create({
     data: {
@@ -126,7 +121,6 @@ export async function connectGoogleCalendar(userId: string, code: string) {
       name: primaryCalendar.summary || 'Google Calendar',
       provider: 'GOOGLE',
       externalId: primaryCalendar.id,
-      isPrimary: hasExistingCalendars === 0, // Set as primary if it's the first calendar
       isEnabled: true,
       color: primaryCalendar.backgroundColor || undefined,
       credentials: {

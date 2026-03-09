@@ -912,34 +912,48 @@ export default function BookingDetailPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4 space-y-2 max-h-64 overflow-y-auto">
-            {availableMembersData?.availableMembers?.map((member) => (
-              <button
-                key={member.userId}
-                onClick={() => setSelectedMemberId(member.userId)}
-                className={cn(
-                  'w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left',
-                  selectedMemberId === member.userId
-                    ? 'border-ocean-500 bg-ocean-50'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                )}
-              >
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={member.image || undefined} />
-                  <AvatarFallback>
-                    {getInitials(member.name || member.email)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-900 truncate">
-                    {member.name || 'Team Member'}
-                  </p>
-                  <p className="text-sm text-gray-500 truncate">{member.email}</p>
-                </div>
-                {selectedMemberId === member.userId && (
-                  <CheckCircle className="h-5 w-5 text-ocean-500 flex-shrink-0" />
-                )}
-              </button>
-            ))}
+            {availableMembersData?.availableMembers?.map((member) => {
+              const isBusy = member.isAvailable === false;
+              return (
+                <button
+                  key={member.userId}
+                  onClick={() => !isBusy && setSelectedMemberId(member.userId)}
+                  disabled={isBusy}
+                  className={cn(
+                    'w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left',
+                    isBusy
+                      ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                      : selectedMemberId === member.userId
+                        ? 'border-ocean-500 bg-ocean-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  )}
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={member.image || undefined} />
+                    <AvatarFallback>
+                      {getInitials(member.name || member.email)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 truncate">
+                      {member.name || 'Team Member'}
+                    </p>
+                    <p className="text-sm text-gray-500 truncate">{member.email}</p>
+                  </div>
+                  {isBusy ? (
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                      Busy
+                    </span>
+                  ) : selectedMemberId === member.userId ? (
+                    <CheckCircle className="h-5 w-5 text-ocean-500 flex-shrink-0" />
+                  ) : (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                      Available
+                    </span>
+                  )}
+                </button>
+              );
+            })}
             {(!availableMembersData?.availableMembers || availableMembersData.availableMembers.length === 0) && (
               <p className="text-center text-gray-500 py-4">No team members available</p>
             )}

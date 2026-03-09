@@ -828,6 +828,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       for (const fb of futureBookings) {
         deleteAllCalendarEvents(bulkCalendarOwnerId, fb.calendarEventId, fb.calendarEventIds);
         cancelBookingReminders(fb.uid).catch(console.error);
+
+        // Delete calendar events from collective members' calendars
+        const fbAttendees = await prisma.bookingAttendee.findMany({
+          where: { bookingId: fb.id, userId: { not: null } },
+        });
+        for (const att of fbAttendees) {
+          if (att.userId && att.calendarEventIds) {
+            deleteAllCalendarEvents(att.userId, null, att.calendarEventIds).catch(console.error);
+          }
+        }
       }
 
       // Build teamMembers for email
@@ -899,9 +909,19 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       },
     });
 
-    // Delete calendar events from all calendars
+    // Delete calendar events from organizer's calendars
     const calendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
     await deleteAllCalendarEvents(calendarOwnerId, booking.calendarEventId, booking.calendarEventIds, { sync: true });
+
+    // Delete calendar events from collective members' calendars
+    const memberAttendees = await prisma.bookingAttendee.findMany({
+      where: { bookingId: booking.id, userId: { not: null } },
+    });
+    for (const att of memberAttendees) {
+      if (att.userId && att.calendarEventIds) {
+        deleteAllCalendarEvents(att.userId, null, att.calendarEventIds).catch(console.error);
+      }
+    }
 
     // Build teamMembers for email
     const cancelTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'

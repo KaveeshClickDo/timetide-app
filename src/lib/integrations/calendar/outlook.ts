@@ -240,11 +240,6 @@ export async function connectOutlookCalendar(userId: string, code: string) {
     return calendar
   }
 
-  // Check if user has any existing calendars
-  const hasExistingCalendars = await prisma.calendar.count({
-    where: { userId },
-  })
-
   // Create new calendar
   const calendar = await prisma.calendar.create({
     data: {
@@ -252,7 +247,6 @@ export async function connectOutlookCalendar(userId: string, code: string) {
       name: calendarData.name || `${user.displayName}'s Calendar`,
       provider: 'OUTLOOK',
       externalId: calendarData.id,
-      isPrimary: hasExistingCalendars === 0,
       isEnabled: true,
       teamsCapable,
       credentials: {

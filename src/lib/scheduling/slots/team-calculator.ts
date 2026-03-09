@@ -497,12 +497,13 @@ export class TeamSlotCalculator {
         // Outlook not connected, continue
       }
 
-      // Get existing bookings for this member
+      // Get existing bookings for this member (including as collective attendee)
       const memberBookings = await prisma.booking.findMany({
         where: {
           OR: [
             { hostId: member.userId },
             { assignedUserId: member.userId },
+            { attendees: { some: { userId: member.userId } } },
           ],
           status: { in: ['PENDING', 'CONFIRMED'] },
           endTime: { gte: now },

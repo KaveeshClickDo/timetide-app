@@ -48,6 +48,7 @@ export interface TeamMemberFlat {
   image: string | null
   timezone: string
   priority: number
+  isAvailable?: boolean
 }
 
 /** Team invitation */

@@ -215,7 +215,6 @@ Connected external calendar accounts.
 | `provider` | CalendarProvider | GOOGLE, OUTLOOK, APPLE, CALDAV |
 | `name` | String | Calendar display name |
 | `externalId` | String | External calendar ID |
-| `isPrimary` | Boolean | Primary calendar flag |
 | `isEnabled` | Boolean | Use for availability checking |
 | `syncStatus` | CalendarSyncStatus | Sync state |
 | `lastSyncedAt` | DateTime? | Last sync timestamp |

@@ -50,7 +50,6 @@ export async function GET(request: Request, { params }: RouteParams) {
                 id: true,
                 provider: true,
                 name: true,
-                isPrimary: true,
               },
             },
             zoomCredential: {

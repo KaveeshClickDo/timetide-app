@@ -53,7 +53,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     const body = await request.json()
-    const { isEnabled, checkForConflicts, isPrimary } = body
+    const { isEnabled, checkForConflicts } = body
 
     // Verify ownership
     const existing = await prisma.calendar.findFirst({
@@ -67,24 +67,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
     }
 
-    // If setting as primary, unset other primary calendars
-    if (isPrimary) {
-      await prisma.calendar.updateMany({
-        where: {
-          userId: session.user.id,
-          isPrimary: true,
-        },
-        data: {
-          isPrimary: false,
-        },
-      })
-    }
-
     const calendar = await prisma.calendar.update({
       where: { id: params.id },
       data: {
         isEnabled: isEnabled !== undefined ? isEnabled : existing.isEnabled,
-        isPrimary: isPrimary !== undefined ? isPrimary : existing.isPrimary,
       },
     })
 
@@ -121,26 +107,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Calendar not found' }, { status: 404 })
     }
 
-    const wasPrimary = calendar.isPrimary
-
     // Delete the calendar (credentials will be cascaded)
     await prisma.calendar.delete({
       where: { id: params.id },
     })
-
-    // If the deleted calendar was primary, promote the next remaining calendar
-    if (wasPrimary) {
-      const remaining = await prisma.calendar.findFirst({
-        where: { userId: session.user.id, isEnabled: true },
-        orderBy: { createdAt: 'asc' },
-      })
-      if (remaining) {
-        await prisma.calendar.update({
-          where: { id: remaining.id },
-          data: { isPrimary: true },
-        })
-      }
-    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -41,6 +41,7 @@ model User {
   eventTypes           EventType[]
   availabilitySchedules AvailabilitySchedule[]
   bookingsAsHost       Booking[]              @relation("BookingHost")
+  bookingAttendances   BookingAttendee[]
   teamMemberships      TeamMember[]
   webhooks             Webhook[]
   zoomCredential       ZoomCredential?
@@ -117,7 +118,6 @@ model Calendar {
   accessToken  String?      @db.Text
   refreshToken String?      @db.Text
   tokenExpiry  DateTime?
-  isPrimary    Boolean      @default(false)
   isEnabled    Boolean      @default(true)
   color        String?
 
@@ -456,15 +456,19 @@ model Booking {
 }
 
 model BookingAttendee {
-  id        String @id @default(cuid())
-  bookingId String
-  email     String
-  name      String?
-  timezone  String?
-  
+  id               String  @id @default(cuid())
+  bookingId        String
+  email            String
+  name             String?
+  timezone         String?
+  userId           String?              // Team member user ID (for collective events)
+  calendarEventIds Json?                // Per-member calendar event IDs: { "GOOGLE": "id", "OUTLOOK": "id" }
+
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id])
 
   @@index([bookingId])
+  @@index([userId])
 }
 
 enum BookingStatus {

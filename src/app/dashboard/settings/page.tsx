@@ -286,35 +286,6 @@ export default function SettingsPage() {
     },
   })
 
-  // Handle setting primary calendar
-  const setPrimaryMutation = useMutation({
-    mutationFn: async (calendarId: string) => {
-      const res = await fetch(`/api/calendars/${calendarId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPrimary: true }),
-      })
-      if (!res.ok) throw new Error('Failed to set primary')
-      return res.json()
-    },
-    onSuccess: () => {
-      refetchCalendars()
-      toast({
-        title: 'Primary calendar updated',
-        description: 'Your primary calendar has been updated.',
-      })
-    },
-    onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to update primary calendar.',
-        variant: 'destructive',
-      })
-    },
-  })
-
-  const bothCalendarsConnected = !!googleCalendar && !!outlookCalendar
-
   // Handle Zoom connection
   const handleConnectZoom = async () => {
     try {
@@ -610,14 +581,7 @@ export default function SettingsPage() {
                     <Calendar className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">Google Calendar</p>
-                      {googleCalendar?.isPrimary && (
-                        <span className="text-xs bg-ocean-100 text-ocean-700 px-2 py-0.5 rounded-full font-medium">
-                          Primary
-                        </span>
-                      )}
-                    </div>
+                    <p className="font-medium">Google Calendar</p>
                     <p className="text-sm text-gray-500">
                       {googleCalendar ? (
                         <>
@@ -633,16 +597,6 @@ export default function SettingsPage() {
                 <div className="flex gap-2 flex-shrink-0">
                   {googleCalendar ? (
                     <>
-                      {bothCalendarsConnected && !googleCalendar.isPrimary && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPrimaryMutation.mutate(googleCalendar.id)}
-                          disabled={setPrimaryMutation.isPending}
-                        >
-                          Set as primary
-                        </Button>
-                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -694,14 +648,7 @@ export default function SettingsPage() {
                     <Calendar className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">Microsoft Outlook</p>
-                      {outlookCalendar?.isPrimary && (
-                        <span className="text-xs bg-ocean-100 text-ocean-700 px-2 py-0.5 rounded-full font-medium">
-                          Primary
-                        </span>
-                      )}
-                    </div>
+                    <p className="font-medium">Microsoft Outlook</p>
                     <p className="text-sm text-gray-500">
                       {outlookCalendar ? (
                         <>
@@ -717,16 +664,6 @@ export default function SettingsPage() {
                 <div className="flex gap-2">
                   {outlookCalendar ? (
                     <>
-                      {bothCalendarsConnected && !outlookCalendar.isPrimary && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPrimaryMutation.mutate(outlookCalendar.id)}
-                          disabled={setPrimaryMutation.isPending}
-                        >
-                          Set as primary
-                        </Button>
-                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -771,12 +708,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Primary calendar explanation */}
-              {bothCalendarsConnected && (
-                <p className="text-xs text-gray-500 mt-2">
-                  The primary calendar is used for generating meeting links when using Zoom or other non-provider-specific locations. All connected calendars are checked for availability and will show your bookings.
-                </p>
-              )}
             </div>
           </CardContent>
         </Card>

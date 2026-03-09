@@ -837,6 +837,7 @@ export default function NewEventTypePage() {
                       type="date"
                       value={formData.periodEndDate}
                       min={formData.periodStartDate}
+                      max={format(addDays(new Date(), 365 * 10), 'yyyy-MM-dd')}
                       onChange={(e) =>
                         setFormData({ ...formData, periodEndDate: e.target.value })
                       }

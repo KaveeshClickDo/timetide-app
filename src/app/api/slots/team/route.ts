@@ -117,18 +117,23 @@ export async function GET(request: NextRequest) {
     const periodType = eventType.periodType as 'ROLLING' | 'RANGE' | 'UNLIMITED';
 
     switch (periodType) {
-      case 'RANGE':
-        const periodEnd = eventType.periodEndDate
+      case 'RANGE': {
+        let periodEnd = eventType.periodEndDate
           ? new Date(eventType.periodEndDate)
           : addDays(now, 30);
+        // Cap at 10 years from now
+        const tenYearsFromNow = addDays(now, 365 * 10);
+        if (periodEnd > tenYearsFromNow) periodEnd = tenYearsFromNow;
         maxDays = Math.ceil(
           (periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
         );
         rangeEnd = endDate ? parseISO(endDate) : periodEnd;
         break;
+      }
       case 'UNLIMITED':
-        maxDays = 90;
-        rangeEnd = endDate ? parseISO(endDate) : addDays(now, maxDays);
+        // Truly unlimited — no booking window cap. Safety is per-request limits.
+        maxDays = 365 * 100;
+        rangeEnd = endDate ? parseISO(endDate) : addDays(now, 31);
         break;
       case 'ROLLING':
       default:
@@ -155,6 +160,9 @@ export async function GET(request: NextRequest) {
       maxDaysInAdvance: maxDays,
       inviteeTimezone: timezone,
       maxBookingsPerDay: eventType.maxBookingsPerDay || undefined,
+      seatsPerSlot: eventType.seatsPerSlot ?? 1,
+      rangeStart,
+      rangeEnd,
     });
 
     // Track analytics
@@ -214,6 +222,7 @@ export async function GET(request: NextRequest) {
         title: eventType.title,
         duration: eventType.length,
         requiresConfirmation: eventType.requiresConfirmation,
+        seatsPerSlot: eventType.seatsPerSlot ?? 1,
       },
       team: {
         id: team.id,

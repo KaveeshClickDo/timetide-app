@@ -312,6 +312,8 @@ export default function EditEventTypePage({ params }: PageProps) {
 
       if (formData.maxBookingsPerDay > 0) {
         payload.maxBookingsPerDay = formData.maxBookingsPerDay
+      } else {
+        payload.maxBookingsPerDay = null
       }
 
       // Include seatsPerSlot for group bookings
@@ -792,6 +794,7 @@ export default function EditEventTypePage({ params }: PageProps) {
                       type="date"
                       value={formData.periodEndDate}
                       min={formData.periodStartDate}
+                      max={format(addDays(new Date(), 365 * 10), 'yyyy-MM-dd')}
                       onChange={(e) =>
                         setFormData({ ...formData, periodEndDate: e.target.value })
                       }

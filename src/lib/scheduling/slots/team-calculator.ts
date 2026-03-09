@@ -70,6 +70,9 @@ export class TeamSlotCalculator {
     maxDaysInAdvance: number;
     inviteeTimezone: string;
     maxBookingsPerDay?: number;
+    seatsPerSlot?: number;
+    rangeStart?: Date;
+    rangeEnd?: Date;
   }): Promise<TeamSlotCalculatorResult> {
     // Fetch assigned team members
     const assignments = await prisma.eventTypeAssignment.findMany({
@@ -149,10 +152,17 @@ export class TeamSlotCalculator {
       maxDaysInAdvance: number;
       inviteeTimezone: string;
       maxBookingsPerDay?: number;
+      seatsPerSlot?: number;
+      rangeStart?: Date;
+      rangeEnd?: Date;
     }
   ): Promise<TeamSlotCalculatorResult> {
+    const seatsPerSlot = options.seatsPerSlot ?? 1;
+    const isGroupEvent = seatsPerSlot > 1;
+    const groupOptions = isGroupEvent ? { eventTypeId: this.eventTypeId, seatsPerSlot } : undefined;
+
     // Get availability for all members
-    const memberAvailabilities = await this.getMemberAvailabilities(members, options);
+    const { availabilities: memberAvailabilities, slotBookingCounts } = await this.getMemberAvailabilities(members, options, groupOptions);
 
     // Calculate slots for each member
     const memberSlots: Map<string, CalculatedSlots> = new Map();
@@ -173,7 +183,7 @@ export class TeamSlotCalculator {
         existingBookingsPerDay: new Map(), // Per-member limits handled separately
       });
 
-      memberSlots.set(memberData.member.id, calculator.calculate());
+      memberSlots.set(memberData.member.id, calculator.calculate(options.rangeStart, options.rangeEnd));
     }
 
     // Merge and assign slots in round-robin fashion
@@ -221,12 +231,17 @@ export class TeamSlotCalculator {
           );
 
           if (isAvailable) {
-            dateSlots.push({
+            const slotEntry: TeamSlotWithAssignment = {
               start: slot.start,
               end: slot.end,
               assignedMemberId: member.id,
               assignedMemberName: member.userName,
-            });
+            };
+            if (isGroupEvent) {
+              const booked = slotBookingCounts.get(slot.start.toISOString()) ?? 0;
+              slotEntry.seatsRemaining = seatsPerSlot - booked;
+            }
+            dateSlots.push(slotEntry);
             newLastAssignedMemberId = member.id;
             break;
           }
@@ -260,6 +275,9 @@ export class TeamSlotCalculator {
       maxDaysInAdvance: number;
       inviteeTimezone: string;
       maxBookingsPerDay?: number;
+      seatsPerSlot?: number;
+      rangeStart?: Date;
+      rangeEnd?: Date;
     }
   ): Promise<TeamSlotCalculatorResult> {
     if (members.length === 0) {
@@ -270,8 +288,12 @@ export class TeamSlotCalculator {
       };
     }
 
+    const seatsPerSlot = options.seatsPerSlot ?? 1;
+    const isGroupEvent = seatsPerSlot > 1;
+    const groupOptions = isGroupEvent ? { eventTypeId: this.eventTypeId, seatsPerSlot } : undefined;
+
     // Get availability for all members
-    const memberAvailabilities = await this.getMemberAvailabilities(members, options);
+    const { availabilities: memberAvailabilities, slotBookingCounts } = await this.getMemberAvailabilities(members, options, groupOptions);
 
     // Calculate slots for each member
     const memberSlotsMap: Map<string, CalculatedSlots> = new Map();
@@ -292,7 +314,7 @@ export class TeamSlotCalculator {
         existingBookingsPerDay: new Map(),
       });
 
-      memberSlotsMap.set(memberData.member.id, calculator.calculate());
+      memberSlotsMap.set(memberData.member.id, calculator.calculate(options.rangeStart, options.rangeEnd));
     }
 
     // Find intersection of all members' availability
@@ -316,12 +338,18 @@ export class TeamSlotCalculator {
       });
 
       if (collectiveSlots.length > 0) {
-        result[date] = collectiveSlots.map((slot) => ({
-          start: slot.start,
-          end: slot.end,
-          // All members are assigned for collective
-          availableMembers: members,
-        }));
+        result[date] = collectiveSlots.map((slot) => {
+          const entry: TeamSlotWithAssignment = {
+            start: slot.start,
+            end: slot.end,
+            availableMembers: members,
+          };
+          if (isGroupEvent) {
+            const booked = slotBookingCounts.get(slot.start.toISOString()) ?? 0;
+            entry.seatsRemaining = seatsPerSlot - booked;
+          }
+          return entry;
+        });
       }
     }
 
@@ -346,10 +374,17 @@ export class TeamSlotCalculator {
       maxDaysInAdvance: number;
       inviteeTimezone: string;
       maxBookingsPerDay?: number;
+      seatsPerSlot?: number;
+      rangeStart?: Date;
+      rangeEnd?: Date;
     }
   ): Promise<TeamSlotCalculatorResult> {
+    const seatsPerSlot = options.seatsPerSlot ?? 1;
+    const isGroupEvent = seatsPerSlot > 1;
+    const groupOptions = isGroupEvent ? { eventTypeId: this.eventTypeId, seatsPerSlot } : undefined;
+
     // Get availability for all members
-    const memberAvailabilities = await this.getMemberAvailabilities(members, options);
+    const { availabilities: memberAvailabilities, slotBookingCounts } = await this.getMemberAvailabilities(members, options, groupOptions);
 
     // Calculate slots for each member
     const memberSlotsMap: Map<string, CalculatedSlots> = new Map();
@@ -370,7 +405,7 @@ export class TeamSlotCalculator {
         existingBookingsPerDay: new Map(),
       });
 
-      memberSlotsMap.set(memberData.member.id, calculator.calculate());
+      memberSlotsMap.set(memberData.member.id, calculator.calculate(options.rangeStart, options.rangeEnd));
     }
 
     // Union of all slots with their available members
@@ -405,11 +440,18 @@ export class TeamSlotCalculator {
         slotAvailability.values()
       )
         .sort((a, b) => a.slot.start.getTime() - b.slot.start.getTime())
-        .map(({ slot, members: availableMembers }) => ({
-          start: slot.start,
-          end: slot.end,
-          availableMembers, // Host will pick from these
-        }));
+        .map(({ slot, members: availableMembers }) => {
+          const entry: TeamSlotWithAssignment = {
+            start: slot.start,
+            end: slot.end,
+            availableMembers,
+          };
+          if (isGroupEvent) {
+            const booked = slotBookingCounts.get(slot.start.toISOString()) ?? 0;
+            entry.seatsRemaining = seatsPerSlot - booked;
+          }
+          return entry;
+        });
 
       if (daySlots.length > 0) {
         result[date] = daySlots;
@@ -430,12 +472,19 @@ export class TeamSlotCalculator {
     members: TeamMemberInfo[],
     options: {
       maxDaysInAdvance: number;
+      rangeEnd?: Date;
+    },
+    groupOptions?: {
+      eventTypeId: string;
+      seatsPerSlot: number;
     }
-  ): Promise<MemberAvailabilityData[]> {
+  ): Promise<{ availabilities: MemberAvailabilityData[]; slotBookingCounts: Map<string, number> }> {
     const now = new Date();
-    const rangeEnd = addDays(now, options.maxDaysInAdvance);
+    // Use rangeEnd from request (scoped to current month) for efficient calendar/DB queries
+    const rangeEnd = options.rangeEnd ?? addDays(now, Math.min(options.maxDaysInAdvance, 45));
 
     const results: MemberAvailabilityData[] = [];
+    const slotBookingCounts = new Map<string, number>();
 
     for (const member of members) {
       // Get member's default schedule
@@ -511,15 +560,43 @@ export class TeamSlotCalculator {
         select: {
           startTime: true,
           endTime: true,
+          eventTypeId: true,
         },
       });
 
-      busyTimes.push(
-        ...memberBookings.map((b) => ({
-          start: b.startTime,
-          end: b.endTime,
-        }))
-      );
+      // For group events: only mark same-event slots as busy when fully booked
+      if (groupOptions && groupOptions.seatsPerSlot > 1) {
+        const otherBookings: BusyTime[] = [];
+        const fullyBookedSlots: BusyTime[] = [];
+
+        for (const b of memberBookings) {
+          if (b.eventTypeId === groupOptions.eventTypeId) {
+            const slotKey = b.startTime.toISOString();
+            slotBookingCounts.set(slotKey, (slotBookingCounts.get(slotKey) ?? 0) + 1);
+          } else {
+            otherBookings.push({ start: b.startTime, end: b.endTime });
+          }
+        }
+
+        // Only add fully-booked group slots as busy
+        for (const b of memberBookings) {
+          if (b.eventTypeId === groupOptions.eventTypeId) {
+            const slotKey = b.startTime.toISOString();
+            if ((slotBookingCounts.get(slotKey) ?? 0) >= groupOptions.seatsPerSlot) {
+              fullyBookedSlots.push({ start: b.startTime, end: b.endTime });
+            }
+          }
+        }
+
+        busyTimes.push(...otherBookings, ...fullyBookedSlots);
+      } else {
+        busyTimes.push(
+          ...memberBookings.map((b) => ({
+            start: b.startTime,
+            end: b.endTime,
+          }))
+        );
+      }
 
       // Merge overlapping busy times
       busyTimes = mergeBusyTimes(busyTimes);
@@ -532,7 +609,7 @@ export class TeamSlotCalculator {
       });
     }
 
-    return results;
+    return { availabilities: results, slotBookingCounts };
   }
 }
 

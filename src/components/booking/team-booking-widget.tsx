@@ -58,6 +58,7 @@ interface TeamBookingWidgetProps {
     locationType: string;
     schedulingType: SchedulingType | null;
     questions: Question[];
+    seatsPerSlot?: number;
   };
   members: TeamMemberBooking[];
   defaultTimezone: string;
@@ -168,6 +169,7 @@ export default function TeamBookingWidget({
                 end: new Date(slot.end),
                 formattedTime: formatInTimeZone(startDate, inviteeTimezone, 'h:mm a'),
                 assignedMemberId: slot.assignedMemberId,
+                ...(slot.seatsRemaining != null && { seatsRemaining: slot.seatsRemaining }),
               };
             });
           }
@@ -466,6 +468,12 @@ export default function TeamBookingWidget({
                   {schedulingTypeLabels[eventType.schedulingType]}
                 </div>
               )}
+              {(eventType.seatsPerSlot ?? 1) > 1 && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Users className="h-4 w-4 text-ocean-500" />
+                  Group event · {eventType.seatsPerSlot} seats
+                </div>
+              )}
             </div>
 
             {/* Team Members */}
@@ -625,7 +633,15 @@ export default function TeamBookingWidget({
                           selectedSlot === slot.time && 'time-slot-selected'
                         )}
                       >
-                        {slot.formattedTime}
+                        <span>{slot.formattedTime}</span>
+                        {slot.seatsRemaining != null && slot.seatsRemaining < (eventType.seatsPerSlot ?? 1) && (
+                          <span className={cn(
+                            'text-[10px] font-medium block leading-tight',
+                            slot.seatsRemaining <= 2 ? 'text-amber-600' : 'text-gray-500'
+                          )}>
+                            {slot.seatsRemaining} {slot.seatsRemaining === 1 ? 'seat' : 'seats'} left
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>

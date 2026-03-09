@@ -86,10 +86,7 @@ export default function EmailVerification({
 
   const verifyCodeSubmit = useCallback(async () => {
     const fullCode = code.join('')
-    if (fullCode.length !== 6) {
-      setError('Please enter the full 6-digit code')
-      return
-    }
+    if (fullCode.length !== 6) return
 
     setVerifying(true)
     setError('')

@@ -73,6 +73,7 @@ export interface TeamSlotWithAssignment {
   assignedMemberId?: string
   assignedMemberName?: string
   availableMembers?: TeamMemberInfo[]
+  seatsRemaining?: number
 }
 
 export interface TeamCalculatedSlots {

@@ -40,7 +40,7 @@ export type TimeSlot = SlotTimeSlot;
 // SAFETY CONSTANTS - Prevent infinite loops and memory issues
 // ============================================================================
 const MAX_SLOTS_PER_DAY = 100;      // Maximum slots per day (prevents memory explosion)
-const MAX_DAYS_TO_PROCESS = 90;     // Maximum days to calculate
+const MAX_DAYS_PER_REQUEST = 45;    // Safety cap for while loop (frontend sends ~31 days per month request)
 const MIN_SLOT_INTERVAL = 5;        // Minimum 5 minutes between slots
 const MIN_SLOT_DURATION = 5;        // Minimum 5 minute slots
 
@@ -55,7 +55,7 @@ export class SlotCalculator {
     // SAFETY: Ensure duration and interval are valid positive numbers
     const safeDuration = Math.max(MIN_SLOT_DURATION, options.duration || 30);
     const safeInterval = Math.max(MIN_SLOT_INTERVAL, options.slotInterval || safeDuration);
-    const safeMaxDays = Math.min(MAX_DAYS_TO_PROCESS, options.maxDaysInAdvance || 30);
+    const safeMaxDays = options.maxDaysInAdvance || 30;
 
     this.options = {
       duration: safeDuration,
@@ -86,18 +86,22 @@ export class SlotCalculator {
 
   /**
    * Calculate all available slots within the booking window
+   * @param fromDate Start of the calculation range (defaults to now)
+   * @param toDate End of the calculation range (defaults to now + maxDaysInAdvance)
    */
-  calculate(fromDate?: Date): CalculatedSlots {
+  calculate(fromDate?: Date, toDate?: Date): CalculatedSlots {
     const now = new Date();
     const startDate = fromDate ?? now;
-    const endDate = addDays(now, this.options.maxDaysInAdvance);
+    const bookingWindowEnd = addDays(now, this.options.maxDaysInAdvance);
+    // Use the earlier of toDate or booking window end
+    const endDate = toDate && isBefore(toDate, bookingWindowEnd) ? toDate : bookingWindowEnd;
 
     const slots: CalculatedSlots = {};
     let currentDate = startOfDay(startDate);
     let daysProcessed = 0;
 
-    // SAFETY: Limit the number of days we process
-    while (isBefore(currentDate, endDate) && daysProcessed < MAX_DAYS_TO_PROCESS) {
+    // SAFETY: Limit the number of days we process per request
+    while (isBefore(currentDate, endDate) && daysProcessed < MAX_DAYS_PER_REQUEST) {
       const dateKey = format(currentDate, 'yyyy-MM-dd');
       const daySlots = this.getSlotsForDay(currentDate, now);
 

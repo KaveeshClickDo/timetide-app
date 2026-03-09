@@ -289,6 +289,8 @@ export default function EditTeamEventTypePage() {
 
       if (formData.maxBookingsPerDay > 0) {
         payload.maxBookingsPerDay = formData.maxBookingsPerDay
+      } else {
+        payload.maxBookingsPerDay = null
       }
 
       // Group booking
@@ -931,6 +933,7 @@ export default function EditTeamEventTypePage() {
                       type="date"
                       value={formData.periodEndDate}
                       min={formData.periodStartDate}
+                      max={format(addDays(new Date(), 365 * 10), 'yyyy-MM-dd')}
                       onChange={(e) => setFormData({ ...formData, periodEndDate: e.target.value })}
                     />
                   </div>

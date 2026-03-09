@@ -82,10 +82,13 @@ export async function GET(request: NextRequest) {
 
     // Calculate booking window based on period type
     switch (eventType.periodType) {
-      case 'RANGE':
+      case 'RANGE': {
         // Use specific date range
         const periodStart = eventType.periodStartDate ? new Date(eventType.periodStartDate) : now;
-        const periodEnd = eventType.periodEndDate ? new Date(eventType.periodEndDate) : addDays(now, 30);
+        let periodEnd = eventType.periodEndDate ? new Date(eventType.periodEndDate) : addDays(now, 30);
+        // Cap at 10 years from now
+        const tenYearsFromNow = addDays(now, 365 * 10);
+        if (periodEnd > tenYearsFromNow) periodEnd = tenYearsFromNow;
 
         // Ensure rangeStart is not before periodStart
         if (rangeStart < periodStart) {
@@ -105,12 +108,12 @@ export async function GET(request: NextRequest) {
         // Calculate maxDays for the calculator
         maxDays = Math.ceil((periodEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         break;
+      }
 
       case 'UNLIMITED':
-        // No restrictions, but we still limit per-request to prevent overload
-        // Default to 90 days max per request for performance
-        maxDays = 90;
-        rangeEnd = endDate ? parseISO(endDate) : addDays(now, maxDays);
+        // Truly unlimited — no booking window cap. Safety is per-request (MAX_DAYS_PER_REQUEST=45, MAX_SLOTS_PER_DAY=100)
+        maxDays = 365 * 100;
+        rangeEnd = endDate ? parseISO(endDate) : addDays(now, 31);
         break;
 
       case 'ROLLING':
@@ -282,8 +285,8 @@ export async function GET(request: NextRequest) {
       existingBookingsPerDay: bookingsPerDay,
     });
 
-    // Calculate available slots
-    const calculatedSlots = calculator.calculate(rangeStart);
+    // Calculate available slots (scoped to requested date range for performance)
+    const calculatedSlots = calculator.calculate(rangeStart, rangeEnd);
 
     // For group events, enrich slots with remaining seat counts
     let slots: Record<string, Array<{ start: Date; end: Date; seatsRemaining?: number }>>;

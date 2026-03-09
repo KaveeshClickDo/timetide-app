@@ -85,6 +85,7 @@ export default function TeamBookingPage() {
           description: eventType.description,
           length: eventType.length,
           locationType: eventType.locationType,
+          seatsPerSlot: eventType.seatsPerSlot ?? 1,
           schedulingType: eventType.schedulingType ?? null,
           questions:
             eventType.questions?.map((q) => ({

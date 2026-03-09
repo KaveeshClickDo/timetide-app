@@ -678,28 +678,44 @@ export async function POST(request: NextRequest) {
       const occStart = allOccurrenceDates[i];
       const occEnd = addMinutes(occStart, eventType.length);
 
-      const booking = await prisma.booking.create({
-        data: {
-          eventTypeId,
-          hostId: selectedHost.id,
-          assignedUserId: assignedUserId,
-          startTime: occStart,
-          endTime: occEnd,
-          timezone,
-          inviteeName: name,
-          inviteeEmail: email,
-          inviteePhone: phone,
-          inviteeNotes: notes,
-          responses: responses ?? undefined,
-          status: bookingStatus,
-          location,
-          source: 'web',
-          recurringGroupId,
-          recurringIndex: recurring ? i : undefined,
-          recurringCount: recurring ? occurrenceCount : undefined,
-          recurringFrequency: recurring ? recurringFrequency : undefined,
-          recurringInterval: recurring ? recurringInterval : undefined,
-        },
+      const booking = await prisma.$transaction(async (tx) => {
+        // Re-check seat availability inside transaction to prevent race conditions
+        if (isGroupEvent) {
+          const currentCount = await tx.booking.count({
+            where: {
+              eventTypeId,
+              startTime: occStart,
+              status: { in: ['PENDING', 'CONFIRMED'] },
+            },
+          });
+          if (currentCount >= seatsPerSlot) {
+            throw new Error('SEATS_FULL');
+          }
+        }
+
+        return tx.booking.create({
+          data: {
+            eventTypeId,
+            hostId: selectedHost.id,
+            assignedUserId: assignedUserId,
+            startTime: occStart,
+            endTime: occEnd,
+            timezone,
+            inviteeName: name,
+            inviteeEmail: email,
+            inviteePhone: phone,
+            inviteeNotes: notes,
+            responses: responses ?? undefined,
+            status: bookingStatus,
+            location,
+            source: 'web',
+            recurringGroupId,
+            recurringIndex: recurring ? i : undefined,
+            recurringCount: recurring ? occurrenceCount : undefined,
+            recurringFrequency: recurring ? recurringFrequency : undefined,
+            recurringInterval: recurring ? recurringInterval : undefined,
+          },
+        });
       });
 
       createdBookings.push({
@@ -1086,6 +1102,13 @@ export async function POST(request: NextRequest) {
       })) : undefined,
     }, { status: 201 });
   } catch (error) {
+    // Handle group booking seat capacity exceeded (from transaction re-check)
+    if (error instanceof Error && error.message === 'SEATS_FULL') {
+      return NextResponse.json(
+        { error: 'All seats for this time slot are taken. Please select another time.' },
+        { status: 409 }
+      );
+    }
     console.error('POST booking error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },

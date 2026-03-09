@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
         length: eventType.length,
         locationType: eventType.locationType,
         schedulingType: eventType.schedulingType,
+        seatsPerSlot: eventType.seatsPerSlot ?? 1,
         requiresConfirmation: eventType.requiresConfirmation,
         questions: eventType.questions.map((q) => ({
           id: q.id,

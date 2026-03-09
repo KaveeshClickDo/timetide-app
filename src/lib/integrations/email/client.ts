@@ -1304,3 +1304,55 @@ export async function sendTeamInvitationEmail(
     html: generateTeamInvitationEmail(data),
   });
 }
+
+// ============================================================================
+// EMAIL VERIFICATION
+// ============================================================================
+
+function generateVerificationCodeEmail(code: string): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>${baseStyles}</head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="logo">TimeTide</div>
+          <p style="color: #64748b; margin-top: 8px;">Email Verification</p>
+        </div>
+
+        <div class="card" style="text-align: center;">
+          <p style="color: #64748b; margin-bottom: 16px;">
+            Use the following code to verify your email address:
+          </p>
+          <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #0ea5e9; padding: 16px 0; font-family: monospace;">
+            ${esc(code)}
+          </div>
+          <p style="color: #94a3b8; font-size: 13px; margin-top: 16px;">
+            This code expires in 10 minutes.
+          </p>
+        </div>
+
+        <p style="text-align: center; color: #94a3b8; font-size: 13px;">
+          If you didn't request this code, you can safely ignore this email.
+        </p>
+
+        <div class="footer">
+          <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+}
+
+export async function sendVerificationCodeEmail(
+  email: string,
+  code: string
+): Promise<boolean> {
+  return sendEmail({
+    to: email,
+    subject: `${code} is your TimeTide verification code`,
+    html: generateVerificationCodeEmail(code),
+  });
+}

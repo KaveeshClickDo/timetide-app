@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { cn, formatDuration, getInitials } from '@/lib/utils'
+import EmailVerification, { type VerificationProof } from '@/components/email-verification'
 import type { TimeSlot } from '@/types/booking'
 
 const locationIcons = {
@@ -66,6 +67,8 @@ export default function ReschedulePage() {
   const [rescheduleScope, setRescheduleScope] = useState<'this' | 'this_and_future'>('this')
   const [inviteeTimezone, setInviteeTimezone] = useState<string>('UTC')
   const [step, setStep] = useState<'calendar' | 'time' | 'confirm' | 'success'>('calendar')
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationProof, setVerificationProof] = useState<VerificationProof | null>(null)
 
   // Detect timezone
   useEffect(() => {
@@ -147,7 +150,7 @@ export default function ReschedulePage() {
 
   // Reschedule mutation
   const rescheduleMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (proof: VerificationProof) => {
       const res = await fetch(`/api/bookings/${bookingId}/reschedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -155,6 +158,11 @@ export default function ReschedulePage() {
           newStartTime: selectedSlot,
           reason: reason || undefined,
           scope: booking?.recurringGroupId ? rescheduleScope : 'this',
+          emailVerification: {
+            code: proof.code,
+            signature: proof.signature,
+            expiresAt: proof.expiresAt,
+          },
         }),
       })
       if (!res.ok) {
@@ -167,6 +175,19 @@ export default function ReschedulePage() {
       setStep('success')
     },
   })
+
+  const handleRescheduleClick = () => {
+    if (verificationProof) {
+      rescheduleMutation.mutate(verificationProof)
+    } else {
+      setShowVerification(true)
+    }
+  }
+
+  const handleEmailVerified = (proof: VerificationProof) => {
+    setVerificationProof(proof)
+    rescheduleMutation.mutate(proof)
+  }
 
   // Calendar logic
   const days = eachDayOfInterval({
@@ -634,7 +655,7 @@ export default function ReschedulePage() {
 
                   <Button
                     className="w-full"
-                    onClick={() => rescheduleMutation.mutate()}
+                    onClick={handleRescheduleClick}
                     disabled={rescheduleMutation.isPending}
                   >
                     {rescheduleMutation.isPending ? (
@@ -664,6 +685,16 @@ export default function ReschedulePage() {
           </Link>
         </div>
       </div>
+
+      {booking && (
+        <EmailVerification
+          open={showVerification}
+          onOpenChange={setShowVerification}
+          email={booking.inviteeEmail}
+          type="BOOKING_MANAGE"
+          onVerified={handleEmailVerified}
+        />
+      )}
     </div>
   )
 }

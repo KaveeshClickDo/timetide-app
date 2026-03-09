@@ -10,6 +10,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { cancelBookingSchema, confirmRejectBookingSchema } from '@/lib/validation/schemas';
+import { verifyCode } from '@/lib/email-verification';
 import { deleteGoogleCalendarEvent, createGoogleCalendarEvent, type CreateCalendarEventResult } from '@/lib/integrations/calendar/google';
 import { deleteOutlookCalendarEvent, createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
 import { deleteAllCalendarEvents, parseCalendarEventIds, buildCalendarEventIdsUpdate } from '@/lib/integrations/calendar/event-ids';
@@ -722,12 +723,13 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const { id } = params;
     const session = await getServerSession(authOptions);
 
-    // Parse cancellation reason and cancelAllFuture from body
+    // Parse cancellation reason, cancelAllFuture, and email verification from body
     let reason: string | undefined;
     let cancelAllFuture = false;
+    let bodyData: any = {};
     try {
-      const body = await request.json();
-      const validated = cancelBookingSchema.safeParse(body);
+      bodyData = await request.json();
+      const validated = cancelBookingSchema.safeParse(bodyData);
       if (validated.success) {
         reason = validated.data.reason;
         cancelAllFuture = validated.data.cancelAllFuture ?? false;
@@ -784,14 +786,32 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Check authorization - host, team members, or invitee via UID
+    // Check authorization - host, team members, or invitee via UID + email verification
     const isHost = session?.user?.id === booking.hostId;
     const isTeamMemberDelete = booking.eventType.teamMemberAssignments?.some(
       (a: { teamMember: { userId: string } }) => a.teamMember.userId === session?.user?.id
     );
     const accessedByUid = id === booking.uid;
 
-    if (!isHost && !isTeamMemberDelete && !accessedByUid) {
+    if (isHost || isTeamMemberDelete) {
+      // Authenticated host or team member — allowed
+    } else if (accessedByUid) {
+      // Invitee via UID — require email verification
+      const ev = bodyData?.emailVerification;
+      if (!ev?.code || !ev?.signature || !ev?.expiresAt) {
+        return NextResponse.json(
+          { error: 'Email verification is required to cancel this booking' },
+          { status: 403 }
+        );
+      }
+      const result = verifyCode(booking.inviteeEmail, ev.code, 'BOOKING_MANAGE', ev.signature, ev.expiresAt);
+      if (!result.valid) {
+        return NextResponse.json(
+          { error: result.error || 'Email verification failed' },
+          { status: 403 }
+        );
+      }
+    } else {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 

@@ -30,6 +30,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { cn, formatDuration, getInitials } from '@/lib/utils'
+import EmailVerification, { type VerificationProof } from '@/components/email-verification'
 import type { TimeSlot, BookingWindow, BookingStep } from '@/types/booking'
 import type { Question } from '@/types/event-type'
 
@@ -89,6 +90,8 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
     responses: {} as Record<string, string>,
   })
   const [bookingResult, setBookingResult] = useState<any>(null)
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationProof, setVerificationProof] = useState<VerificationProof | null>(null)
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringWeeks, setRecurringWeeks] = useState(Math.min(4, eventType.recurringMaxWeeks || 12))
 
@@ -187,7 +190,7 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
 
   // Book mutation
   const bookMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (proof: VerificationProof) => {
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,6 +213,11 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
               }),
             },
           }),
+          emailVerification: {
+            code: proof.code,
+            signature: proof.signature,
+            expiresAt: proof.expiresAt,
+          },
         }),
       })
       if (!res.ok) {
@@ -294,7 +302,12 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    bookMutation.mutate()
+    setShowVerification(true)
+  }
+
+  const handleEmailVerified = (proof: VerificationProof) => {
+    setVerificationProof(proof)
+    bookMutation.mutate(proof)
   }
 
   // Confirmation step
@@ -863,6 +876,14 @@ export default function BookingWidget({ user, eventType, isEmbed }: BookingWidge
           </Link>
         </div>
       )}
+
+      <EmailVerification
+        open={showVerification}
+        onOpenChange={setShowVerification}
+        email={formData.email}
+        type="BOOKING_CREATE"
+        onVerified={handleEmailVerified}
+      />
     </div>
   )
 }

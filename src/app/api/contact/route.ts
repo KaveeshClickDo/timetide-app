@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sendEmail } from '@/lib/integrations/email/client'
+import { verifyCode } from '@/lib/email-verification'
 
 const contactSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -13,6 +14,22 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const data = contactSchema.parse(body)
+
+    // Verify email ownership
+    const ev = body.emailVerification
+    if (!ev?.code || !ev?.signature || !ev?.expiresAt) {
+      return NextResponse.json(
+        { error: 'Email verification is required' },
+        { status: 400 }
+      )
+    }
+    const verification = verifyCode(data.email, ev.code, 'BOOKING_CREATE', ev.signature, ev.expiresAt)
+    if (!verification.valid) {
+      return NextResponse.json(
+        { error: verification.error || 'Email verification failed' },
+        { status: 403 }
+      )
+    }
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

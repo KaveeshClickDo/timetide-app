@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
 import { AddToCalendar } from '@/components/add-to-calendar'
+import EmailVerification, { type VerificationProof } from '@/components/email-verification'
 import type { BookingDetails } from '@/types/booking'
 
 const statusConfig = {
@@ -89,6 +90,9 @@ export default function PublicBookingManagementPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancellationReason, setCancellationReason] = useState('')
   const [cancelled, setCancelled] = useState(false)
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationProof, setVerificationProof] = useState<VerificationProof | null>(null)
+  const [pendingAction, setPendingAction] = useState<'cancel' | 'reschedule' | null>(null)
 
   const { data: bookingData, isPending, error } = useQuery({
     queryKey: ['public-booking', params.id],
@@ -105,11 +109,18 @@ export default function PublicBookingManagementPage() {
   })
 
   const cancelMutation = useMutation({
-    mutationFn: async (reason: string) => {
+    mutationFn: async ({ reason, proof }: { reason: string; proof: VerificationProof }) => {
       const res = await fetch(`/api/bookings/${params.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({
+          reason,
+          emailVerification: {
+            code: proof.code,
+            signature: proof.signature,
+            expiresAt: proof.expiresAt,
+          },
+        }),
       })
       if (!res.ok) {
         const error = await res.json()
@@ -121,8 +132,29 @@ export default function PublicBookingManagementPage() {
       queryClient.invalidateQueries({ queryKey: ['public-booking', params.id] })
       setCancelled(true)
       setShowCancelDialog(false)
+      setVerificationProof(null)
     },
   })
+
+  // When cancel button is clicked in the dialog, start verification
+  const handleCancelClick = () => {
+    if (verificationProof) {
+      // Already verified — proceed directly
+      cancelMutation.mutate({ reason: cancellationReason, proof: verificationProof })
+    } else {
+      setPendingAction('cancel')
+      setShowVerification(true)
+    }
+  }
+
+  // On email verified, proceed with the pending action
+  const handleEmailVerified = (proof: VerificationProof) => {
+    setVerificationProof(proof)
+    if (pendingAction === 'cancel') {
+      cancelMutation.mutate({ reason: cancellationReason, proof })
+    }
+    setPendingAction(null)
+  }
 
   if (isPending) {
     return (
@@ -411,7 +443,7 @@ export default function PublicBookingManagementPage() {
               Keep Booking
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => cancelMutation.mutate(cancellationReason)}
+              onClick={handleCancelClick}
               disabled={cancelMutation.isPending}
               className="bg-red-600 hover:bg-red-700"
             >
@@ -427,6 +459,17 @@ export default function PublicBookingManagementPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Email Verification Modal */}
+      {booking && (
+        <EmailVerification
+          open={showVerification}
+          onOpenChange={setShowVerification}
+          email={booking.inviteeEmail}
+          type="BOOKING_MANAGE"
+          onVerified={handleEmailVerified}
+        />
+      )}
     </div>
   )
 }

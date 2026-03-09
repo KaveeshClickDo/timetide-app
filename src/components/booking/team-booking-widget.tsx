@@ -37,6 +37,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn, formatDuration, getInitials } from '@/lib/utils';
+import EmailVerification, { type VerificationProof } from '@/components/email-verification';
 import type { TimeSlot, BookingWindow, BookingStep, SchedulingType } from '@/types/booking';
 import type { TeamMemberBooking } from '@/types/team';
 import type { Question } from '@/types/event-type';
@@ -108,6 +109,8 @@ export default function TeamBookingWidget({
     responses: {} as Record<string, string>,
   });
   const [bookingResult, setBookingResult] = useState<any>(null);
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationProof, setVerificationProof] = useState<VerificationProof | null>(null);
   const [bookingWindow, setBookingWindow] = useState<BookingWindow | null>(null);
 
   // Detect user's timezone
@@ -180,7 +183,7 @@ export default function TeamBookingWidget({
 
   // Book mutation
   const bookMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (proof: VerificationProof) => {
       const res = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,6 +197,11 @@ export default function TeamBookingWidget({
           responses:
             Object.keys(formData.responses).length > 0 ? formData.responses : undefined,
           isTeamBooking: true,
+          emailVerification: {
+            code: proof.code,
+            signature: proof.signature,
+            expiresAt: proof.expiresAt,
+          },
         }),
       });
       if (!res.ok) {
@@ -275,7 +283,12 @@ export default function TeamBookingWidget({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    bookMutation.mutate();
+    setShowVerification(true);
+  };
+
+  const handleEmailVerified = (proof: VerificationProof) => {
+    setVerificationProof(proof);
+    bookMutation.mutate(proof);
   };
 
   // Confirmation step
@@ -788,6 +801,14 @@ export default function TeamBookingWidget({
           </Link>
         </div>
       )}
+
+      <EmailVerification
+        open={showVerification}
+        onOpenChange={setShowVerification}
+        email={formData.email}
+        type="BOOKING_CREATE"
+        onVerified={handleEmailVerified}
+      />
     </div>
   );
 }

@@ -29,6 +29,7 @@ import {
   hasZoomConnected,
 } from '@/lib/integrations/zoom';
 import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
+import { verifyCode } from '@/lib/email-verification';
 import {
   checkBookingRateLimit,
   queueBookingConfirmationEmails,
@@ -159,6 +160,22 @@ export async function POST(request: NextRequest) {
 
     const { eventTypeId, startTime, timezone, name, email, phone, notes, responses, recurring } =
       validated.data;
+
+    // Verify email ownership via HMAC code
+    const ev = body.emailVerification;
+    if (!ev?.code || !ev?.signature || !ev?.expiresAt) {
+      return NextResponse.json(
+        { error: 'Email verification is required to create a booking' },
+        { status: 400 }
+      );
+    }
+    const verification = verifyCode(email, ev.code, 'BOOKING_CREATE', ev.signature, ev.expiresAt);
+    if (!verification.valid) {
+      return NextResponse.json(
+        { error: verification.error || 'Email verification failed' },
+        { status: 403 }
+      );
+    }
 
     // Fetch event type with team member assignments
     const eventType = await prisma.eventType.findUnique({

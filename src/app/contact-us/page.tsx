@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Send,
 } from 'lucide-react'
+import EmailVerification, { type VerificationProof } from '@/components/email-verification'
 
 export default function ContactPage() {
   const [form, setForm] = useState({
@@ -27,9 +28,14 @@ export default function ContactPage() {
   })
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [showVerification, setShowVerification] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setShowVerification(true)
+  }
+
+  const handleEmailVerified = async (proof: VerificationProof) => {
     setStatus('loading')
     setErrorMessage('')
 
@@ -37,7 +43,14 @@ export default function ContactPage() {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          emailVerification: {
+            code: proof.code,
+            signature: proof.signature,
+            expiresAt: proof.expiresAt,
+          },
+        }),
       })
 
       if (!res.ok) {
@@ -282,6 +295,14 @@ export default function ContactPage() {
       </section>
 
       <PublicFooter />
+
+      <EmailVerification
+        open={showVerification}
+        onOpenChange={setShowVerification}
+        email={form.email}
+        type="BOOKING_CREATE"
+        onVerified={handleEmailVerified}
+      />
     </div>
   )
 }

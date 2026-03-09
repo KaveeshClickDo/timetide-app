@@ -10,6 +10,7 @@ import { addMinutes } from 'date-fns';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
 import { rescheduleBookingSchema } from '@/lib/validation/schemas';
+import { verifyCode } from '@/lib/email-verification';
 import { updateGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
 import { updateOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
 import { updateAllCalendarEvents } from '@/lib/integrations/calendar/event-ids';
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Check authorization - host, assigned member, team members can reschedule; invitee via UID
+    // Check authorization - host, assigned member, team members can reschedule; invitee via UID + email verification
     const isHost = session?.user?.id === booking.hostId;
     const isAssignedMember = session?.user?.id === booking.assignedUserId;
     const isTeamMember = booking.eventType.teamMemberAssignments?.some(
@@ -102,7 +103,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     );
     const accessedByUid = id === booking.uid;
 
-    if (!isHost && !isAssignedMember && !isTeamMember && !accessedByUid) {
+    if (isHost || isAssignedMember || isTeamMember) {
+      // Authenticated host, assigned member, or team member — allowed
+    } else if (accessedByUid) {
+      // Invitee via UID — require email verification
+      const ev = body.emailVerification;
+      if (!ev?.code || !ev?.signature || !ev?.expiresAt) {
+        return NextResponse.json(
+          { error: 'Email verification is required to reschedule this booking' },
+          { status: 403 }
+        );
+      }
+      const result = verifyCode(booking.inviteeEmail, ev.code, 'BOOKING_MANAGE', ev.signature, ev.expiresAt);
+      if (!result.valid) {
+        return NextResponse.json(
+          { error: result.error || 'Email verification failed' },
+          { status: 403 }
+        );
+      }
+    } else {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 

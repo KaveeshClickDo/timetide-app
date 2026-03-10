@@ -101,7 +101,7 @@ export class SlotCalculator {
     let daysProcessed = 0;
 
     // SAFETY: Limit the number of days we process per request
-    while (isBefore(currentDate, endDate) && daysProcessed < MAX_DAYS_PER_REQUEST) {
+    while (!isAfter(currentDate, endDate) && daysProcessed < MAX_DAYS_PER_REQUEST) {
       const dateKey = format(currentDate, 'yyyy-MM-dd');
       const daySlots = this.getSlotsForDay(currentDate, now);
 

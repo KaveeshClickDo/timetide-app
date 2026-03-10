@@ -472,6 +472,7 @@ export class TeamSlotCalculator {
     members: TeamMemberInfo[],
     options: {
       maxDaysInAdvance: number;
+      rangeStart?: Date;
       rangeEnd?: Date;
     },
     groupOptions?: {
@@ -480,7 +481,8 @@ export class TeamSlotCalculator {
     }
   ): Promise<{ availabilities: MemberAvailabilityData[]; slotBookingCounts: Map<string, number> }> {
     const now = new Date();
-    // Use rangeEnd from request (scoped to current month) for efficient calendar/DB queries
+    // Use rangeStart/rangeEnd from request (scoped to current month) for efficient calendar/DB queries
+    const rangeStart = options.rangeStart ?? now;
     const rangeEnd = options.rangeEnd ?? addDays(now, Math.min(options.maxDaysInAdvance, 45));
 
     const results: MemberAvailabilityData[] = [];
@@ -519,7 +521,7 @@ export class TeamSlotCalculator {
 
       // Fetch from Google Calendar
       try {
-        const googleBusy = await getAllBusyTimes(member.userId, now, rangeEnd);
+        const googleBusy = await getAllBusyTimes(member.userId, rangeStart, rangeEnd);
         busyTimes.push(...googleBusy);
       } catch {
         // Calendar not connected, continue
@@ -537,7 +539,7 @@ export class TeamSlotCalculator {
         if (outlookCalendar) {
           const outlookBusy = await getOutlookBusyTimes(
             outlookCalendar.id,
-            now,
+            rangeStart,
             rangeEnd
           );
           busyTimes.push(...outlookBusy);

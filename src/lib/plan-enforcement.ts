@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { PLAN_LIMITS, getRequiredPlan, type PlanTier, type PlanLimits } from './pricing'
+import { prisma } from './prisma'
 
 type NumericLimitKey = {
   [K in keyof PlanLimits]: PlanLimits[K] extends number ? K : never
@@ -15,7 +16,7 @@ type BooleanFeatureKey = {
 }[keyof PlanLimits]
 
 /**
- * Check if a numeric limit (maxEventTypes, maxCalendars, maxWebhooks) is exceeded.
+ * Check if a numeric limit (maxEventTypes, maxWebhooks) is exceeded.
  * Returns a 403 NextResponse if blocked, or null if allowed.
  */
 export function checkNumericLimit(
@@ -44,7 +45,7 @@ export function checkNumericLimit(
 }
 
 /**
- * Check if a boolean feature (teams, analytics, bufferTimes, etc.) is allowed.
+ * Check if a boolean feature (teams, analytics, customQuestions, etc.) is allowed.
  * Returns a 403 NextResponse if blocked, or null if allowed.
  */
 export function checkFeatureAccess(
@@ -70,7 +71,7 @@ export function checkFeatureAccess(
 }
 
 /**
- * Validate event type feature fields (bufferTimes, customQuestions, groupBooking, bookingLimits).
+ * Validate event type feature fields (customQuestions, groupBooking, recurringBooking).
  * Used by both POST /api/event-types and PATCH /api/event-types/[id].
  * Returns a 403 NextResponse if any gated feature is used, or null if all allowed.
  */
@@ -78,13 +79,6 @@ export function checkEventTypeFeatures(
   plan: PlanTier,
   body: Record<string, unknown>,
 ): NextResponse | null {
-  // Buffer times
-  if ((body.bufferTimeBefore && (body.bufferTimeBefore as number) > 0) ||
-      (body.bufferTimeAfter && (body.bufferTimeAfter as number) > 0)) {
-    const denied = checkFeatureAccess(plan, 'bufferTimes')
-    if (denied) return denied
-  }
-
   // Custom questions
   if (body.questions && Array.isArray(body.questions) && body.questions.length > 0) {
     const denied = checkFeatureAccess(plan, 'customQuestions')
@@ -97,12 +91,6 @@ export function checkEventTypeFeatures(
     if (denied) return denied
   }
 
-  // Booking limits
-  if (body.maxBookingsPerDay != null) {
-    const denied = checkFeatureAccess(plan, 'bookingLimits')
-    if (denied) return denied
-  }
-
   // Recurring booking
   if (body.allowsRecurring === true) {
     const denied = checkFeatureAccess(plan, 'recurringBooking')
@@ -110,6 +98,18 @@ export function checkEventTypeFeatures(
   }
 
   return null
+}
+
+/**
+ * Get the team owner's plan for a given team.
+ * Used to enforce team features based on who is paying (the owner), not the requesting user.
+ */
+export async function getTeamOwnerPlan(teamId: string): Promise<PlanTier> {
+  const owner = await prisma.teamMember.findFirst({
+    where: { teamId, role: 'OWNER' },
+    include: { user: { select: { plan: true } } },
+  })
+  return (owner?.user?.plan as PlanTier) || 'FREE'
 }
 
 // ---------------------------------------------------------------------------
@@ -124,15 +124,12 @@ function getUpgradePlanForNumeric(currentPlan: PlanTier): PlanTier {
 
 const LIMIT_LABELS: Record<NumericLimitKey, string> = {
   maxEventTypes: 'Event type',
-  maxCalendars: 'Calendar',
   maxWebhooks: 'Webhook',
 }
 
 const FEATURE_LABELS: Record<BooleanFeatureKey, string> = {
-  bufferTimes: 'Buffer times',
   customQuestions: 'Custom questions',
   groupBooking: 'Group booking',
-  bookingLimits: 'Booking limits',
   recurringBooking: 'Recurring bookings',
   teams: 'Team scheduling',
   analytics: 'Analytics',

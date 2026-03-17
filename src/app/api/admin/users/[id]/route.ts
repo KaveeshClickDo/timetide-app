@@ -3,6 +3,13 @@ import prisma from '@/lib/prisma'
 import { requireAdmin } from '@/lib/admin-auth'
 import { logAdminAction } from '@/lib/admin-audit'
 import { adminUpdateUserSchema } from '@/lib/validation/schemas'
+import {
+  activateSubscription,
+  adminDowngradeImmediate,
+  adminDowngradeWithGrace,
+  cancelDowngrade,
+} from '@/lib/subscription-lifecycle'
+import type { PlanTier } from '@/lib/pricing'
 
 export async function GET(
   req: NextRequest,
@@ -19,6 +26,9 @@ export async function GET(
         id: true, email: true, name: true, username: true, image: true,
         plan: true, role: true, isDisabled: true, createdAt: true,
         timezone: true, onboardingCompleted: true, emailVerified: true,
+        subscriptionStatus: true, planActivatedAt: true, planExpiresAt: true,
+        gracePeriodEndsAt: true, cleanupScheduledAt: true,
+        downgradeReason: true, downgradeInitiatedBy: true,
         _count: { select: { bookingsAsHost: true, eventTypes: true, teamMemberships: true } },
         eventTypes: {
           select: {
@@ -74,42 +84,102 @@ export async function PATCH(
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
-      select: { plan: true, role: true, isDisabled: true },
+      select: { plan: true, role: true, isDisabled: true, email: true },
     })
 
     if (!existingUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const user = await prisma.user.update({
-      where: { id },
-      data: validated,
-      select: {
-        id: true, email: true, name: true, plan: true, role: true, isDisabled: true,
-      },
-    })
+    const adminId = session!.user.id
 
-    // Log admin action
-    const changes: Record<string, unknown> = {}
-    if (validated.plan && validated.plan !== existingUser.plan) {
-      changes.plan = { from: existingUser.plan, to: validated.plan }
+    // Handle subscription lifecycle actions
+    if (validated.planAction) {
+      try {
+        switch (validated.planAction) {
+          case 'upgrade': {
+            if (!validated.plan || validated.plan === 'FREE') {
+              return NextResponse.json({ error: 'Plan is required for upgrade' }, { status: 400 })
+            }
+            await activateSubscription(id, validated.plan as PlanTier, 30, `admin:${adminId}`)
+            break
+          }
+          case 'downgrade_immediate': {
+            const targetPlan = (validated.plan as PlanTier) || 'FREE'
+            await adminDowngradeImmediate(id, adminId, targetPlan)
+            break
+          }
+          case 'downgrade_grace': {
+            const targetPlan = (validated.plan as PlanTier) || 'FREE'
+            await adminDowngradeWithGrace(id, adminId, validated.gracePeriodDays, targetPlan)
+            break
+          }
+          case 'cancel_downgrade': {
+            await cancelDowngrade(id, `admin:${adminId}`)
+            break
+          }
+        }
+
+        await logAdminAction({
+          adminId,
+          action: 'UPDATE_USER',
+          targetType: 'User',
+          targetId: id,
+          details: {
+            planAction: validated.planAction,
+            fromPlan: existingUser.plan,
+            toPlan: validated.plan || 'FREE',
+            gracePeriodDays: validated.gracePeriodDays,
+            userEmail: existingUser.email,
+          },
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to update subscription'
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
     }
+
+    // Handle non-subscription field updates (role, isDisabled, or direct plan change without planAction)
+    const directUpdates: Record<string, unknown> = {}
     if (validated.role && validated.role !== existingUser.role) {
-      changes.role = { from: existingUser.role, to: validated.role }
+      directUpdates.role = validated.role
     }
     if (validated.isDisabled !== undefined && validated.isDisabled !== existingUser.isDisabled) {
-      changes.isDisabled = { from: existingUser.isDisabled, to: validated.isDisabled }
+      directUpdates.isDisabled = validated.isDisabled
+    }
+    // Backward compat: direct plan change without planAction
+    if (validated.plan && !validated.planAction && validated.plan !== existingUser.plan) {
+      directUpdates.plan = validated.plan
     }
 
-    if (Object.keys(changes).length > 0) {
+    if (Object.keys(directUpdates).length > 0) {
+      await prisma.user.update({
+        where: { id },
+        data: directUpdates,
+      })
+
+      const changes: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(directUpdates)) {
+        changes[key] = { from: (existingUser as Record<string, unknown>)[key], to: value }
+      }
+
       await logAdminAction({
-        adminId: session!.user.id,
+        adminId,
         action: 'UPDATE_USER',
         targetType: 'User',
         targetId: id,
-        details: { changes, userEmail: user.email },
+        details: { changes, userEmail: existingUser.email },
       })
     }
+
+    // Return updated user
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true, email: true, name: true, plan: true, role: true, isDisabled: true,
+        subscriptionStatus: true, planExpiresAt: true, gracePeriodEndsAt: true, cleanupScheduledAt: true,
+      },
+    })
 
     return NextResponse.json(user)
   } catch (error) {

@@ -30,6 +30,7 @@ import { initEmailWorker } from './email-queue';
 import { initReminderWorker, scheduleAllPendingReminders } from './reminder-queue';
 import { initCalendarSyncWorker, scheduleCalendarSyncJobs } from './calendar-sync-queue';
 import { initWebhookWorker } from './webhook-queue';
+import { initSubscriptionWorker, scheduleSubscriptionJobs } from './subscription-queue';
 
 let initialized = false;
 
@@ -72,6 +73,10 @@ export async function initWorkers(): Promise<void> {
 
     // Set up scheduled calendar sync jobs
     await scheduleCalendarSyncJobs();
+
+    // Initialize subscription lifecycle worker
+    await initSubscriptionWorker();
+    await scheduleSubscriptionJobs();
 
     initialized = true;
     console.log('All queue workers initialized successfully');

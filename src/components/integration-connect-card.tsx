@@ -73,7 +73,7 @@ export function IntegrationConnectCard({ provider, connected, name, returnTo }: 
   }
 
   return (
-    <div className="flex items-start justify-between gap-3 p-4 border rounded-lg">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 border rounded-lg">
       <div className="flex items-start gap-3 min-w-0">
         <div className={`w-10 h-10 flex-shrink-0 rounded-lg ${config.iconBg} flex items-center justify-center`}>
           <Icon className={`h-5 w-5 ${config.iconColor}`} />
@@ -93,7 +93,7 @@ export function IntegrationConnectCard({ provider, connected, name, returnTo }: 
         </div>
       </div>
       {connected ? (
-        <div className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+        <div className="flex-shrink-0 self-start sm:self-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 text-green-700 text-xs font-medium">
           <Check className="h-3 w-3" />
           Connected
         </div>
@@ -103,7 +103,7 @@ export function IntegrationConnectCard({ provider, connected, name, returnTo }: 
           size="sm"
           onClick={handleConnect}
           disabled={connecting}
-          className="flex-shrink-0"
+          className="flex-shrink-0 w-full sm:w-auto"
         >
           {connecting ? (
             <>

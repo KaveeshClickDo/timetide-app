@@ -41,6 +41,7 @@ import { useFeatureGate } from '@/hooks/use-feature-gate'
 import { UpgradeModal } from '@/components/upgrade-modal'
 import { PwaInstallBanner } from '@/components/pwa-install-banner'
 import { ImpersonationBanner } from '@/components/impersonation-banner'
+import { SubscriptionBanner } from '@/components/subscription-banner'
 import { SessionExpiryWarning } from '@/components/session-expiry-warning'
 import { useIdleTimeout } from '@/hooks/use-idle-timeout'
 
@@ -89,6 +90,19 @@ export default function DashboardLayout({
 
   const { canAccess: canCreateEvent } = useFeatureGate('maxEventTypes', eventTypes?.length ?? 0)
 
+  // Fetch user's team memberships (to unlock Teams nav for invited members)
+  const { data: userTeams } = useQuery<{ teams: { id: string }[] }>({
+    queryKey: ['teams'],
+    queryFn: async () => {
+      const res = await fetch('/api/teams')
+      if (!res.ok) return { teams: [] }
+      return res.json()
+    },
+    enabled: !!user?.id,
+  })
+
+  const isTeamMember = (userTeams?.teams?.length ?? 0) > 0
+
   // Auto-logout after 30 minutes of inactivity
   useIdleTimeout()
 
@@ -114,6 +128,23 @@ export default function DashboardLayout({
         })
     }
   }, [user?.timezone, user?.timezoneAutoDetect])
+
+  // Onboarding gets a minimal layout — no sidebar or nav so users can't skip the flow
+  if (pathname.startsWith('/dashboard/onboarding')) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        <ImpersonationBanner />
+        <header className="bg-white border-b border-gray-200 h-16 flex items-center px-6">
+          <Link href="/dashboard/onboarding">
+            <Image src="/header-logo.svg" alt="TimeTide" width={120} height={32} priority />
+          </Link>
+        </header>
+        <main className="flex-1 p-4">
+          {children}
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -165,7 +196,7 @@ export default function DashboardLayout({
                   : pathname.startsWith(item.href)
               const userPlan: PlanTier = (user?.plan as PlanTier) ?? 'FREE'
               const userLimits = PLAN_LIMITS[userPlan]
-              const isLocked = item.gateFeature && !userLimits[item.gateFeature]
+              const isLocked = item.gateFeature && !userLimits[item.gateFeature] && !(item.gateFeature === 'teams' && isTeamMember)
               const requiredPlan = item.gateFeature ? getRequiredPlan(item.gateFeature) : null
               return (
                 <Link
@@ -271,6 +302,7 @@ export default function DashboardLayout({
 
       {/* Main content */}
       <div className="lg:pl-64 min-h-screen flex flex-col">
+        <SubscriptionBanner />
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-4 sm:px-6">

@@ -19,6 +19,7 @@ import {
   Loader2,
   CheckCircle2,
   Globe,
+  Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -89,6 +90,7 @@ export default function EventTypesPage() {
 
   const username = session?.user?.username
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const eventTypeGate = useFeatureGate('maxEventTypes')
 
   const { data: eventTypes, isLoading } = useQuery<EventTypeListItem[]>({
     queryKey: ['eventTypes'],
@@ -129,11 +131,21 @@ export default function EventTypesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isActive }),
       })
-      if (!res.ok) throw new Error('Failed to update')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to update')
+      }
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['eventTypes'] })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Cannot activate',
+        description: error.message,
+        variant: 'destructive',
+      })
     },
   })
 
@@ -206,6 +218,36 @@ export default function EventTypesPage() {
         </Card>
       )}
 
+      {/* Locked events callout */}
+      {eventTypes && eventTypes.some((et) => et.lockedByDowngrade) && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <Lock className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-red-800">
+                  {eventTypes.filter((et) => et.lockedByDowngrade).length} event type{eventTypes.filter((et) => et.lockedByDowngrade).length !== 1 ? 's' : ''} locked by downgrade
+                </p>
+                <p className="text-sm text-red-700 mt-1">
+                  Your plan was downgraded and excess event types have been locked.
+                  {session?.user?.cleanupScheduledAt && (
+                    <> Locked events will be permanently deleted on{' '}
+                      <strong>{new Date(session.user.cleanupScheduledAt).toLocaleDateString()}</strong>.
+                    </>
+                  )}
+                  {' '}You can activate one at a time by deactivating your current active event.
+                </p>
+                <Link href="/dashboard/billing" className="inline-block mt-2">
+                  <Button size="sm" variant="destructive">
+                    Reactivate Plan
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Event Types List */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -260,8 +302,13 @@ export default function EventTypesPage() {
                               {eventType.title}
                             </h3>
                             {!eventType.isActive && (
-                              <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">
-                                Inactive
+                              <span className={cn(
+                                'text-xs px-2 py-0.5 rounded flex-shrink-0',
+                                eventType.lockedByDowngrade
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-gray-100 text-gray-600'
+                              )}>
+                                {eventType.lockedByDowngrade ? 'Locked' : 'Inactive'}
                               </span>
                             )}
                           </div>
@@ -328,12 +375,20 @@ export default function EventTypesPage() {
                                 </Link>
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() =>
+                                onClick={() => {
+                                  if (eventType.lockedByDowngrade && !eventType.isActive) {
+                                    const activeCount = eventTypes?.filter((et) => et.isActive).length ?? 0
+                                    if (eventTypeGate.limit !== Infinity && activeCount >= eventTypeGate.limit) {
+                                      if (!confirm(`Activating this event type will require your current active event to be deactivated (${eventTypeGate.limit} active event limit on your plan). Continue?`)) {
+                                        return
+                                      }
+                                    }
+                                  }
                                   toggleMutation.mutate({
                                     id: eventType.id,
                                     isActive: !eventType.isActive,
                                   })
-                                }
+                                }}
                               >
                                 {eventType.isActive ? (
                                   <>
@@ -343,7 +398,7 @@ export default function EventTypesPage() {
                                 ) : (
                                   <>
                                     <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
-                                    Enable
+                                    {eventType.lockedByDowngrade ? 'Activate (Swap)' : 'Enable'}
                                   </>
                                 )}
                               </DropdownMenuItem>

@@ -183,7 +183,7 @@ export const authOptions: NextAuthOptions = {
 
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
-          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true },
+          select: { username: true, timezone: true, timezoneAutoDetect: true, bio: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true, subscriptionStatus: true, planExpiresAt: true, gracePeriodEndsAt: true, cleanupScheduledAt: true },
         });
 
         token.username = dbUser?.username ?? undefined;
@@ -195,6 +195,10 @@ export const authOptions: NextAuthOptions = {
         token.onboardingCompleted = dbUser?.onboardingCompleted ?? false;
         // Only require email verification for credential users (have password)
         token.emailVerified = !!dbUser?.emailVerified || !dbUser?.password;
+        token.subscriptionStatus = dbUser?.subscriptionStatus ?? 'NONE';
+        token.planExpiresAt = dbUser?.planExpiresAt?.getTime();
+        token.gracePeriodEndsAt = dbUser?.gracePeriodEndsAt?.getTime();
+        token.cleanupScheduledAt = dbUser?.cleanupScheduledAt?.getTime();
         token.lastVerified = Date.now();
 
         // Auto-assign ADMIN role based on ADMIN_EMAILS env variable
@@ -208,8 +212,8 @@ export const authOptions: NextAuthOptions = {
         }
       }
 
-      // Periodically verify user still exists in DB (every 5 minutes)
-      const VERIFY_INTERVAL = 5 * 60 * 1000;
+      // Periodically verify user still exists in DB (every 1 minute)
+      const VERIFY_INTERVAL = 1 * 60 * 1000;
       const lastVerified = (token.lastVerified as number) ?? 0;
 
       if (token.id && Date.now() - lastVerified > VERIFY_INTERVAL) {
@@ -217,7 +221,7 @@ export const authOptions: NextAuthOptions = {
         const verifyUserId = (token.originalAdminId || token.id) as string;
         const dbUser = await prisma.user.findUnique({
           where: { id: verifyUserId },
-          select: { id: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true, isDisabled: true },
+          select: { id: true, plan: true, role: true, emailVerified: true, password: true, onboardingCompleted: true, isDisabled: true, subscriptionStatus: true, planExpiresAt: true, gracePeriodEndsAt: true, cleanupScheduledAt: true },
         });
 
         if (!dbUser || dbUser.isDisabled) {
@@ -231,6 +235,10 @@ export const authOptions: NextAuthOptions = {
           token.role = dbUser.role ?? 'USER';
           token.onboardingCompleted = dbUser.onboardingCompleted ?? false;
           token.emailVerified = !!dbUser.emailVerified || !dbUser.password;
+          token.subscriptionStatus = dbUser.subscriptionStatus ?? 'NONE';
+          token.planExpiresAt = dbUser.planExpiresAt?.getTime();
+          token.gracePeriodEndsAt = dbUser.gracePeriodEndsAt?.getTime();
+          token.cleanupScheduledAt = dbUser.cleanupScheduledAt?.getTime();
         }
         token.lastVerified = Date.now();
       }
@@ -252,6 +260,10 @@ export const authOptions: NextAuthOptions = {
           session.user.impersonating = true;
           session.user.originalAdminId = token.originalAdminId as string;
         }
+        session.user.subscriptionStatus = token.subscriptionStatus as string;
+        session.user.planExpiresAt = token.planExpiresAt as number | undefined;
+        session.user.gracePeriodEndsAt = token.gracePeriodEndsAt as number | undefined;
+        session.user.cleanupScheduledAt = token.cleanupScheduledAt as number | undefined;
         // Expose token issued time so client can show session expiry warning
         session.user.tokenIssuedAt = token.iat as number;
       }
@@ -359,6 +371,10 @@ declare module 'next-auth' {
       plan: string;
       role: string;
       emailVerified: boolean;
+      subscriptionStatus: string;
+      planExpiresAt?: number;
+      gracePeriodEndsAt?: number;
+      cleanupScheduledAt?: number;
       tokenIssuedAt?: number;
       impersonating?: boolean;
       originalAdminId?: string;
@@ -389,6 +405,10 @@ declare module 'next-auth/jwt' {
     accessToken?: string;
     refreshToken?: string;
     provider?: string;
+    subscriptionStatus: string;
+    planExpiresAt?: number;
+    gracePeriodEndsAt?: number;
+    cleanupScheduledAt?: number;
     impersonatingUserId?: string;
     originalAdminId?: string;
   }

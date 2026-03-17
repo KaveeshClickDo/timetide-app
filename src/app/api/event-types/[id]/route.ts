@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { checkEventTypeFeatures } from '@/lib/plan-enforcement'
-import type { PlanTier } from '@/lib/pricing'
+import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
 
 interface RouteParams {
   params: { id: string }
@@ -79,6 +79,36 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const featureDenied = checkEventTypeFeatures(plan, body as Record<string, unknown>)
     if (featureDenied) return featureDenied
 
+    // Enforce active-event limit for plan users
+    if (body.isActive === true && !existing.isActive) {
+      const maxEvents = PLAN_LIMITS[plan].maxEventTypes
+      if (maxEvents !== Infinity) {
+        const activeEvents = await prisma.eventType.findMany({
+          where: { userId: session.user.id, isActive: true, id: { not: params.id } },
+          orderBy: { updatedAt: 'asc' },
+          select: { id: true },
+        })
+        if (activeEvents.length >= maxEvents) {
+          // If activating a locked-by-downgrade event, auto-swap: deactivate the oldest active event
+          if (existing.lockedByDowngrade) {
+            const toDeactivate = activeEvents.slice(0, activeEvents.length - maxEvents + 1)
+            await prisma.eventType.updateMany({
+              where: { id: { in: toDeactivate.map((e) => e.id) } },
+              data: { isActive: false },
+            })
+          } else {
+            return NextResponse.json(
+              {
+                error: `Your plan allows ${maxEvents} active event type${maxEvents !== 1 ? 's' : ''}. Deactivate your current active event type first, or upgrade your plan.`,
+                code: 'PLAN_LIMIT',
+              },
+              { status: 403 },
+            )
+          }
+        }
+      }
+    }
+
     // Handle slug update
     let newSlug = existing.slug
     if (body.title && body.title !== existing.title) {
@@ -118,6 +148,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       if (body[field] !== undefined) {
         updateData[field] = body[field]
       }
+    }
+
+    // When activating a downgrade-locked event, clear the lock flag (user chose this one to keep)
+    if (body.isActive === true && existing.lockedByDowngrade) {
+      updateData.lockedByDowngrade = false
     }
 
     const eventType = await prisma.eventType.update({

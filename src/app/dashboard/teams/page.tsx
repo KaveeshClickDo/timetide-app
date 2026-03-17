@@ -58,7 +58,7 @@ export default function TeamsPage() {
     description: '',
   });
 
-  // Fetch teams
+  // Fetch teams (always fetch — needed to determine if user is a team member)
   const { data, isLoading, error } = useQuery<{ teams: TeamListItem[] }>({
     queryKey: ['teams'],
     queryFn: async () => {
@@ -67,6 +67,8 @@ export default function TeamsPage() {
       return res.json();
     },
   });
+
+  const teams = data?.teams || [];
 
   // Create team mutation
   const createTeamMutation = useMutation({
@@ -148,16 +150,6 @@ export default function TeamsPage() {
 
   const teamsGate = useFeatureGate('teams');
 
-  if (teamsGate.requiresUpgrade) {
-    return (
-      <FeatureGatePage
-        feature="teams"
-        requiredPlan={teamsGate.requiredPlan}
-        description="Create teams, add members, and set up round-robin or collective scheduling. Available on the Team plan."
-      />
-    );
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -174,7 +166,16 @@ export default function TeamsPage() {
     );
   }
 
-  const teams = data?.teams || [];
+  // Show gate page only if user has no team memberships AND plan doesn't include teams
+  if (teamsGate.requiresUpgrade && teams.length === 0) {
+    return (
+      <FeatureGatePage
+        feature="teams"
+        requiredPlan={teamsGate.requiredPlan}
+        description="Create teams, add members, and set up round-robin or collective scheduling. Available on the Team plan."
+      />
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -187,12 +188,14 @@ export default function TeamsPage() {
           </p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto flex-shrink-0">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Team
-            </Button>
-          </DialogTrigger>
+          {!teamsGate.requiresUpgrade && (
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto flex-shrink-0">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Team
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="w-[calc(100vw-2rem)] max-h-[90vh] overflow-y-auto">
             <form onSubmit={handleCreateTeam}>
               <DialogHeader>
@@ -278,10 +281,12 @@ export default function TeamsPage() {
               Create your first team to enable round-robin scheduling, collective availability,
               and shared booking pages.
             </p>
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create Your First Team
-            </Button>
+            {!teamsGate.requiresUpgrade && (
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Your First Team
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

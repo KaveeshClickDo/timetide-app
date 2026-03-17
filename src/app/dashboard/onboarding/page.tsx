@@ -433,24 +433,24 @@ function OnboardingContent() {
   }
 
   return (
-    <div className="min-h-[80vh] flex flex-col items-center justify-center py-12 px-4">
+    <div className="min-h-[80vh] flex flex-col items-center justify-center py-6 sm:py-10 px-4">
       <div className="w-full max-w-2xl">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-ocean-100 text-ocean-700 text-sm font-medium mb-4">
+        <div className="text-center mb-4 sm:mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-full bg-ocean-100 text-ocean-700 text-sm font-medium mb-3">
             <Sparkles className="h-4 w-4" />
             Welcome to TimeTide!
           </div>
-          <h1 className="text-3xl font-heading font-bold text-gray-900 mb-2">
+          <h1 className="text-2xl sm:text-3xl font-heading font-bold text-gray-900 mb-1.5">
             Let&apos;s get you set up
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 text-sm sm:text-base">
             Just a few quick steps to start scheduling meetings
           </p>
         </div>
 
         {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-1 mb-8">
+        <div className="flex items-center justify-center gap-1 mb-4 sm:mb-6">
           {STEPS.map((step, index) => {
             const Icon = step.icon
             const isActive = currentStep === step.id
@@ -487,16 +487,16 @@ function OnboardingContent() {
         </div>
 
         {/* Step Content */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
+        <Card className="mb-4 sm:mb-6">
+          <CardContent className="pt-4 sm:pt-6">
             {/* Step 1: Timezone */}
             {currentStep === 1 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-3 sm:mb-6">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-3">
                     <Globe className="h-8 w-8 text-ocean-600" />
                   </div>
-                  <h2 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold text-gray-900 mb-1 sm:mb-2">
                     Set Your Timezone
                   </h2>
                   <p className="text-gray-600">
@@ -563,12 +563,12 @@ function OnboardingContent() {
 
             {/* Step 2: Availability */}
             {currentStep === 2 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-3 sm:mb-6">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-3">
                     <Clock className="h-8 w-8 text-ocean-600" />
                   </div>
-                  <h2 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold text-gray-900 mb-1 sm:mb-2">
                     Set Your Availability
                   </h2>
                   <p className="text-gray-600">
@@ -673,12 +673,12 @@ function OnboardingContent() {
 
             {/* Step 3: Booking Link */}
             {currentStep === 3 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-3 sm:mb-6">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-3">
                     <LinkIcon className="h-8 w-8 text-ocean-600" />
                   </div>
-                  <h2 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold text-gray-900 mb-1 sm:mb-2">
                     Your Booking Link
                   </h2>
                   <p className="text-gray-600">
@@ -749,12 +749,12 @@ function OnboardingContent() {
 
             {/* Step 4: Event Types */}
             {currentStep === 4 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-3 sm:mb-6">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-3">
                     <Calendar className="h-8 w-8 text-ocean-600" />
                   </div>
-                  <h2 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold text-gray-900 mb-1 sm:mb-2">
                     Your Event Types
                   </h2>
                   <p className="text-gray-600">
@@ -803,12 +803,12 @@ function OnboardingContent() {
 
             {/* Step 5: Connect Accounts */}
             {currentStep === 5 && (
-              <div className="space-y-6">
-                <div className="text-center mb-6">
-                  <div className="w-16 h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-3 sm:mb-6">
+                  <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-ocean-100 flex items-center justify-center mx-auto mb-3">
                     <Zap className="h-8 w-8 text-ocean-600" />
                   </div>
-                  <h2 className="text-xl font-heading font-semibold text-gray-900 mb-2">
+                  <h2 className="text-lg sm:text-xl font-heading font-semibold text-gray-900 mb-1 sm:mb-2">
                     Connect Your Accounts
                   </h2>
                   <p className="text-gray-600">

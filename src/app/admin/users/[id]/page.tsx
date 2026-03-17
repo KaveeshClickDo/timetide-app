@@ -7,12 +7,13 @@ import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import {
   ArrowLeft, Calendar, Users, Globe, Shield, Ban, Eye,
-  CheckCircle2, XCircle, Loader2, Trash2,
+  CheckCircle2, XCircle, Loader2, Trash2, AlertTriangle, Lock, Clock,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -44,6 +45,38 @@ const syncStatusColors: Record<string, string> = {
   DISCONNECTED: 'bg-gray-100 text-gray-600',
 }
 
+const subscriptionStatusColors: Record<string, string> = {
+  NONE: 'bg-gray-100 text-gray-600',
+  ACTIVE: 'bg-green-100 text-green-700',
+  UNSUBSCRIBED: 'bg-amber-100 text-amber-700',
+  GRACE_PERIOD: 'bg-orange-100 text-orange-700',
+  DOWNGRADING: 'bg-orange-100 text-orange-700',
+  LOCKED: 'bg-red-100 text-red-700',
+}
+
+const subscriptionStatusLabels: Record<string, string> = {
+  NONE: 'No Subscription',
+  ACTIVE: 'Active',
+  UNSUBSCRIBED: 'Cancelled',
+  GRACE_PERIOD: 'Grace Period',
+  DOWNGRADING: 'Downgrading',
+  LOCKED: 'Locked',
+}
+
+/** Which plans can a given plan be downgraded to */
+const downgradeTargets: Record<string, string[]> = {
+  TEAM: ['PRO', 'FREE'],
+  PRO: ['FREE'],
+  FREE: [],
+}
+
+/** Which plans can a given plan be upgraded to */
+const upgradeTargets: Record<string, string[]> = {
+  FREE: ['PRO', 'TEAM'],
+  PRO: ['TEAM'],
+  TEAM: [],
+}
+
 export default function AdminUserDetailPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -53,6 +86,12 @@ export default function AdminUserDetailPage() {
   const [showDisableDialog, setShowDisableDialog] = useState(false)
   const [showImpersonateDialog, setShowImpersonateDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showDowngradeDialog, setShowDowngradeDialog] = useState<'immediate' | 'grace' | null>(null)
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
+  const [showCancelDowngradeDialog, setShowCancelDowngradeDialog] = useState(false)
+  const [downgradeTargetPlan, setDowngradeTargetPlan] = useState('FREE')
+  const [upgradeTargetPlan, setUpgradeTargetPlan] = useState('PRO')
+  const [gracePeriodDays, setGracePeriodDays] = useState(30)
 
   const { data: user, isLoading } = useQuery<AdminUserDetail>({
     queryKey: ['admin-user', id],
@@ -70,15 +109,18 @@ export default function AdminUserDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error('Failed to update user')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || 'Failed to update user')
+      }
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-user', id] })
       toast({ title: 'User updated successfully' })
     },
-    onError: () => {
-      toast({ title: 'Failed to update user', variant: 'destructive' })
+    onError: (err: Error) => {
+      toast({ title: err.message, variant: 'destructive' })
     },
   })
 
@@ -202,19 +244,9 @@ export default function AdminUserDetailPage() {
               </div>
               <div>
                 <p className="text-xs text-gray-500 mb-1">Plan</p>
-                <Select
-                  value={user.plan}
-                  onValueChange={(plan) => updateUser.mutate({ plan })}
-                >
-                  <SelectTrigger className="h-8 w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FREE">Free</SelectItem>
-                    <SelectItem value="PRO">Pro</SelectItem>
-                    <SelectItem value="TEAM">Team</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Badge className={cn('text-xs', planColors[user.plan])}>
+                  {user.plan}
+                </Badge>
               </div>
               <div>
                 <p className="text-xs text-gray-500 mb-1">Role</p>
@@ -271,6 +303,133 @@ export default function AdminUserDetailPage() {
                 </p>
               </div>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Subscription Management */}
+      <Card className="mb-6">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Subscription Management
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Status overview */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Subscription Status</p>
+              <Badge className={cn('text-xs', subscriptionStatusColors[user.subscriptionStatus] || 'bg-gray-100 text-gray-600')}>
+                {subscriptionStatusLabels[user.subscriptionStatus] || user.subscriptionStatus}
+              </Badge>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Plan Activated</p>
+              <p className="text-sm font-medium">
+                {user.planActivatedAt ? new Date(user.planActivatedAt).toLocaleDateString() : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">Plan Expires</p>
+              <p className="text-sm font-medium">
+                {user.planExpiresAt ? new Date(user.planExpiresAt).toLocaleDateString() : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 mb-1">
+                {user.subscriptionStatus === 'LOCKED' ? 'Cleanup Scheduled' : 'Grace Period Ends'}
+              </p>
+              <p className="text-sm font-medium">
+                {user.subscriptionStatus === 'LOCKED'
+                  ? (user.cleanupScheduledAt ? new Date(user.cleanupScheduledAt).toLocaleDateString() : '—')
+                  : (user.gracePeriodEndsAt ? new Date(user.gracePeriodEndsAt).toLocaleDateString() : '—')
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* Downgrade info if applicable */}
+          {user.downgradeReason && (
+            <div className="text-xs text-gray-500 mb-4">
+              Reason: <span className="font-medium">{user.downgradeReason}</span>
+              {user.downgradeInitiatedBy && <> &middot; By: <span className="font-medium">{user.downgradeInitiatedBy}</span></>}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Upgrade button */}
+            {upgradeTargets[user.plan]?.length > 0 && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setUpgradeTargetPlan(upgradeTargets[user.plan][0])
+                  setShowUpgradeDialog(true)
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                Upgrade
+              </Button>
+            )}
+
+            {/* Downgrade buttons - only for paid plans */}
+            {downgradeTargets[user.plan]?.length > 0 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                  onClick={() => {
+                    setDowngradeTargetPlan(downgradeTargets[user.plan][downgradeTargets[user.plan].length - 1])
+                    setGracePeriodDays(30)
+                    setShowDowngradeDialog('grace')
+                  }}
+                >
+                  <Clock className="h-4 w-4 mr-1" />
+                  Downgrade with Grace
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                  onClick={() => {
+                    setDowngradeTargetPlan(downgradeTargets[user.plan][downgradeTargets[user.plan].length - 1])
+                    setShowDowngradeDialog('immediate')
+                  }}
+                >
+                  <AlertTriangle className="h-4 w-4 mr-1" />
+                  Downgrade Immediately
+                </Button>
+              </>
+            )}
+
+            {/* Downgrading-specific: show cancel downgrade */}
+            {user.subscriptionStatus === 'DOWNGRADING' && (
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => setShowCancelDowngradeDialog(true)}
+              >
+                <XCircle className="h-4 w-4 mr-1" />
+                Cancel Downgrade
+              </Button>
+            )}
+
+            {/* Locked-specific: show reactivate */}
+            {user.subscriptionStatus === 'LOCKED' && (
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => {
+                  setUpgradeTargetPlan(user.plan === 'FREE' ? 'PRO' : user.plan)
+                  setShowUpgradeDialog(true)
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                Reactivate
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -464,6 +623,190 @@ export default function AdminUserDetailPage() {
               className="bg-red-600 hover:bg-red-700"
             >
               Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Upgrade Dialog */}
+      <AlertDialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Upgrade User Plan</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Upgrade <strong>{user.name || user.email}</strong> from{' '}
+                  <Badge className={cn('text-xs', planColors[user.plan])}>{user.plan}</Badge> to:
+                </p>
+                <Select value={upgradeTargetPlan} onValueChange={setUpgradeTargetPlan}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {upgradeTargets[user.plan]?.map((p) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-gray-500">
+                  This activates a 30-day billing period. If the user was locked, all resources will be restored.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                updateUser.mutate({ planAction: 'upgrade', plan: upgradeTargetPlan })
+                setShowUpgradeDialog(false)
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700"
+            >
+              Upgrade to {upgradeTargetPlan}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Downgrade Immediate Dialog */}
+      <AlertDialog open={showDowngradeDialog === 'immediate'} onOpenChange={() => setShowDowngradeDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Downgrade Immediately</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Downgrade <strong>{user.name || user.email}</strong> from{' '}
+                  <Badge className={cn('text-xs', planColors[user.plan])}>{user.plan}</Badge> to:
+                </p>
+                {downgradeTargets[user.plan]?.length > 1 && (
+                  <Select value={downgradeTargetPlan} onValueChange={setDowngradeTargetPlan}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {downgradeTargets[user.plan]?.map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {downgradeTargets[user.plan]?.length === 1 && (
+                  <Badge className={cn('text-xs', planColors[downgradeTargetPlan])}>{downgradeTargetPlan}</Badge>
+                )}
+                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 space-y-1">
+                  <p className="font-medium">This action takes effect immediately:</p>
+                  <ul className="list-disc list-inside text-xs space-y-0.5">
+                    <li>Features exceeding the target plan will be locked</li>
+                    <li>Excess event types and webhooks will be deactivated</li>
+                    <li>User has 7 days to reactivate before data is deleted</li>
+                  </ul>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                updateUser.mutate({ planAction: 'downgrade_immediate', plan: downgradeTargetPlan })
+                setShowDowngradeDialog(null)
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Downgrade Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel Downgrade Dialog */}
+      <AlertDialog open={showCancelDowngradeDialog} onOpenChange={setShowCancelDowngradeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Scheduled Downgrade</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will cancel the scheduled downgrade for <strong>{user.name || user.email}</strong>.
+              Their <Badge className={cn('text-xs', planColors[user.plan])}>{user.plan}</Badge> plan
+              will remain active and the grace period will be cleared.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Downgrade</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                updateUser.mutate({ planAction: 'cancel_downgrade' })
+                setShowCancelDowngradeDialog(false)
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Cancel Downgrade
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Downgrade with Grace Dialog */}
+      <AlertDialog open={showDowngradeDialog === 'grace'} onOpenChange={() => setShowDowngradeDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Downgrade with Grace Period</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Schedule a downgrade for <strong>{user.name || user.email}</strong> from{' '}
+                  <Badge className={cn('text-xs', planColors[user.plan])}>{user.plan}</Badge> to:
+                </p>
+                {downgradeTargets[user.plan]?.length > 1 && (
+                  <Select value={downgradeTargetPlan} onValueChange={setDowngradeTargetPlan}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {downgradeTargets[user.plan]?.map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {downgradeTargets[user.plan]?.length === 1 && (
+                  <Badge className={cn('text-xs', planColors[downgradeTargetPlan])}>{downgradeTargetPlan}</Badge>
+                )}
+                <div>
+                  <label className="text-xs font-medium text-gray-700 mb-1 block">
+                    Grace period (days)
+                  </label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={gracePeriodDays}
+                    onChange={(e) => setGracePeriodDays(Number(e.target.value))}
+                    className="w-32"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    User keeps current features for {gracePeriodDays} day{gracePeriodDays !== 1 ? 's' : ''}. After that, resources are locked.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                updateUser.mutate({
+                  planAction: 'downgrade_grace',
+                  plan: downgradeTargetPlan,
+                  gracePeriodDays,
+                })
+                setShowDowngradeDialog(null)
+              }}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              Schedule Downgrade
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

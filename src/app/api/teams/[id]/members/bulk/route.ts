@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { bulkMemberActionSchema } from '@/lib/validation/schemas'
 import { logTeamAction } from '@/lib/team-audit'
+import { checkFeatureAccess, getTeamOwnerPlan } from '@/lib/plan-enforcement'
 
 interface RouteParams {
   params: { id: string }
@@ -30,6 +31,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!membership || membership.role === 'MEMBER') {
       return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
     }
+
+    // Enforce teams feature gate (check team owner's plan, not the requesting user's)
+    const ownerPlan = await getTeamOwnerPlan(params.id)
+    const featureDenied = checkFeatureAccess(ownerPlan, 'teams')
+    if (featureDenied) return featureDenied
 
     const body = await request.json()
     const result = bulkMemberActionSchema.safeParse(body)

@@ -18,7 +18,28 @@ export type EmailJobType =
   | 'bulk_confirmed_by_host'
   | 'team_member_added'
   | 'team_invitation'
+  | 'plan_expiring_warning'
+  | 'grace_period_started'
+  | 'grace_period_ending'
+  | 'plan_locked'
+  | 'cleanup_warning'
+  | 'plan_cleanup_complete'
+  | 'admin_downgrade_notice'
+  | 'plan_reactivated'
   | 'custom'
+
+export interface PlanEmailData {
+  userName: string
+  userEmail: string
+  currentPlan: string
+  newPlan?: string
+  expiresAt?: string
+  gracePeriodEndsAt?: string
+  cleanupScheduledAt?: string
+  lockedEventCount?: number
+  lockedWebhookCount?: number
+  reactivateUrl: string
+}
 
 export interface EmailJobData {
   type: EmailJobType
@@ -27,6 +48,7 @@ export interface EmailJobData {
   bookingData?: BookingEmailData
   recurringBookingData?: RecurringBookingEmailData
   teamData?: TeamEmailData & { expiresIn?: string; acceptUrl?: string }
+  planData?: PlanEmailData
   isHost?: boolean
   reason?: string
   hoursUntil?: number
@@ -136,4 +158,20 @@ export interface RateLimitResult {
   remaining: number
   resetAt: number
   limit: number
+}
+
+// ============================================================================
+// SUBSCRIPTION QUEUE
+// ============================================================================
+
+export type SubscriptionJobType =
+  | 'check_expirations'
+  | 'check_grace_periods'
+  | 'check_cleanups'
+  | 'send_warning'
+
+export interface SubscriptionJobData {
+  type: SubscriptionJobType
+  userId?: string          // For user-specific jobs like send_warning
+  warningType?: string     // For send_warning: 'expiring' | 'grace_ending' | 'cleanup_warning'
 }

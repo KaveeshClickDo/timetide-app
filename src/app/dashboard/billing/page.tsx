@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Suspense } from 'react'
-import { LinkIcon, Webhook, Calendar } from 'lucide-react'
+import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { PricingCard } from '@/components/pricing-card'
@@ -17,7 +17,7 @@ import {
   type PlanTier,
 } from '@/lib/pricing'
 
-function UsageBar({ used, limit, label, icon: Icon }: { used: number; limit: number; label: string; icon: typeof Calendar }) {
+function UsageBar({ used, limit, label, icon: Icon }: { used: number; limit: number; label: string; icon: LucideIcon }) {
   const isUnlimited = limit === Infinity
   const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100)
   const isAtLimit = !isUnlimited && used >= limit
@@ -49,12 +49,16 @@ function UsageBar({ used, limit, label, icon: Icon }: { used: number; limit: num
 }
 
 function BillingContent() {
-  const { data: session, update: updateSession } = useSession()
+  const { data: session } = useSession()
   const searchParams = useSearchParams()
   const highlightPlan = searchParams.get('highlight') as PlanTier | null
   const currentPlan = (session?.user?.plan as PlanTier) || 'FREE'
   const currentTier = getPlanByTier(currentPlan)
   const limits = getPlanLimits(currentPlan)
+  const subscriptionStatus = session?.user?.subscriptionStatus
+  const planExpiresAt = session?.user?.planExpiresAt
+  const gracePeriodEndsAt = session?.user?.gracePeriodEndsAt
+  const cleanupScheduledAt = session?.user?.cleanupScheduledAt
 
   // Fetch usage counts
   const { data: eventTypes } = useQuery<{ eventTypes: unknown[] }>({
@@ -62,15 +66,6 @@ function BillingContent() {
     queryFn: async () => {
       const res = await fetch('/api/event-types')
       if (!res.ok) return { eventTypes: [] }
-      return res.json()
-    },
-  })
-
-  const { data: calendars } = useQuery<{ calendars: unknown[] }>({
-    queryKey: ['calendars'],
-    queryFn: async () => {
-      const res = await fetch('/api/calendars')
-      if (!res.ok) return { calendars: [] }
       return res.json()
     },
   })
@@ -85,25 +80,7 @@ function BillingContent() {
   })
 
   const eventTypeCount = (eventTypes as any)?.eventTypes?.length ?? 0
-  const calendarCount = (calendars as any)?.calendars?.length ?? 0
   const webhookCount = (webhooks as any)?.webhooks?.length ?? 0
-
-  // Demo mode plan switching (development only)
-  const handlePlanSwitch = async (plan: PlanTier) => {
-    try {
-      const res = await fetch('/api/mock/switch-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan }),
-      })
-      if (res.ok) {
-        await updateSession({ ...session, user: { ...session?.user, plan } })
-        window.location.reload()
-      }
-    } catch {
-      // Mock API may not exist yet
-    }
-  }
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -137,6 +114,73 @@ function BillingContent() {
         </CardContent>
       </Card>
 
+      {/* Subscription Status */}
+      {subscriptionStatus && subscriptionStatus !== 'NONE' && (
+        <Card className={cn(
+          'mb-6',
+          subscriptionStatus === 'ACTIVE' && 'border-green-200',
+          subscriptionStatus === 'UNSUBSCRIBED' && 'border-amber-200',
+          (subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && 'border-orange-200',
+          subscriptionStatus === 'LOCKED' && 'border-red-200',
+        )}>
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <div className={cn(
+                'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                subscriptionStatus === 'ACTIVE' && 'bg-green-100',
+                subscriptionStatus === 'UNSUBSCRIBED' && 'bg-amber-100',
+                (subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && 'bg-orange-100',
+                subscriptionStatus === 'LOCKED' && 'bg-red-100',
+              )}>
+                {subscriptionStatus === 'ACTIVE' && <Clock className="h-5 w-5 text-green-600" />}
+                {subscriptionStatus === 'UNSUBSCRIBED' && <Clock className="h-5 w-5 text-amber-600" />}
+                {(subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && <AlertTriangle className="h-5 w-5 text-orange-600" />}
+                {subscriptionStatus === 'LOCKED' && <Lock className="h-5 w-5 text-red-600" />}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-gray-900">Subscription Status</h3>
+                  <Badge variant="outline" className={cn(
+                    'text-xs',
+                    subscriptionStatus === 'ACTIVE' && 'border-green-300 text-green-700',
+                    subscriptionStatus === 'UNSUBSCRIBED' && 'border-amber-300 text-amber-700',
+                    (subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && 'border-orange-300 text-orange-700',
+                    subscriptionStatus === 'LOCKED' && 'border-red-300 text-red-700',
+                  )}>
+                    {subscriptionStatus === 'ACTIVE' && 'Active'}
+                    {subscriptionStatus === 'UNSUBSCRIBED' && 'Cancelled'}
+                    {subscriptionStatus === 'GRACE_PERIOD' && 'Grace Period'}
+                    {subscriptionStatus === 'DOWNGRADING' && 'Downgrading'}
+                    {subscriptionStatus === 'LOCKED' && 'Locked'}
+                  </Badge>
+                </div>
+                {subscriptionStatus === 'ACTIVE' && planExpiresAt && (
+                  <p className="text-sm text-gray-600">
+                    Your plan renews on <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
+                  </p>
+                )}
+                {subscriptionStatus === 'UNSUBSCRIBED' && planExpiresAt && (
+                  <p className="text-sm text-amber-700">
+                    Cancelled. PRO features remain active until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
+                  </p>
+                )}
+                {(subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && gracePeriodEndsAt && (
+                  <p className="text-sm text-orange-700">
+                    Renew before <strong>{new Date(gracePeriodEndsAt).toLocaleDateString()}</strong> to keep your features.
+                  </p>
+                )}
+                {subscriptionStatus === 'LOCKED' && cleanupScheduledAt && (
+                  <p className="text-sm text-red-700">
+                    Features locked. Data will be permanently deleted on <strong>{new Date(cleanupScheduledAt).toLocaleDateString()}</strong>.
+                    Reactivate now to restore them.
+                  </p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Usage Indicators */}
       <Card className="mb-8">
         <CardHeader>
@@ -144,7 +188,6 @@ function BillingContent() {
         </CardHeader>
         <CardContent className="space-y-4">
           <UsageBar used={eventTypeCount} limit={limits.maxEventTypes} label="Event Types" icon={LinkIcon} />
-          <UsageBar used={calendarCount} limit={limits.maxCalendars} label="Calendars" icon={Calendar} />
           <UsageBar used={webhookCount} limit={limits.maxWebhooks} label="Webhooks" icon={Webhook} />
         </CardContent>
       </Card>
@@ -162,42 +205,9 @@ function BillingContent() {
         ))}
       </div>
 
-      {/* TODO: Add billing history, payment method management when Stripe is integrated */}
       <p className="text-center text-sm text-gray-400 mt-8">
-        Payment integration coming soon. Contact support for plan changes.
+        Need to change your plan? <a href="/dashboard/support" className="text-ocean-600 hover:underline">Contact support</a>.
       </p>
-
-      {/* Demo Mode - Development Only */}
-      {process.env.NODE_ENV === 'development' && (
-        <Card className="mt-8 border-dashed border-2 border-amber-300">
-          <CardHeader>
-            <CardTitle className="text-base text-amber-700">
-              Demo Mode — Switch Plan (Dev Only)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {(['FREE', 'PRO', 'TEAM'] as PlanTier[]).map((plan) => (
-                <button
-                  key={plan}
-                  onClick={() => handlePlanSwitch(plan)}
-                  className={cn(
-                    'px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
-                    currentPlan === plan
-                      ? 'bg-ocean-500 text-white border-ocean-500'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  )}
-                >
-                  Switch to {plan}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-amber-600 mt-2">
-              This section is only visible in development mode.
-            </p>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

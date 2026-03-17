@@ -40,6 +40,13 @@ export interface AdminUserDetail extends AdminUserListItem {
   timezone: string
   onboardingCompleted: boolean
   emailVerified: string | null
+  subscriptionStatus: string
+  planActivatedAt: string | null
+  planExpiresAt: string | null
+  gracePeriodEndsAt: string | null
+  cleanupScheduledAt: string | null
+  downgradeReason: string | null
+  downgradeInitiatedBy: string | null
   eventTypes: {
     id: string
     title: string

@@ -81,6 +81,7 @@ export default function WebhooksPage() {
   } | null>(null);
   const [deliveryWebhookId, setDeliveryWebhookId] = useState<string | null>(null);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [newWebhook, setNewWebhook] = useState({
     name: '',
     url: '',
@@ -106,8 +107,13 @@ export default function WebhooksPage() {
         body: JSON.stringify(webhookData),
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to create webhook');
+        const errData = await res.json();
+        if (errData.code === 'PLAN_LIMIT') {
+          setIsCreateDialogOpen(false);
+          setShowUpgradeModal(true);
+          throw new Error('__PLAN_LIMIT__');
+        }
+        throw new Error(errData.error || 'Failed to create webhook');
       }
       return res.json();
     },
@@ -123,6 +129,7 @@ export default function WebhooksPage() {
       }
     },
     onError: (error: Error) => {
+      if (error.message === '__PLAN_LIMIT__') return;
       toast({ title: error.message, variant: 'destructive' });
     },
   });
@@ -157,8 +164,12 @@ export default function WebhooksPage() {
         body: JSON.stringify({ isActive }),
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to update webhook');
+        const errData = await res.json();
+        if (errData.code === 'PLAN_LIMIT') {
+          setShowUpgradeModal(true);
+          throw new Error('__PLAN_LIMIT__');
+        }
+        throw new Error(errData.error || 'Failed to update webhook');
       }
       return res.json();
     },
@@ -166,6 +177,7 @@ export default function WebhooksPage() {
       queryClient.invalidateQueries({ queryKey: ['webhooks'] });
     },
     onError: (error: Error) => {
+      if (error.message === '__PLAN_LIMIT__') return;
       toast({ title: error.message, variant: 'destructive' });
     },
   });
@@ -403,7 +415,15 @@ export default function WebhooksPage() {
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto flex-shrink-0">
+            <Button
+              className="w-full sm:w-auto flex-shrink-0"
+              onClick={(e) => {
+                if (webhookGate.requiresUpgrade) {
+                  e.preventDefault();
+                  setShowUpgradeModal(true);
+                }
+              }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Add Webhook
             </Button>
@@ -503,7 +523,13 @@ export default function WebhooksPage() {
               Set up webhooks to receive real-time notifications when bookings are created,
               cancelled, or rescheduled.
             </p>
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
+            <Button onClick={() => {
+              if (webhookGate.requiresUpgrade) {
+                setShowUpgradeModal(true);
+              } else {
+                setIsCreateDialogOpen(true);
+              }
+            }}>
               <Plus className="h-4 w-4 mr-2" />
               Add Your First Webhook
             </Button>
@@ -925,6 +951,14 @@ export default function WebhooksPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        open={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="maxWebhooks"
+        requiredPlan={webhookGate.requiredPlan}
+      />
     </div>
   );
 }

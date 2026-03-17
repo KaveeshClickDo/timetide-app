@@ -199,8 +199,6 @@ export default function EditEventTypePage({ params }: PageProps) {
   // Feature gates
   const customQuestionsGate = useFeatureGate('customQuestions')
   const groupBookingGate = useFeatureGate('groupBooking')
-  const bufferGate = useFeatureGate('bufferTimes')
-  const bookingLimitGate = useFeatureGate('bookingLimits')
   const recurringGate = useFeatureGate('recurringBooking')
 
   // Fetch event type
@@ -1106,10 +1104,7 @@ export default function EditEventTypePage({ params }: PageProps) {
               className="flex items-center justify-between w-full text-left"
             >
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  Advanced Settings
-                  <ProBadge feature="bufferTimes" />
-                </CardTitle>
+                <CardTitle>Advanced Settings</CardTitle>
                 <CardDescription>Buffer times, minimum notice, and booking limits.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
@@ -1121,15 +1116,11 @@ export default function EditEventTypePage({ params }: PageProps) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Buffer Before (minutes)
-                    {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
-                  </Label>
+                  <Label>Buffer Before (minutes)</Label>
                   <Input
                     type="number"
                     min={0}
                     value={formData.bufferTimeBefore}
-                    disabled={!bufferGate.canAccess}
                     onChange={(e) =>
                       setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })
                     }
@@ -1139,15 +1130,11 @@ export default function EditEventTypePage({ params }: PageProps) {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Buffer After (minutes)
-                    {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
-                  </Label>
+                  <Label>Buffer After (minutes)</Label>
                   <Input
                     type="number"
                     min={0}
                     value={formData.bufferTimeAfter}
-                    disabled={!bufferGate.canAccess}
                     onChange={(e) =>
                       setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })
                     }
@@ -1172,15 +1159,11 @@ export default function EditEventTypePage({ params }: PageProps) {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Max Bookings Per Day
-                    {!bookingLimitGate.canAccess && <ProBadge feature="bookingLimits" />}
-                  </Label>
+                  <Label>Max Bookings Per Day</Label>
                   <Input
                     type="number"
                     min={0}
                     value={formData.maxBookingsPerDay}
-                    disabled={!bookingLimitGate.canAccess}
                     onChange={(e) =>
                       setFormData({
                         ...formData,

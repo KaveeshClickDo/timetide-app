@@ -9,6 +9,13 @@ export type NotificationType =
   | 'BOOKING_REMINDER'
   | 'TEAM_MEMBER_ADDED'
   | 'TEAM_INVITATION_RECEIVED'
+  | 'PLAN_EXPIRING_SOON'
+  | 'PLAN_GRACE_PERIOD_STARTED'
+  | 'PLAN_GRACE_PERIOD_ENDING'
+  | 'PLAN_LOCKED'
+  | 'PLAN_CLEANUP_WARNING'
+  | 'PLAN_DOWNGRADED'
+  | 'PLAN_REACTIVATED'
 
 export interface Notification {
   id: string

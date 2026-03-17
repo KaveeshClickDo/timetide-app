@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import {
   getPlanLimits,
   getRequiredPlan,
+  getUpgradeTier,
   type PlanTier,
   type PlanLimits,
 } from '@/lib/pricing'
@@ -45,6 +46,9 @@ export function useFeatureGate(
   currentCount?: number
 ): FeatureGateResult | NumericGateResult {
   const { data: session } = useSession()
+  // The plan field is authoritative — lockResources already sets it to the
+  // correct target plan (e.g., PRO for TEAM→PRO, FREE for PRO→FREE).
+  // No need to override based on subscriptionStatus.
   const currentPlan = (session?.user?.plan as PlanTier) || 'FREE'
   const limits = getPlanLimits(currentPlan)
   const requiredPlan = getRequiredPlan(feature)
@@ -63,10 +67,24 @@ export function useFeatureGate(
   const limit = value as number
   const canAccess = currentCount === undefined ? limit > 0 : currentCount < limit
 
+  // When user is at their limit, suggest the next plan up — not the minimum plan
+  // that has the feature. E.g., PRO user at 10 webhooks needs TEAM, not PRO.
+  let upgradePlan = requiredPlan
+  if (!canAccess) {
+    const PLAN_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
+    const currentIdx = PLAN_ORDER.indexOf(currentPlan)
+    const requiredIdx = PLAN_ORDER.indexOf(requiredPlan)
+    if (currentIdx >= requiredIdx) {
+      // User is already on or above the minimum required plan — suggest next tier
+      const nextTier = getUpgradeTier(currentPlan)
+      upgradePlan = nextTier?.id ?? 'TEAM'
+    }
+  }
+
   return {
     canAccess,
     requiresUpgrade: !canAccess,
-    requiredPlan: canAccess ? currentPlan : requiredPlan,
+    requiredPlan: canAccess ? currentPlan : upgradePlan,
     currentPlan,
     limit,
     limitLabel: limit === Infinity ? 'Unlimited' : String(limit),

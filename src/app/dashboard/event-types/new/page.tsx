@@ -221,22 +221,16 @@ function GatedRecurringToggle({ formData, setFormData }: { formData: any; setFor
   )
 }
 
-function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFormData: (v: any) => void }) {
-  const bufferGate = useFeatureGate('bufferTimes')
-  const bookingLimitGate = useFeatureGate('bookingLimits')
+function AdvancedSettings({ formData, setFormData }: { formData: any; setFormData: (v: any) => void }) {
   return (
     <CardContent className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="flex items-center gap-2">
-            Buffer Before (minutes)
-            {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
-          </Label>
+          <Label>Buffer Before (minutes)</Label>
           <Input
             type="number"
             min={0}
             value={formData.bufferTimeBefore}
-            disabled={!bufferGate.canAccess}
             onChange={(e) =>
               setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })
             }
@@ -244,15 +238,11 @@ function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFo
           <p className="text-xs text-gray-500">Free time before each meeting</p>
         </div>
         <div className="space-y-2">
-          <Label className="flex items-center gap-2">
-            Buffer After (minutes)
-            {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
-          </Label>
+          <Label>Buffer After (minutes)</Label>
           <Input
             type="number"
             min={0}
             value={formData.bufferTimeAfter}
-            disabled={!bufferGate.canAccess}
             onChange={(e) =>
               setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })
             }
@@ -274,15 +264,11 @@ function GatedAdvancedSettings({ formData, setFormData }: { formData: any; setFo
           <p className="text-xs text-gray-500">How far in advance must bookings be made</p>
         </div>
         <div className="space-y-2">
-          <Label className="flex items-center gap-2">
-            Max Bookings Per Day
-            {!bookingLimitGate.canAccess && <ProBadge feature="bookingLimits" />}
-          </Label>
+          <Label>Max Bookings Per Day</Label>
           <Input
             type="number"
             min={0}
             value={formData.maxBookingsPerDay}
-            disabled={!bookingLimitGate.canAccess}
             onChange={(e) =>
               setFormData({ ...formData, maxBookingsPerDay: parseInt(e.target.value) || 0 })
             }
@@ -1016,10 +1002,7 @@ export default function NewEventTypePage() {
               className="flex items-center justify-between w-full text-left"
             >
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  Advanced Settings
-                  <ProBadge feature="bufferTimes" />
-                </CardTitle>
+                <CardTitle>Advanced Settings</CardTitle>
                 <CardDescription>Buffer times, minimum notice, and booking limits.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
@@ -1028,7 +1011,7 @@ export default function NewEventTypePage() {
             </button>
           </CardHeader>
           {showAdvanced && (
-            <GatedAdvancedSettings formData={formData} setFormData={setFormData} />
+            <AdvancedSettings formData={formData} setFormData={setFormData} />
           )}
         </Card>
 

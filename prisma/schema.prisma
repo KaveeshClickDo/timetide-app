@@ -31,6 +31,19 @@ model User {
   role                UserRole @default(USER)
   isDisabled          Boolean  @default(false)
 
+  // Subscription lifecycle
+  subscriptionStatus    SubscriptionStatus @default(NONE)
+  planActivatedAt       DateTime?   // When the current paid plan started
+  planExpiresAt         DateTime?   // When the billing period ends (e.g., Apr 2 → May 2)
+  gracePeriodEndsAt     DateTime?   // When the grace period ends (7 days after expiry)
+  cleanupScheduledAt    DateTime?   // When locked resources get permanently deleted
+  downgradeReason       String?     // voluntary_unsub | payment_failed | admin_immediate | admin_grace
+  downgradeInitiatedBy  String?     // admin userId, 'system', or 'user'
+
+  // Stripe (placeholders for future integration)
+  stripeCustomerId      String?  @unique
+  stripeSubscriptionId  String?  @unique
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -50,6 +63,7 @@ model User {
   assignedTickets      SupportTicket[]        @relation("AdminAssignedTickets")
   ticketMessages       SupportTicketMessage[] @relation("TicketMessages")
   adminAuditLogs       AdminAuditLog[]        @relation("AdminAuditLogs")
+  subscriptionHistory  SubscriptionHistory[]
 
   @@index([email])
   @@index([username])
@@ -64,6 +78,15 @@ enum UserPlan {
 enum UserRole {
   USER
   ADMIN
+}
+
+enum SubscriptionStatus {
+  NONE          // Never subscribed or fully cleaned up
+  ACTIVE        // Within paid billing period
+  UNSUBSCRIBED  // Cancelled but pre-paid period still running
+  GRACE_PERIOD  // Billing expired, 7-day grace window
+  DOWNGRADING   // Admin-initiated grace period
+  LOCKED        // Features locked, 7-day cleanup countdown
 }
 
 model Account {
@@ -263,8 +286,9 @@ model EventType {
   meetingOrganizerUserId String?         // For team events: whose account generates meeting links
 
   // Status
-  isActive         Boolean  @default(true)
-  
+  isActive          Boolean  @default(true)
+  lockedByDowngrade Boolean  @default(false) // True when deactivated by plan downgrade system
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -609,7 +633,8 @@ model Webhook {
   url           String
   secret        String?  // For HMAC signature verification
   eventTriggers String[] // e.g., ["booking.created", "booking.cancelled"]
-  isActive      Boolean  @default(true)
+  isActive          Boolean  @default(true)
+  lockedByDowngrade Boolean  @default(false) // True when disabled by plan downgrade system
 
   // Health tracking
   failureCount  Int      @default(0)
@@ -701,6 +726,13 @@ enum NotificationType {
   BOOKING_REMINDER
   TEAM_MEMBER_ADDED
   TEAM_INVITATION_RECEIVED
+  PLAN_EXPIRING_SOON
+  PLAN_GRACE_PERIOD_STARTED
+  PLAN_GRACE_PERIOD_ENDING
+  PLAN_LOCKED
+  PLAN_CLEANUP_WARNING
+  PLAN_DOWNGRADED
+  PLAN_REACTIVATED
 }
 
 model Notification {
@@ -776,6 +808,30 @@ model SupportTicketMessage {
 
   @@index([ticketId])
   @@index([senderId])
+}
+
+// ============================================================================
+// SUBSCRIPTION HISTORY
+// ============================================================================
+
+model SubscriptionHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  action       String   // upgrade | downgrade | unsubscribe | grace_start | locked | cleanup | reactivate
+  fromPlan     String
+  toPlan       String
+  fromStatus   String
+  toStatus     String
+  reason       String?
+  initiatedBy  String   // 'user' | 'system' | 'admin:{adminId}'
+  metadata     Json?
+
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([action])
 }
 
 // ============================================================================

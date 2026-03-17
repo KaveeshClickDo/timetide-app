@@ -11,6 +11,8 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import crypto from 'crypto';
+import { checkNumericLimit } from '@/lib/plan-enforcement';
+import type { PlanTier } from '@/lib/pricing';
 
 const updateWebhookSchema = z.object({
   name: z.string().max(100).optional().nullable(),
@@ -192,8 +194,14 @@ export async function PATCH(
     if (eventTriggers !== undefined) updateData.eventTriggers = eventTriggers;
     if (isActive !== undefined) {
       updateData.isActive = isActive;
-      // Reset failure count when re-enabling
+      // Enforce plan limit when re-enabling a webhook
       if (isActive && !existing.isActive) {
+        const plan = (session.user as Record<string, unknown>).plan as PlanTier;
+        const activeCount = await prisma.webhook.count({
+          where: { userId: session.user.id, isActive: true, id: { not: id } },
+        });
+        const limitDenied = checkNumericLimit(plan, 'maxWebhooks', activeCount);
+        if (limitDenied) return limitDenied;
         updateData.failureCount = 0;
       }
     }

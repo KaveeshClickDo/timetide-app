@@ -10,6 +10,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { checkFeatureAccess, getTeamOwnerPlan } from '@/lib/plan-enforcement';
 
 interface RouteParams {
   params: { id: string; eventTypeId: string };
@@ -117,6 +118,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         { status: 403 }
       );
     }
+
+    // Enforce teams feature gate (check team owner's plan, not the requesting user's)
+    const ownerPlan = await getTeamOwnerPlan(params.id);
+    const featureDenied = checkFeatureAccess(ownerPlan, 'teams');
+    if (featureDenied) return featureDenied;
 
     // Verify event type belongs to team
     const eventType = await verifyEventType(params.eventTypeId, params.id);

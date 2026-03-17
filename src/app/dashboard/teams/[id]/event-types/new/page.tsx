@@ -29,8 +29,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
 import { Switch } from '@/components/ui/switch'
 import { cn, getInitials } from '@/lib/utils'
-import { useFeatureGate } from '@/hooks/use-feature-gate'
-import { ProBadge } from '@/components/pro-badge'
 import type { TeamMemberWithRole } from '@/types/team'
 import type { QuestionInput } from '@/types/event-type'
 
@@ -101,13 +99,6 @@ export default function NewTeamEventTypePage() {
     hideNotes: false,
     successRedirectUrl: '',
   })
-
-  // Feature gates
-  const customQuestionsGate = useFeatureGate('customQuestions')
-  const groupBookingGate = useFeatureGate('groupBooking')
-  const recurringGate = useFeatureGate('recurringBooking')
-  const bufferGate = useFeatureGate('bufferTimes')
-  const bookingLimitGate = useFeatureGate('bookingLimits')
 
   // Fetch team details for members list
   const { data: teamData, isLoading: isTeamLoading } = useQuery<{ team: { id: string; name: string; slug: string; members: TeamMemberWithRole[] } }>({
@@ -819,10 +810,7 @@ export default function NewTeamEventTypePage() {
         {/* Custom Questions */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Booking Questions
-              <ProBadge feature="customQuestions" />
-            </CardTitle>
+            <CardTitle>Booking Questions</CardTitle>
             <CardDescription>
               Ask invitees for additional information when they book.
             </CardDescription>
@@ -903,11 +891,9 @@ export default function NewTeamEventTypePage() {
               type="button"
               variant="outline"
               onClick={addQuestion}
-              disabled={!customQuestionsGate.canAccess}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add Question
-              {!customQuestionsGate.canAccess && <span className="ml-1 text-[10px] text-ocean-600 font-semibold">PRO</span>}
             </Button>
           </CardContent>
         </Card>
@@ -918,7 +904,6 @@ export default function NewTeamEventTypePage() {
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
               Group Booking
-              <ProBadge feature="groupBooking" />
             </CardTitle>
             <CardDescription>
               Allow multiple people to book the same time slot.
@@ -934,15 +919,13 @@ export default function NewTeamEventTypePage() {
               </div>
               <button
                 type="button"
-                disabled={!groupBookingGate.canAccess}
-                onClick={() => groupBookingGate.canAccess && setFormData({
+                onClick={() => setFormData({
                   ...formData,
                   isGroupBooking: !formData.isGroupBooking,
                   seatsPerSlot: !formData.isGroupBooking ? 10 : 1
                 })}
                 className={cn(
                   'relative inline-flex flex-shrink-0 h-6 w-11 items-center rounded-full transition-colors',
-                  !groupBookingGate.canAccess ? 'bg-gray-100 cursor-not-allowed' :
                   formData.isGroupBooking ? 'bg-ocean-500' : 'bg-gray-200'
                 )}
               >
@@ -954,7 +937,7 @@ export default function NewTeamEventTypePage() {
                 />
               </button>
             </div>
-            {formData.isGroupBooking && groupBookingGate.canAccess && (
+            {formData.isGroupBooking && (
               <div className="pt-4 border-t space-y-4">
                 <div className="space-y-2">
                   <Label>Maximum Seats Per Slot</Label>
@@ -991,7 +974,6 @@ export default function NewTeamEventTypePage() {
             <CardTitle className="flex items-center gap-2">
               <RefreshCw className="h-5 w-5" />
               Recurring Bookings
-              <ProBadge feature="recurringBooking" />
             </CardTitle>
             <CardDescription>
               Allow invitees to book weekly recurring sessions.
@@ -1007,11 +989,9 @@ export default function NewTeamEventTypePage() {
               </div>
               <button
                 type="button"
-                disabled={!recurringGate.canAccess}
-                onClick={() => recurringGate.canAccess && setFormData({ ...formData, allowsRecurring: !formData.allowsRecurring })}
+                onClick={() => setFormData({ ...formData, allowsRecurring: !formData.allowsRecurring })}
                 className={cn(
                   'relative inline-flex flex-shrink-0 h-6 w-11 items-center rounded-full transition-colors',
-                  !recurringGate.canAccess ? 'bg-gray-100 cursor-not-allowed' :
                   formData.allowsRecurring ? 'bg-ocean-500' : 'bg-gray-200'
                 )}
               >
@@ -1086,10 +1066,7 @@ export default function NewTeamEventTypePage() {
               className="flex items-center justify-between w-full text-left"
             >
               <div>
-                <CardTitle className="flex items-center gap-2">
-                  Advanced Settings
-                  <ProBadge feature="bufferTimes" />
-                </CardTitle>
+                <CardTitle>Advanced Settings</CardTitle>
                 <CardDescription>Buffer times, minimum notice, and booking limits.</CardDescription>
               </div>
               <span className="text-ocean-600 text-sm">
@@ -1101,31 +1078,23 @@ export default function NewTeamEventTypePage() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Buffer Before (minutes)
-                    {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
-                  </Label>
+                  <Label>Buffer Before (minutes)</Label>
                   <Input
                     type="number"
                     min={0}
                     max={120}
                     value={formData.bufferTimeBefore}
-                    disabled={!bufferGate.canAccess}
                     onChange={(e) => setFormData({ ...formData, bufferTimeBefore: parseInt(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-gray-500">Free time before each meeting</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Buffer After (minutes)
-                    {!bufferGate.canAccess && <ProBadge feature="bufferTimes" />}
-                  </Label>
+                  <Label>Buffer After (minutes)</Label>
                   <Input
                     type="number"
                     min={0}
                     max={120}
                     value={formData.bufferTimeAfter}
-                    disabled={!bufferGate.canAccess}
                     onChange={(e) => setFormData({ ...formData, bufferTimeAfter: parseInt(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-gray-500">Free time after each meeting</p>
@@ -1143,16 +1112,12 @@ export default function NewTeamEventTypePage() {
                   <p className="text-xs text-gray-500">How far in advance must bookings be made</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    Max Bookings Per Day
-                    {!bookingLimitGate.canAccess && <ProBadge feature="bookingLimits" />}
-                  </Label>
+                  <Label>Max Bookings Per Day</Label>
                   <Input
                     type="number"
                     min={0}
                     max={100}
                     value={formData.maxBookingsPerDay}
-                    disabled={!bookingLimitGate.canAccess}
                     onChange={(e) => setFormData({ ...formData, maxBookingsPerDay: parseInt(e.target.value) || 0 })}
                   />
                   <p className="text-xs text-gray-500">0 = unlimited</p>

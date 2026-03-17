@@ -30,7 +30,8 @@ export const PRICING_TIERS: PricingTier[] = [
     features: [
       '1 Event Type',
       'Unlimited Bookings',
-      'Calendar Integration',
+      'Google & Outlook Calendar',
+      'Buffer Times & Booking Limits',
       'Email Notifications',
     ],
     ctaLabel: 'Get Started',
@@ -46,10 +47,10 @@ export const PRICING_TIERS: PricingTier[] = [
     isPopular: true,
     features: [
       'Unlimited Event Types',
-      'Custom Branding',
-      'Multiple Calendars',
-      'Buffer Times',
       'Custom Questions',
+      'Group Booking',
+      'Recurring Bookings',
+      'Up to 10 Webhooks',
       'Priority Support',
     ],
     ctaLabel: 'Start Free Trial',
@@ -66,9 +67,9 @@ export const PRICING_TIERS: PricingTier[] = [
     features: [
       'Everything in Pro',
       'Team Scheduling',
-      'Round Robin',
-      'Collective Events',
-      'Analytics',
+      'Round Robin & Collective Events',
+      'Analytics Dashboard',
+      'Unlimited Webhooks',
       'API Access',
     ],
     ctaLabel: 'Contact Sales',
@@ -95,12 +96,9 @@ export function getUpgradeTier(currentTier: PlanTier): PricingTier | null {
 
 export interface PlanLimits {
   maxEventTypes: number
-  maxCalendars: number
   maxWebhooks: number
-  bufferTimes: boolean
   customQuestions: boolean
   groupBooking: boolean
-  bookingLimits: boolean
   recurringBooking: boolean
   teams: boolean
   analytics: boolean
@@ -108,38 +106,28 @@ export interface PlanLimits {
 
 export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   FREE: {
-    // TODO: Restore original FREE limits when enabling paid tiers
-    maxEventTypes: Infinity,
-    maxCalendars: Infinity,
-    maxWebhooks: Infinity,
-    bufferTimes: true,
-    customQuestions: true,
-    groupBooking: true,
-    bookingLimits: true,
-    recurringBooking: true,
-    teams: true,
-    analytics: true,
+    maxEventTypes: 1,
+    maxWebhooks: 0,
+    customQuestions: false,
+    groupBooking: false,
+    recurringBooking: false,
+    teams: false,
+    analytics: false,
   },
   PRO: {
     maxEventTypes: Infinity,
-    maxCalendars: Infinity,
-    maxWebhooks: Infinity,
-    bufferTimes: true,
+    maxWebhooks: 10,
     customQuestions: true,
     groupBooking: true,
-    bookingLimits: true,
     recurringBooking: true,
-    teams: true,
-    analytics: true,
+    teams: false,
+    analytics: false,
   },
   TEAM: {
     maxEventTypes: Infinity,
-    maxCalendars: Infinity,
     maxWebhooks: Infinity,
-    bufferTimes: true,
     customQuestions: true,
     groupBooking: true,
-    bookingLimits: true,
     recurringBooking: true,
     teams: true,
     analytics: true,
@@ -160,12 +148,9 @@ export function getRequiredPlan(feature: keyof PlanLimits): PlanTier {
 /** Human-readable labels for plan limit features */
 export const FEATURE_LABELS: Record<keyof PlanLimits, string> = {
   maxEventTypes: 'Event Types',
-  maxCalendars: 'Calendar Integrations',
   maxWebhooks: 'Webhooks',
-  bufferTimes: 'Buffer Times',
   customQuestions: 'Custom Questions',
   groupBooking: 'Group Booking',
-  bookingLimits: 'Booking Limits',
   recurringBooking: 'Recurring Bookings',
   teams: 'Team Scheduling',
   analytics: 'Analytics',

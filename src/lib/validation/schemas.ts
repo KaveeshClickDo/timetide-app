@@ -375,6 +375,8 @@ export const adminUpdateUserSchema = z.object({
   plan: z.enum(['FREE', 'PRO', 'TEAM']).optional(),
   isDisabled: z.boolean().optional(),
   role: z.enum(['USER', 'ADMIN']).optional(),
+  planAction: z.enum(['upgrade', 'downgrade_immediate', 'downgrade_grace', 'cancel_downgrade']).optional(),
+  gracePeriodDays: z.number().int().min(1).max(365).optional(),
 });
 
 // ============================================================================

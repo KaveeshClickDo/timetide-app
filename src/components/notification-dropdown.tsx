@@ -12,6 +12,11 @@ import {
   RefreshCw,
   Users,
   Mail,
+  AlertTriangle,
+  Lock,
+  Trash2,
+  ArrowDownCircle,
+  RotateCcw,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -33,6 +38,13 @@ const typeIcons: Record<string, typeof Calendar> = {
   BOOKING_REMINDER: Clock,
   TEAM_MEMBER_ADDED: Users,
   TEAM_INVITATION_RECEIVED: Mail,
+  PLAN_EXPIRING_SOON: Clock,
+  PLAN_GRACE_PERIOD_STARTED: AlertTriangle,
+  PLAN_GRACE_PERIOD_ENDING: AlertTriangle,
+  PLAN_LOCKED: Lock,
+  PLAN_CLEANUP_WARNING: Trash2,
+  PLAN_DOWNGRADED: ArrowDownCircle,
+  PLAN_REACTIVATED: RotateCcw,
 }
 
 const typeColors: Record<string, string> = {
@@ -44,6 +56,13 @@ const typeColors: Record<string, string> = {
   BOOKING_REMINDER: 'text-blue-600 bg-blue-50',
   TEAM_MEMBER_ADDED: 'text-purple-600 bg-purple-50',
   TEAM_INVITATION_RECEIVED: 'text-indigo-600 bg-indigo-50',
+  PLAN_EXPIRING_SOON: 'text-amber-600 bg-amber-50',
+  PLAN_GRACE_PERIOD_STARTED: 'text-orange-600 bg-orange-50',
+  PLAN_GRACE_PERIOD_ENDING: 'text-orange-600 bg-orange-50',
+  PLAN_LOCKED: 'text-red-600 bg-red-50',
+  PLAN_CLEANUP_WARNING: 'text-red-600 bg-red-50',
+  PLAN_DOWNGRADED: 'text-gray-600 bg-gray-100',
+  PLAN_REACTIVATED: 'text-green-600 bg-green-50',
 }
 
 export function NotificationDropdown() {

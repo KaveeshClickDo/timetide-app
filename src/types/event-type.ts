@@ -29,6 +29,7 @@ export interface EventTypeListItem {
   length: number
   locationType: string
   isActive: boolean
+  lockedByDowngrade: boolean
   _count: {
     bookings: number
   }

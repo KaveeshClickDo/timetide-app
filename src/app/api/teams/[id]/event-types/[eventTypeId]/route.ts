@@ -10,8 +10,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { checkFeatureAccess, checkEventTypeFeatures } from '@/lib/plan-enforcement';
-import type { PlanTier } from '@/lib/pricing';
+import { checkFeatureAccess, checkEventTypeFeatures, getTeamOwnerPlan } from '@/lib/plan-enforcement';
 import {
   locationTypeSchema,
   schedulingTypeSchema,
@@ -137,9 +136,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Enforce teams feature gate
-    const plan = (session.user as any).plan as PlanTier;
-    const teamsDenied = checkFeatureAccess(plan, 'teams');
+    // Enforce teams feature gate based on team owner's plan (owner is paying)
+    const ownerPlan = await getTeamOwnerPlan(params.id);
+    const teamsDenied = checkFeatureAccess(ownerPlan, 'teams');
     if (teamsDenied) return teamsDenied;
 
     // Verify event type belongs to team
@@ -164,8 +163,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Enforce pro feature gates on event type fields
-    const eventFeatureDenied = checkEventTypeFeatures(plan, result.data as Record<string, unknown>);
+    // Enforce pro feature gates on event type fields based on owner's plan
+    const eventFeatureDenied = checkEventTypeFeatures(ownerPlan, result.data as Record<string, unknown>);
     if (eventFeatureDenied) return eventFeatureDenied;
 
     const { questions, memberIds, meetingOrganizerUserId, ...updateFields } = result.data;

@@ -20,6 +20,14 @@ import {
   generateBulkConfirmedByHostEmail,
   generateTeamMemberAddedEmail,
   generateTeamInvitationEmail,
+  generatePlanExpiringEmail,
+  generateGracePeriodStartedEmail,
+  generateGracePeriodEndingEmail,
+  generatePlanLockedEmail,
+  generateCleanupWarningEmail,
+  generateCleanupCompleteEmail,
+  generateAdminDowngradeEmail,
+  generatePlanReactivatedEmail,
 } from '@/lib/integrations/email/client';
 import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
 import type { EmailJobType, EmailJobData } from '@/types/queue';
@@ -179,6 +187,46 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
       html = generateTeamInvitationEmail(job.data.teamData as TeamEmailData & { expiresIn: string; acceptUrl: string });
       break;
 
+    case 'plan_expiring_warning':
+      if (!job.data.planData) throw new Error('Missing planData for plan_expiring_warning');
+      html = generatePlanExpiringEmail(job.data.planData);
+      break;
+
+    case 'grace_period_started':
+      if (!job.data.planData) throw new Error('Missing planData for grace_period_started');
+      html = generateGracePeriodStartedEmail(job.data.planData);
+      break;
+
+    case 'grace_period_ending':
+      if (!job.data.planData) throw new Error('Missing planData for grace_period_ending');
+      html = generateGracePeriodEndingEmail(job.data.planData);
+      break;
+
+    case 'plan_locked':
+      if (!job.data.planData) throw new Error('Missing planData for plan_locked');
+      html = generatePlanLockedEmail(job.data.planData);
+      break;
+
+    case 'cleanup_warning':
+      if (!job.data.planData) throw new Error('Missing planData for cleanup_warning');
+      html = generateCleanupWarningEmail(job.data.planData);
+      break;
+
+    case 'plan_cleanup_complete':
+      if (!job.data.planData) throw new Error('Missing planData for plan_cleanup_complete');
+      html = generateCleanupCompleteEmail(job.data.planData);
+      break;
+
+    case 'admin_downgrade_notice':
+      if (!job.data.planData) throw new Error('Missing planData for admin_downgrade_notice');
+      html = generateAdminDowngradeEmail(job.data.planData);
+      break;
+
+    case 'plan_reactivated':
+      if (!job.data.planData) throw new Error('Missing planData for plan_reactivated');
+      html = generatePlanReactivatedEmail(job.data.planData);
+      break;
+
     case 'custom':
       if (!customHtml) throw new Error('Missing customHtml for custom email');
       html = customHtml;
@@ -226,10 +274,11 @@ export async function queueEmail(data: EmailJobData): Promise<void> {
  */
 async function processEmailJobDirect(data: EmailJobData): Promise<void> {
   try {
+    console.log(`[email] Direct send fallback (no Redis): ${data.type} to ${data.to}`);
     const job = { data } as Job<EmailJobData>;
     await processEmailJob(job);
   } catch (error) {
-    console.error('Direct email send failed:', error);
+    console.error(`[email] Direct send failed for ${data.type} to ${data.to}:`, error);
     // Don't throw - this is fire-and-forget in fallback mode
   }
 }

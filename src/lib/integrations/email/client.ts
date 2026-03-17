@@ -5,6 +5,7 @@
 
 import { Resend } from 'resend';
 import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
+import type { PlanEmailData } from '@/types/queue';
 
 export type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
 
@@ -32,6 +33,11 @@ function getEmailTimes(data: BookingEmailData, isHost: boolean) {
 
 
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
+  if (!process.env.RESEND_API_KEY) {
+    console.error('Email send skipped: RESEND_API_KEY not configured');
+    return false;
+  }
+
   try {
     const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM ?? 'TimeTide <noreply@timetide.app>',
@@ -1355,4 +1361,256 @@ export async function sendVerificationCodeEmail(
     subject: `${code} is your TimeTide verification code`,
     html: generateVerificationCodeEmail(code),
   });
+}
+
+// ============================================================================
+// PLAN / SUBSCRIPTION EMAIL TEMPLATES
+// ============================================================================
+
+const planEmailHeader = (title: string, subtitle: string, color: string) => `
+  <!DOCTYPE html>
+  <html>
+  <head>${baseStyles}</head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div class="logo"><img src="${process.env.NEXT_PUBLIC_APP_URL}/email-logo.png" alt="TimeTide" width="32" height="32" style="display:inline-block;vertical-align:middle;width:32px;height:32px;" /> TimeTide</div>
+      </div>
+      <h2 style="text-align: center; color: ${color}; margin-bottom: 8px;">${title}</h2>
+      <p style="text-align: center; color: #64748b;">${subtitle}</p>
+`;
+
+const planEmailFooter = (note?: string) => `
+      ${note ? `<p style="text-align: center; color: #94a3b8; font-size: 13px;">${note}</p>` : ''}
+      <div class="footer">
+        <p>TimeTide Powered by SeekaHost Technologies Ltd.</p>
+      </div>
+    </div>
+  </body>
+  </html>
+`;
+
+const planCta = (url: string, label: string, variant: 'primary' | 'outline' = 'primary') =>
+  `<div style="text-align: center; margin: 32px 0;">
+    <a href="${esc(url)}" class="btn${variant === 'outline' ? ' btn-outline' : ''}" style="${variant === 'primary' ? 'color: #ffffff;' : ''}">${esc(label)}</a>
+  </div>`;
+
+export function generatePlanExpiringEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Your plan expires soon',
+      `Hi ${esc(data.userName)}, your <strong>${esc(data.currentPlan)}</strong> plan is expiring.`,
+      '#f59e0b',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Expires</span>
+          <span class="detail-value">${esc(data.expiresAt)}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        Renew before your plan expires to keep all your event types, webhooks, and PRO features.
+      </p>
+      ${planCta(data.reactivateUrl, 'Renew Now')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateGracePeriodStartedEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Action needed: Renew your subscription',
+      `Hi ${esc(data.userName)}, your <strong>${esc(data.currentPlan)}</strong> billing period has ended.`,
+      '#f97316',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Grace Until</span>
+          <span class="detail-value">${esc(data.gracePeriodEndsAt)}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        You have a 7-day grace period to renew. After that, your extra event types and webhooks will be locked.
+      </p>
+      ${planCta(data.reactivateUrl, 'Renew Now')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateGracePeriodEndingEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Grace period ending soon',
+      `Hi ${esc(data.userName)}, your grace period is almost over.`,
+      '#ea580c',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Locks On</span>
+          <span class="detail-value">${esc(data.gracePeriodEndsAt)}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        If you don't renew before your grace period ends, your extra event types and webhooks will be locked and eventually deleted.
+      </p>
+      ${planCta(data.reactivateUrl, 'Renew Now')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generatePlanLockedEmail(data: PlanEmailData): string {
+  const lockedItems: string[] = [];
+  if (data.lockedEventCount) lockedItems.push(`${data.lockedEventCount} event type${data.lockedEventCount !== 1 ? 's' : ''}`);
+  if (data.lockedWebhookCount) lockedItems.push(`${data.lockedWebhookCount} webhook${data.lockedWebhookCount !== 1 ? 's' : ''}`);
+
+  return `
+    ${planEmailHeader(
+      `Your ${esc(data.currentPlan)} features have been locked`,
+      `Hi ${esc(data.userName)}, your subscription was not renewed in time.`,
+      '#dc2626',
+    )}
+      <div class="card">
+        ${lockedItems.length > 0 ? `
+        <div class="detail-row">
+          <span class="detail-label">Locked</span>
+          <span class="detail-value">${esc(lockedItems.join(' and '))}</span>
+        </div>` : ''}
+        <div class="detail-row">
+          <span class="detail-label">Deleted On</span>
+          <span class="detail-value">${esc(data.cleanupScheduledAt)}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        Your locked resources will be permanently deleted on the date above. Reactivate now to restore them.
+      </p>
+      ${planCta(data.reactivateUrl, 'Reactivate Now')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateCleanupWarningEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Your data will be deleted soon',
+      `Hi ${esc(data.userName)}, this is your final warning.`,
+      '#dc2626',
+    )}
+      <div class="card" style="border: 2px solid #fecaca;">
+        <div class="detail-row">
+          <span class="detail-label">Deleted On</span>
+          <span class="detail-value" style="color: #dc2626; font-weight: 700;">${esc(data.cleanupScheduledAt)}</span>
+        </div>
+        ${data.lockedEventCount ? `
+        <div class="detail-row">
+          <span class="detail-label">Events</span>
+          <span class="detail-value">${data.lockedEventCount} locked event type${data.lockedEventCount !== 1 ? 's' : ''}</span>
+        </div>` : ''}
+        ${data.lockedWebhookCount ? `
+        <div class="detail-row">
+          <span class="detail-label">Webhooks</span>
+          <span class="detail-value">${data.lockedWebhookCount} locked webhook${data.lockedWebhookCount !== 1 ? 's' : ''}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #dc2626; font-weight: 500;">
+        After this date, your locked event types and webhooks will be permanently deleted and cannot be recovered.
+      </p>
+      ${planCta(data.reactivateUrl, 'Reactivate Now')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateCleanupCompleteEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Your extra resources have been removed',
+      `Hi ${esc(data.userName)}, your account has been adjusted to the ${esc(data.newPlan || 'FREE')} plan.`,
+      '#64748b',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.newPlan || 'FREE')}</span>
+        </div>
+        ${data.lockedEventCount ? `
+        <div class="detail-row">
+          <span class="detail-label">Removed</span>
+          <span class="detail-value">${data.lockedEventCount} event type${data.lockedEventCount !== 1 ? 's' : ''} deleted</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        You can upgrade anytime to create more event types and access PRO features.
+      </p>
+      ${planCta(data.reactivateUrl, 'View Plans', 'outline')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateAdminDowngradeEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Your plan has been changed',
+      `Hi ${esc(data.userName)}, an administrator has changed your plan.`,
+      '#f97316',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Previous</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">New Plan</span>
+          <span class="detail-value">${esc(data.newPlan || 'FREE')}</span>
+        </div>
+        ${data.gracePeriodEndsAt ? `
+        <div class="detail-row">
+          <span class="detail-label">Grace Until</span>
+          <span class="detail-value">${esc(data.gracePeriodEndsAt)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        ${data.gracePeriodEndsAt
+          ? 'You have a grace period to upgrade before your features are locked.'
+          : 'Your extra features have been locked immediately. Reactivate to restore them.'}
+      </p>
+      ${planCta(data.reactivateUrl, 'View Billing')}
+    ${planEmailFooter('If you believe this is an error, please contact support.')}
+  `;
+}
+
+export function generatePlanReactivatedEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Welcome back! Your features are restored',
+      `Hi ${esc(data.userName)}, your <strong>${esc(data.currentPlan)}</strong> plan is active again.`,
+      '#16a34a',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        ${data.expiresAt ? `
+        <div class="detail-row">
+          <span class="detail-label">Renews</span>
+          <span class="detail-value">${esc(data.expiresAt)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        All your previously locked event types and webhooks have been restored. Thank you for resubscribing!
+      </p>
+      ${planCta(data.reactivateUrl, 'Go to Dashboard', 'outline')}
+    ${planEmailFooter()}
+  `;
 }

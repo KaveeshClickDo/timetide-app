@@ -37,6 +37,7 @@ export interface PlanEmailData {
   gracePeriodEndsAt?: string
   cleanupScheduledAt?: string
   lockedEventCount?: number
+  lockedTeamEventCount?: number
   lockedWebhookCount?: number
   reactivateUrl: string
 }

@@ -22,6 +22,7 @@ import {
   Activity,
   Upload,
   X,
+  AlertTriangle,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -117,7 +118,7 @@ export default function TeamDetailPage() {
   });
 
   // Fetch team details
-  const { data, isLoading, error } = useQuery<{ team: TeamDetail; currentUserRole: string }>({
+  const { data, isLoading, error } = useQuery<{ team: TeamDetail; currentUserRole: string; ownerPlanActive: boolean }>({
     queryKey: ['team', teamId],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${teamId}`);
@@ -463,6 +464,7 @@ export default function TeamDetailPage() {
   }
 
   const team = data.team;
+  const ownerPlanActive = data.ownerPlanActive;
   const members = membersData?.members || team.members;
   const selectableMembers = members.filter((m) => m.role !== 'OWNER');
   const toggleSelectAll = () => {
@@ -484,6 +486,19 @@ export default function TeamDetailPage() {
         <ChevronLeft className="h-4 w-4 mr-2" />
         Back to Teams
       </Button>
+
+      {/* Owner plan inactive banner */}
+      {ownerPlanActive === false && (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 mb-6">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-yellow-800">Team features are restricted</p>
+            <p className="text-sm text-yellow-700 mt-0.5">
+              The team owner&apos;s plan no longer includes team features. New team event types cannot be created and member invitations are disabled. The owner must upgrade to a TEAM plan to restore full access.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 gap-4">
@@ -543,7 +558,7 @@ export default function TeamDetailPage() {
               <div className="flex gap-2 flex-shrink-0">
                 <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button variant="outline">
+                    <Button variant="outline" disabled={ownerPlanActive === false} title={ownerPlanActive === false ? "Owner's plan does not include team features" : undefined}>
                       <Mail className="h-4 w-4 mr-2" />
                       Invite
                     </Button>
@@ -602,7 +617,7 @@ export default function TeamDetailPage() {
                 </Dialog>
               <Dialog open={isAddMemberDialogOpen} onOpenChange={setIsAddMemberDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button disabled={ownerPlanActive === false} title={ownerPlanActive === false ? "Owner's plan does not include team features" : undefined}>
                     <UserPlus className="h-4 w-4 mr-2" />
                     Add Member
                   </Button>

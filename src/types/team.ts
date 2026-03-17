@@ -102,6 +102,7 @@ export interface TeamDetail {
   _count: {
     eventTypes: number
   }
+  ownerPlanActive?: boolean
 }
 
 /** Team for public-facing pages */

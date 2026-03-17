@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { logTeamAction } from '@/lib/team-audit'
+import { PLAN_LIMITS } from '@/lib/pricing'
 
 interface RouteParams {
   params: { id: string }
@@ -70,9 +71,25 @@ export async function GET(request: Request, { params }: RouteParams) {
       },
     })
 
+    // Check if team owner has an active plan that supports teams
+    const ownerMembership = await prisma.teamMember.findFirst({
+      where: { teamId: params.id, role: 'OWNER' },
+      select: {
+        user: {
+          select: { plan: true, subscriptionStatus: true },
+        },
+      },
+    })
+    const ownerPlan = ownerMembership?.user?.plan ?? 'FREE'
+    const ownerStatus = ownerMembership?.user?.subscriptionStatus ?? 'NONE'
+    const ownerPlanActive =
+      !!PLAN_LIMITS[ownerPlan as keyof typeof PLAN_LIMITS]?.teams &&
+      (ownerStatus === 'ACTIVE' || ownerStatus === 'DOWNGRADING')
+
     return NextResponse.json({
       team,
       currentUserRole: membership.role,
+      ownerPlanActive,
     })
   } catch (error) {
     console.error('Error fetching team:', error)

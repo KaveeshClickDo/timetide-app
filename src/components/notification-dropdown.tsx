@@ -19,7 +19,6 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -122,7 +121,7 @@ export function NotificationDropdown() {
         </div>
 
         {/* Notification list */}
-        <ScrollArea className="max-h-[min(400px,60vh)]">
+        <div className="max-h-[min(400px,60vh)] overflow-y-auto">
           {isLoading ? (
             <div className="py-8 text-center text-sm text-gray-500">
               Loading...
@@ -186,7 +185,7 @@ export function NotificationDropdown() {
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   )

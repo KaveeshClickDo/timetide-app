@@ -18,6 +18,7 @@ import {
   MapPin,
   Globe,
   Settings,
+  AlertTriangle,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -63,7 +64,7 @@ export default function TeamEventTypesPage() {
   const teamId = params.id as string;
 
   // Fetch team details
-  const { data: teamData, isLoading: isTeamLoading } = useQuery<{ team: { id: string; name: string; slug: string; members: TeamMemberWithRole[] } }>({
+  const { data: teamData, isLoading: isTeamLoading } = useQuery<{ team: { id: string; name: string; slug: string; members: TeamMemberWithRole[] }; ownerPlanActive: boolean }>({
     queryKey: ['team', teamId],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${teamId}`);
@@ -132,6 +133,7 @@ export default function TeamEventTypesPage() {
   }
 
   const team = teamData.team;
+  const ownerPlanActive = teamData.ownerPlanActive;
   const eventTypes = eventTypesData?.eventTypes || [];
 
   return (
@@ -146,6 +148,19 @@ export default function TeamEventTypesPage() {
         Back to {team.name}
       </Button>
 
+      {/* Owner plan inactive banner */}
+      {ownerPlanActive === false && (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 mb-6">
+          <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-yellow-800">Team features are restricted</p>
+            <p className="text-sm text-yellow-700 mt-0.5">
+              The team owner&apos;s plan no longer includes team features. New team event types cannot be created and member invitations are disabled. The owner must upgrade to a TEAM plan to restore full access.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
         <div>
@@ -156,12 +171,19 @@ export default function TeamEventTypesPage() {
             Manage event types for {team.name}
           </p>
         </div>
-        <Link href={`/dashboard/teams/${teamId}/event-types/new`}>
-          <Button className="w-full sm:w-auto flex-shrink-0">
+        {ownerPlanActive === false ? (
+          <Button className="w-full sm:w-auto flex-shrink-0" disabled title="Owner's plan does not include team features">
             <Plus className="h-4 w-4 mr-2" />
             Create Event Type
           </Button>
-        </Link>
+        ) : (
+          <Link href={`/dashboard/teams/${teamId}/event-types/new`}>
+            <Button className="w-full sm:w-auto flex-shrink-0">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Event Type
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Event Types List */}

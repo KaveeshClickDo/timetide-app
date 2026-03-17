@@ -1471,9 +1471,10 @@ export function generateGracePeriodEndingEmail(data: PlanEmailData): string {
 }
 
 export function generatePlanLockedEmail(data: PlanEmailData): string {
-  const lockedItems: string[] = [];
-  if (data.lockedEventCount) lockedItems.push(`${data.lockedEventCount} event type${data.lockedEventCount !== 1 ? 's' : ''}`);
-  if (data.lockedWebhookCount) lockedItems.push(`${data.lockedWebhookCount} webhook${data.lockedWebhookCount !== 1 ? 's' : ''}`);
+  const lockedRows: string[] = [];
+  if (data.lockedEventCount) lockedRows.push(`${data.lockedEventCount} personal event type${data.lockedEventCount !== 1 ? 's' : ''}`);
+  if (data.lockedTeamEventCount) lockedRows.push(`${data.lockedTeamEventCount} team event type${data.lockedTeamEventCount !== 1 ? 's' : ''}`);
+  if (data.lockedWebhookCount) lockedRows.push(`${data.lockedWebhookCount} webhook${data.lockedWebhookCount !== 1 ? 's' : ''}`);
 
   return `
     ${planEmailHeader(
@@ -1482,10 +1483,10 @@ export function generatePlanLockedEmail(data: PlanEmailData): string {
       '#dc2626',
     )}
       <div class="card">
-        ${lockedItems.length > 0 ? `
+        ${lockedRows.length > 0 ? `
         <div class="detail-row">
           <span class="detail-label">Locked</span>
-          <span class="detail-value">${esc(lockedItems.join(' and '))}</span>
+          <span class="detail-value">${esc(lockedRows.join(' and '))}</span>
         </div>` : ''}
         <div class="detail-row">
           <span class="detail-label">Deleted On</span>
@@ -1516,6 +1517,11 @@ export function generateCleanupWarningEmail(data: PlanEmailData): string {
         <div class="detail-row">
           <span class="detail-label">Events</span>
           <span class="detail-value">${data.lockedEventCount} locked event type${data.lockedEventCount !== 1 ? 's' : ''}</span>
+        </div>` : ''}
+        ${data.lockedTeamEventCount ? `
+        <div class="detail-row">
+          <span class="detail-label">Team Events</span>
+          <span class="detail-value">${data.lockedTeamEventCount} locked team event type${data.lockedTeamEventCount !== 1 ? 's' : ''}</span>
         </div>` : ''}
         ${data.lockedWebhookCount ? `
         <div class="detail-row">
@@ -1548,6 +1554,11 @@ export function generateCleanupCompleteEmail(data: PlanEmailData): string {
           <span class="detail-label">Removed</span>
           <span class="detail-value">${data.lockedEventCount} event type${data.lockedEventCount !== 1 ? 's' : ''} deleted</span>
         </div>` : ''}
+        ${data.lockedTeamEventCount ? `
+        <div class="detail-row">
+          <span class="detail-label">Team Events</span>
+          <span class="detail-value">${data.lockedTeamEventCount} team event type${data.lockedTeamEventCount !== 1 ? 's' : ''} deleted</span>
+        </div>` : ''}
       </div>
       <p style="text-align: center; color: #64748b;">
         You can upgrade anytime to create more event types and access PRO features.
@@ -1566,7 +1577,7 @@ export function generateAdminDowngradeEmail(data: PlanEmailData): string {
     )}
       <div class="card">
         <div class="detail-row">
-          <span class="detail-label">Previous</span>
+          <span class="detail-label">Previous Plan</span>
           <span class="detail-value">${esc(data.currentPlan)}</span>
         </div>
         <div class="detail-row">
@@ -1582,7 +1593,7 @@ export function generateAdminDowngradeEmail(data: PlanEmailData): string {
       <p style="text-align: center; color: #64748b;">
         ${data.gracePeriodEndsAt
           ? 'You have a grace period to upgrade before your features are locked.'
-          : 'Your extra features have been locked immediately. Reactivate to restore them.'}
+          : 'Your plan has been updated by an administrator.'}
       </p>
       ${planCta(data.reactivateUrl, 'View Billing')}
     ${planEmailFooter('If you believe this is an error, please contact support.')}

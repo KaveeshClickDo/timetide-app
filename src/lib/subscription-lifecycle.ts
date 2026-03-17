@@ -348,7 +348,7 @@ export async function adminDowngradeImmediate(
   // lockResources sets plan + LOCKED status + schedules cleanup
   // For paid→paid downgrades, skip lockResources notifications — we send our own admin downgrade email
   const isPaidToPaid = targetPlan !== 'FREE'
-  await lockResources(userId, targetPlan, 'admin_immediate', `admin:${adminId}`, isPaidToPaid)
+  const lockedCounts = await lockResources(userId, targetPlan, 'admin_immediate', `admin:${adminId}`, isPaidToPaid)
 
   // For paid→paid downgrades, override to ACTIVE — user has a valid subscription
   if (isPaidToPaid) {
@@ -540,13 +540,13 @@ export async function lockResources(
   initiatedBy = 'system',
   /** Skip email/notification — caller will send its own (e.g., paid→paid admin downgrade) */
   skipNotifications = false,
-): Promise<void> {
+): Promise<{ lockedPersonalEvents: number; lockedTeamEvents: number; lockedWebhookCount: number }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { plan: true, subscriptionStatus: true },
   })
 
-  if (!user) return
+  if (!user) return { lockedPersonalEvents: 0, lockedTeamEvents: 0, lockedWebhookCount: 0 }
 
   const now = new Date()
   const cleanupScheduledAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -655,7 +655,8 @@ export async function lockResources(
     },
   })
 
-  const totalLockedEvents = eventIdsToLock.length + lockedTeamEvents
+  const lockedPersonalEvents = eventIdsToLock.length
+  const totalLockedEvents = lockedPersonalEvents + lockedTeamEvents
 
   await logSubscriptionHistory({
     userId,
@@ -664,23 +665,29 @@ export async function lockResources(
     toPlan: targetPlan,
     fromStatus: user.subscriptionStatus,
     toStatus: 'LOCKED',
-    reason: `Locked ${totalLockedEvents} events, ${lockedWebhookCount} webhooks`,
+    reason: `Locked ${lockedPersonalEvents} personal events, ${lockedTeamEvents} team events, ${lockedWebhookCount} webhooks`,
     initiatedBy,
     metadata: {
       targetPlan,
-      lockedEventTypes: totalLockedEvents,
-      lockedWebhooks: lockedWebhookCount,
+      lockedPersonalEvents,
       lockedTeamEvents,
+      lockedWebhooks: lockedWebhookCount,
       cleanupScheduledAt: cleanupScheduledAt.toISOString(),
     },
   })
 
   if (!skipNotifications) {
+    const parts: string[] = []
+    if (lockedPersonalEvents > 0) parts.push(`${lockedPersonalEvents} event type(s)`)
+    if (lockedTeamEvents > 0) parts.push(`${lockedTeamEvents} team event type(s)`)
+    if (lockedWebhookCount > 0) parts.push(`${lockedWebhookCount} webhook(s)`)
+    const lockedSummary = parts.length > 0 ? parts.join(', ') : 'some resources'
+
     await createNotification({
       userId,
       type: 'PLAN_LOCKED',
       title: 'Features locked',
-      message: `Features exceeding your ${targetPlan} plan have been locked. ${totalLockedEvents} event type(s) and ${lockedWebhookCount} webhook(s) are deactivated. Reactivate within 7 days to keep your data.`,
+      message: `Features exceeding your ${targetPlan} plan have been locked. ${lockedSummary} deactivated. Reactivate within 7 days to keep your data.`,
     })
 
     // Schedule "cleanup warning" 2 days before cleanupScheduledAt
@@ -698,12 +705,15 @@ export async function lockResources(
         currentPlan: user.plan,
         newPlan: targetPlan,
         cleanupScheduledAt: cleanupScheduledAt.toLocaleDateString(),
-        lockedEventCount: totalLockedEvents,
-        lockedWebhookCount,
+        lockedEventCount: lockedPersonalEvents || undefined,
+        lockedTeamEventCount: lockedTeamEvents || undefined,
+        lockedWebhookCount: lockedWebhookCount || undefined,
         reactivateUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
       })
     }
   }
+
+  return { lockedPersonalEvents, lockedTeamEvents, lockedWebhookCount }
 }
 
 /**

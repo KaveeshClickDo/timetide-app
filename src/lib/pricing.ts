@@ -16,6 +16,8 @@ export interface PricingTier {
   features: string[]
   ctaLabel: string
   ctaVariant: 'outline' | 'default'
+  /** Stripe Price ID for this tier (undefined for FREE) */
+  stripePriceId?: string
 }
 
 export const PRICING_TIERS: PricingTier[] = [

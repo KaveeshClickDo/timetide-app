@@ -3,10 +3,11 @@
 import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { Suspense } from 'react'
-import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, type LucideIcon } from 'lucide-react'
+import { Suspense, useState, useEffect } from 'react'
+import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CreditCard, CheckCircle2, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { PricingCard } from '@/components/pricing-card'
 import { cn } from '@/lib/utils'
 import {
@@ -49,9 +50,11 @@ function UsageBar({ used, limit, label, icon: Icon }: { used: number; limit: num
 }
 
 function BillingContent() {
-  const { data: session } = useSession()
+  const { data: session, update: updateSession } = useSession()
   const searchParams = useSearchParams()
   const highlightPlan = searchParams.get('highlight') as PlanTier | null
+  const success = searchParams.get('success')
+  const canceled = searchParams.get('canceled')
   const currentPlan = (session?.user?.plan as PlanTier) || 'FREE'
   const currentTier = getPlanByTier(currentPlan)
   const limits = getPlanLimits(currentPlan)
@@ -59,6 +62,27 @@ function BillingContent() {
   const planExpiresAt = session?.user?.planExpiresAt
   const gracePeriodEndsAt = session?.user?.gracePeriodEndsAt
   const cleanupScheduledAt = session?.user?.cleanupScheduledAt
+
+  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [portalLoading, setPortalLoading] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'info'; text: string } | null>(null)
+
+  // Show success/cancel feedback from Stripe redirect
+  useEffect(() => {
+    if (success === 'true') {
+      setStatusMessage({ type: 'success', text: 'Subscription activated! Your session will update shortly.' })
+      // Refresh session to pick up new plan
+      updateSession()
+      // Clear message after 8 seconds
+      const timer = setTimeout(() => setStatusMessage(null), 8000)
+      return () => clearTimeout(timer)
+    }
+    if (canceled === 'true') {
+      setStatusMessage({ type: 'info', text: 'Checkout cancelled. No changes were made.' })
+      const timer = setTimeout(() => setStatusMessage(null), 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [success, canceled, updateSession])
 
   // Fetch usage counts
   const { data: eventTypes } = useQuery<{ eventTypes: unknown[] }>({
@@ -82,6 +106,47 @@ function BillingContent() {
   const eventTypeCount = (eventTypes as any)?.eventTypes?.length ?? 0
   const webhookCount = (webhooks as any)?.webhooks?.length ?? 0
 
+  const hasPaidSubscription = subscriptionStatus && !['NONE', 'LOCKED'].includes(subscriptionStatus) && currentPlan !== 'FREE'
+
+  async function handlePlanSelect(plan: PlanTier) {
+    if (plan === 'FREE') return
+    setCheckoutLoading(true)
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to start checkout' })
+        setCheckoutLoading(false)
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+      setCheckoutLoading(false)
+    }
+  }
+
+  async function handleManageSubscription() {
+    setPortalLoading(true)
+    try {
+      const res = await fetch('/api/billing/portal', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to open subscription portal' })
+        setPortalLoading(false)
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+      setPortalLoading(false)
+    }
+  }
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -93,6 +158,24 @@ function BillingContent() {
           Manage your subscription and view available plans.
         </p>
       </div>
+
+      {/* Status Message (success/cancel from Stripe redirect) */}
+      {statusMessage && (
+        <div className={cn(
+          'mb-6 p-4 rounded-lg flex items-center gap-3',
+          statusMessage.type === 'success' && 'bg-green-50 border border-green-200',
+          statusMessage.type === 'info' && 'bg-blue-50 border border-blue-200',
+        )}>
+          {statusMessage.type === 'success' && <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />}
+          <p className={cn(
+            'text-sm',
+            statusMessage.type === 'success' && 'text-green-700',
+            statusMessage.type === 'info' && 'text-blue-700',
+          )}>
+            {statusMessage.text}
+          </p>
+        </div>
+      )}
 
       {/* Current Plan Summary */}
       <Card className="mb-6">
@@ -107,9 +190,22 @@ function BillingContent() {
                 {currentTier.priceLabel}{currentTier.priceSuffix}
               </p>
             </div>
-            <Badge className={getPlanBadgeStyles(currentPlan)}>
-              {currentPlan}
-            </Badge>
+            <div className="flex items-center gap-3">
+              {hasPaidSubscription && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={portalLoading}
+                  onClick={handleManageSubscription}
+                >
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  {portalLoading ? 'Opening...' : 'Manage Subscription'}
+                </Button>
+              )}
+              <Badge className={getPlanBadgeStyles(currentPlan)}>
+                {currentPlan}
+              </Badge>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -161,7 +257,7 @@ function BillingContent() {
                 )}
                 {subscriptionStatus === 'UNSUBSCRIBED' && planExpiresAt && (
                   <p className="text-sm text-amber-700">
-                    Cancelled. PRO features remain active until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
+                    Cancelled. {currentPlan} features remain active until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
                   </p>
                 )}
                 {(subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && gracePeriodEndsAt && (
@@ -200,13 +296,25 @@ function BillingContent() {
             tier={tier}
             currentPlan={currentPlan}
             highlighted={highlightPlan === tier.id}
-            linkHref="#" // TODO: Link to Stripe checkout when payment integration is added
+            onSelect={tier.id !== 'FREE' ? handlePlanSelect : undefined}
+            loading={checkoutLoading}
           />
         ))}
       </div>
 
       <p className="text-center text-sm text-gray-400 mt-8">
-        Need to change your plan? <a href="/dashboard/support" className="text-ocean-600 hover:underline">Contact support</a>.
+        {hasPaidSubscription ? (
+          <>
+            Manage your subscription, update payment method, or view invoices via{' '}
+            <button onClick={handleManageSubscription} className="text-ocean-600 hover:underline">
+              the subscription portal
+            </button>.
+          </>
+        ) : (
+          <>
+            Need help? <a href="/dashboard/support" className="text-ocean-600 hover:underline">Contact support</a>.
+          </>
+        )}
       </p>
     </div>
   )

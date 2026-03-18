@@ -105,11 +105,14 @@ async function logSubscriptionHistory(params: LogHistoryParams): Promise<void> {
  * Activate a paid subscription.
  * Called when user subscribes or admin upgrades.
  * If user was LOCKED, reactivates locked resources.
+ *
+ * @param billingPeriodDaysOrExpiresAt - Number of days (default 30), or an exact Date
+ *   from Stripe's `current_period_end` for precise sync.
  */
 export async function activateSubscription(
   userId: string,
   plan: PlanTier,
-  billingPeriodDays = 30,
+  billingPeriodDaysOrExpiresAt: number | Date = 30,
   initiatedBy = 'system',
 ): Promise<void> {
   const user = await prisma.user.findUnique({
@@ -124,7 +127,14 @@ export async function activateSubscription(
 
   const wasLocked = user.subscriptionStatus === 'LOCKED'
   const now = new Date()
-  const expiresAt = new Date(now.getTime() + billingPeriodDays * 24 * 60 * 60 * 1000)
+  const expiresAt =
+    billingPeriodDaysOrExpiresAt instanceof Date
+      ? billingPeriodDaysOrExpiresAt
+      : new Date(now.getTime() + billingPeriodDaysOrExpiresAt * 24 * 60 * 60 * 1000)
+  const billingPeriodDays =
+    billingPeriodDaysOrExpiresAt instanceof Date
+      ? Math.max(1, Math.ceil((billingPeriodDaysOrExpiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+      : billingPeriodDaysOrExpiresAt
 
   await prisma.user.update({
     where: { id: userId },

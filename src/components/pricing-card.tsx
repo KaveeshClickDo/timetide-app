@@ -13,9 +13,12 @@ interface PricingCardProps {
   currentPlan?: PlanTier
   highlighted?: boolean
   linkHref?: string
+  /** Called when user clicks upgrade/subscribe button. Takes priority over linkHref. */
+  onSelect?: (plan: PlanTier) => void
+  loading?: boolean
 }
 
-export function PricingCard({ tier, currentPlan, highlighted, linkHref }: PricingCardProps) {
+export function PricingCard({ tier, currentPlan, highlighted, linkHref, onSelect, loading }: PricingCardProps) {
   const isCurrentPlan = currentPlan === tier.id
   const isDowngrade =
     currentPlan && TIER_ORDER.indexOf(tier.id) < TIER_ORDER.indexOf(currentPlan)
@@ -61,8 +64,16 @@ export function PricingCard({ tier, currentPlan, highlighted, linkHref }: Pricin
         </Button>
       ) : isDowngrade ? (
         <Button variant="outline" className="w-full" disabled>
-          {/* TODO: Implement downgrade flow when billing is integrated */}
           Downgrade
+        </Button>
+      ) : onSelect ? (
+        <Button
+          variant={tier.ctaVariant}
+          className="w-full"
+          disabled={loading}
+          onClick={() => onSelect(tier.id)}
+        >
+          {loading ? 'Redirecting...' : currentPlan ? `Upgrade to ${tier.name}` : tier.ctaLabel}
         </Button>
       ) : linkHref ? (
         <Link href={linkHref}>

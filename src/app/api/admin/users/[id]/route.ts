@@ -10,6 +10,7 @@ import {
   cancelDowngrade,
 } from '@/lib/subscription-lifecycle'
 import type { PlanTier } from '@/lib/pricing'
+import { syncAdminPlanAction } from '@/lib/stripe-admin-sync'
 
 export async function GET(
   req: NextRequest,
@@ -168,6 +169,11 @@ export async function PATCH(
             gracePeriodDays: validated.gracePeriodDays,
             userEmail: existingUser.email,
           },
+        })
+
+        // Sync admin action to Stripe (non-blocking — admin action succeeds even if Stripe fails)
+        await syncAdminPlanAction(id, validated.planAction, (validated.plan as PlanTier) || 'FREE').catch((err) => {
+          console.error('[admin] Stripe sync failed (non-blocking):', err)
         })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to update subscription'

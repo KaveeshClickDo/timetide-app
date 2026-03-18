@@ -29,23 +29,33 @@ export async function GET(
         subscriptionStatus: true, planActivatedAt: true, planExpiresAt: true,
         gracePeriodEndsAt: true, cleanupScheduledAt: true,
         downgradeReason: true, downgradeInitiatedBy: true,
+        password: true,
+        accounts: { select: { provider: true } },
         _count: { select: { bookingsAsHost: true, eventTypes: true, teamMemberships: true } },
         eventTypes: {
           select: {
-            id: true, title: true, slug: true, isActive: true,
+            id: true, title: true, slug: true, isActive: true, lockedByDowngrade: true,
+            teamId: true,
+            team: { select: { name: true, slug: true } },
             _count: { select: { bookings: true } },
           },
           orderBy: { createdAt: 'desc' },
-          take: 20,
+          take: 50,
         },
         bookingsAsHost: {
           select: {
             id: true, startTime: true, endTime: true, status: true,
             inviteeName: true, inviteeEmail: true,
-            eventType: { select: { title: true } },
+            eventType: {
+              select: {
+                title: true,
+                teamId: true,
+                team: { select: { name: true } },
+              },
+            },
           },
           orderBy: { startTime: 'desc' },
-          take: 20,
+          take: 50,
         },
         teamMemberships: {
           select: {
@@ -56,6 +66,27 @@ export async function GET(
         calendars: {
           select: { id: true, provider: true, name: true, syncStatus: true },
         },
+        webhooks: {
+          select: {
+            id: true, name: true, url: true, isActive: true,
+            lockedByDowngrade: true, eventTriggers: true, createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        supportTickets: {
+          select: {
+            id: true, subject: true, status: true, priority: true, createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        },
+        subscriptionHistory: {
+          select: {
+            id: true, action: true, fromPlan: true, toPlan: true,
+            fromStatus: true, toStatus: true, reason: true, initiatedBy: true, createdAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     })
 
@@ -63,7 +94,12 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    return NextResponse.json(user)
+    const { password, accounts, ...rest } = user
+    return NextResponse.json({
+      ...rest,
+      hasPassword: !!password,
+      authProviders: accounts.map((a) => a.provider),
+    })
   } catch (error) {
     console.error('Admin user detail error:', error)
     return NextResponse.json({ error: 'Failed to fetch user' }, { status: 500 })

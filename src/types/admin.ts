@@ -28,6 +28,7 @@ export interface AdminUserListItem {
   emailVerified: string | null
   hasPassword: boolean
   authProviders: string[]
+  subscriptionStatus: string
   createdAt: string
   _count: {
     bookingsAsHost: number
@@ -40,7 +41,6 @@ export interface AdminUserDetail extends AdminUserListItem {
   timezone: string
   onboardingCompleted: boolean
   emailVerified: string | null
-  subscriptionStatus: string
   planActivatedAt: string | null
   planExpiresAt: string | null
   gracePeriodEndsAt: string | null
@@ -52,6 +52,9 @@ export interface AdminUserDetail extends AdminUserListItem {
     title: string
     slug: string
     isActive: boolean
+    lockedByDowngrade: boolean
+    teamId: string | null
+    team: { name: string; slug: string } | null
     _count: { bookings: number }
   }[]
   bookingsAsHost: {
@@ -61,7 +64,11 @@ export interface AdminUserDetail extends AdminUserListItem {
     status: string
     inviteeName: string
     inviteeEmail: string
-    eventType: { title: string }
+    eventType: {
+      title: string
+      teamId: string | null
+      team: { name: string } | null
+    }
   }[]
   teamMemberships: {
     team: { id: string; name: string; slug: string }
@@ -72,6 +79,33 @@ export interface AdminUserDetail extends AdminUserListItem {
     provider: string
     name: string
     syncStatus: string
+  }[]
+  webhooks: {
+    id: string
+    name: string | null
+    url: string
+    isActive: boolean
+    lockedByDowngrade: boolean
+    eventTriggers: string[]
+    createdAt: string
+  }[]
+  supportTickets: {
+    id: string
+    subject: string
+    status: string
+    priority: string
+    createdAt: string
+  }[]
+  subscriptionHistory: {
+    id: string
+    action: string
+    fromPlan: string
+    toPlan: string
+    fromStatus: string
+    toStatus: string
+    reason: string | null
+    initiatedBy: string
+    createdAt: string
   }[]
 }
 

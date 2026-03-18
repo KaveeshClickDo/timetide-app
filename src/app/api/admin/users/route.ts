@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || ''
     const plan = searchParams.get('plan') || ''
     const role = searchParams.get('role') || ''
+    const status = searchParams.get('status') || ''
+    const subscriptionStatus = searchParams.get('subscriptionStatus') || ''
     const sortBy = searchParams.get('sortBy') || 'createdAt'
     const sortOrder = (searchParams.get('sortOrder') || 'desc') as 'asc' | 'desc'
 
@@ -28,13 +30,25 @@ export async function GET(req: NextRequest) {
 
     if (plan) where.plan = plan
     if (role) where.role = role
+    if (subscriptionStatus) where.subscriptionStatus = subscriptionStatus
+
+    if (status === 'disabled') {
+      where.isDisabled = true
+    } else if (status === 'unverified') {
+      where.isDisabled = false
+      where.emailVerified = null
+    } else if (status === 'active') {
+      where.isDisabled = false
+      where.emailVerified = { not: null }
+    }
 
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
         select: {
           id: true, email: true, name: true, username: true, image: true,
-          plan: true, role: true, isDisabled: true, emailVerified: true, createdAt: true,
+          plan: true, role: true, isDisabled: true, emailVerified: true,
+          subscriptionStatus: true, createdAt: true,
           password: true,
           accounts: { select: { provider: true } },
           _count: { select: { bookingsAsHost: true, eventTypes: true, teamMemberships: true } },

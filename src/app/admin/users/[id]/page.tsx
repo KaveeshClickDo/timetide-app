@@ -8,6 +8,7 @@ import Link from 'next/link'
 import {
   ArrowLeft, Calendar, Users, Globe, Shield, Ban, Eye,
   CheckCircle2, XCircle, Loader2, Trash2, AlertTriangle, Lock, Clock,
+  Webhook, Ticket, History, Mail, Key,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,23 @@ const subscriptionStatusLabels: Record<string, string> = {
   LOCKED: 'Locked',
 }
 
+const ticketStatusColors: Record<string, string> = {
+  OPEN: 'bg-blue-100 text-blue-700',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-700',
+  RESOLVED: 'bg-green-100 text-green-700',
+  CLOSED: 'bg-gray-100 text-gray-600',
+}
+
+const historyActionColors: Record<string, string> = {
+  upgrade: 'bg-green-100 text-green-700',
+  reactivate: 'bg-green-100 text-green-700',
+  downgrade: 'bg-orange-100 text-orange-700',
+  unsubscribe: 'bg-amber-100 text-amber-700',
+  grace_start: 'bg-orange-100 text-orange-700',
+  locked: 'bg-red-100 text-red-700',
+  cleanup: 'bg-red-100 text-red-700',
+}
+
 /** Which plans can a given plan be downgraded to */
 const downgradeTargets: Record<string, string[]> = {
   TEAM: ['PRO', 'FREE'],
@@ -75,6 +93,13 @@ const upgradeTargets: Record<string, string[]> = {
   FREE: ['PRO', 'TEAM'],
   PRO: ['TEAM'],
   TEAM: [],
+}
+
+function formatInitiatedBy(initiatedBy: string): string {
+  if (initiatedBy === 'user') return 'User'
+  if (initiatedBy === 'system') return 'System'
+  if (initiatedBy.startsWith('admin:')) return 'Admin'
+  return initiatedBy
 }
 
 export default function AdminUserDetailPage() {
@@ -178,6 +203,20 @@ export default function AdminUserDetailPage() {
       </div>
     )
   }
+
+  // Sign-up method display
+  const signupMethod = user.isDisabled
+    ? null
+    : user.authProviders.includes('google')
+      ? 'Google'
+      : user.hasPassword
+        ? 'Email & Password'
+        : 'Pending'
+
+  const personalEventTypes = user.eventTypes.filter((et) => !et.teamId)
+  const teamEventTypes = user.eventTypes.filter((et) => et.teamId)
+  const personalBookings = user.bookingsAsHost.filter((b) => !b.eventType.teamId)
+  const teamBookings = user.bookingsAsHost.filter((b) => b.eventType.teamId)
 
   return (
     <div>
@@ -297,10 +336,21 @@ export default function AdminUserDetailPage() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500 mb-1">Stats</p>
-                <p className="text-sm text-gray-600">
-                  {user._count.bookingsAsHost} bookings &middot; {user._count.eventTypes} events &middot; {user._count.teamMemberships} teams
-                </p>
+                <p className="text-xs text-gray-500 mb-1">Sign-up Method</p>
+                <div className="flex items-center gap-1.5">
+                  {signupMethod === 'Google' && (
+                    <><Mail className="h-3.5 w-3.5 text-blue-500" /><span className="text-sm font-medium">Google</span></>
+                  )}
+                  {signupMethod === 'Email & Password' && (
+                    <><Key className="h-3.5 w-3.5 text-gray-500" /><span className="text-sm font-medium">Email & Password</span></>
+                  )}
+                  {signupMethod === 'Pending' && (
+                    <span className="text-sm text-yellow-600 font-medium">Pending</span>
+                  )}
+                  {!signupMethod && (
+                    <span className="text-sm text-gray-400">—</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -416,33 +466,44 @@ export default function AdminUserDetailPage() {
               </Button>
             )}
 
-            {/* Locked-specific: show reactivate */}
-            {user.subscriptionStatus === 'LOCKED' && (
-              <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => {
-                  setUpgradeTargetPlan(user.plan === 'FREE' ? 'PRO' : user.plan)
-                  setShowUpgradeDialog(true)
-                }}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                Reactivate
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>
 
       {/* Tabs */}
       <Tabs defaultValue="event-types">
-        <TabsList>
-          <TabsTrigger value="event-types">Event Types ({user.eventTypes.length})</TabsTrigger>
-          <TabsTrigger value="bookings">Bookings ({user.bookingsAsHost.length})</TabsTrigger>
-          <TabsTrigger value="teams">Teams ({user.teamMemberships.length})</TabsTrigger>
-          <TabsTrigger value="calendars">Calendars ({user.calendars.length})</TabsTrigger>
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="event-types">
+            <Calendar className="h-3.5 w-3.5 mr-1" />
+            Event Types ({user.eventTypes.length})
+          </TabsTrigger>
+          <TabsTrigger value="bookings">
+            <Calendar className="h-3.5 w-3.5 mr-1" />
+            Bookings ({user.bookingsAsHost.length})
+          </TabsTrigger>
+          <TabsTrigger value="teams">
+            <Users className="h-3.5 w-3.5 mr-1" />
+            Teams ({user.teamMemberships.length})
+          </TabsTrigger>
+          <TabsTrigger value="webhooks">
+            <Webhook className="h-3.5 w-3.5 mr-1" />
+            Webhooks ({user.webhooks.length})
+          </TabsTrigger>
+          <TabsTrigger value="tickets">
+            <Ticket className="h-3.5 w-3.5 mr-1" />
+            Tickets ({user.supportTickets.length})
+          </TabsTrigger>
+          <TabsTrigger value="calendars">
+            <Globe className="h-3.5 w-3.5 mr-1" />
+            Calendars ({user.calendars.length})
+          </TabsTrigger>
+          <TabsTrigger value="history">
+            <History className="h-3.5 w-3.5 mr-1" />
+            History ({user.subscriptionHistory.length})
+          </TabsTrigger>
         </TabsList>
 
+        {/* Event Types Tab */}
         <TabsContent value="event-types" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -450,26 +511,73 @@ export default function AdminUserDetailPage() {
                 <p className="p-6 text-sm text-gray-500 text-center">No event types</p>
               ) : (
                 <div className="divide-y">
-                  {user.eventTypes.map((et) => (
-                    <div key={et.id} className="flex items-center justify-between p-4">
-                      <div>
-                        <p className="text-sm font-medium">{et.title}</p>
-                        <p className="text-xs text-gray-500">/{user.username}/{et.slug}</p>
+                  {/* Personal */}
+                  {personalEventTypes.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-gray-50">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Personal ({personalEventTypes.length})</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">{et._count.bookings} bookings</span>
-                        <Badge className={cn('text-[10px]', et.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>
-                          {et.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
+                      {personalEventTypes.map((et) => (
+                        <div key={et.id} className="flex items-center justify-between p-4">
+                          <div>
+                            <p className="text-sm font-medium">{et.title}</p>
+                            <p className="text-xs text-gray-500">/{user.username}/{et.slug}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{et._count.bookings} bookings</span>
+                            {et.lockedByDowngrade && (
+                              <Badge className="text-[10px] bg-red-100 text-red-700">
+                                <Lock className="h-2.5 w-2.5 mr-0.5" />
+                                Locked
+                              </Badge>
+                            )}
+                            <Badge className={cn('text-[10px]', et.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>
+                              {et.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {/* Team */}
+                  {teamEventTypes.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-gray-50">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Team ({teamEventTypes.length})</p>
                       </div>
-                    </div>
-                  ))}
+                      {teamEventTypes.map((et) => (
+                        <div key={et.id} className="flex items-center justify-between p-4">
+                          <div>
+                            <p className="text-sm font-medium">{et.title}</p>
+                            <p className="text-xs text-gray-500">
+                              /team/{et.team?.slug ?? '?'}/{et.slug}
+                              <span className="ml-1 text-purple-500">({et.team?.name ?? 'Team'})</span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{et._count.bookings} bookings</span>
+                            {et.lockedByDowngrade && (
+                              <Badge className="text-[10px] bg-red-100 text-red-700">
+                                <Lock className="h-2.5 w-2.5 mr-0.5" />
+                                Locked
+                              </Badge>
+                            )}
+                            <Badge className="text-[10px] bg-purple-100 text-purple-700">Team</Badge>
+                            <Badge className={cn('text-[10px]', et.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>
+                              {et.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Bookings Tab */}
         <TabsContent value="bookings" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -477,30 +585,69 @@ export default function AdminUserDetailPage() {
                 <p className="p-6 text-sm text-gray-500 text-center">No bookings</p>
               ) : (
                 <div className="divide-y">
-                  {user.bookingsAsHost.map((b) => (
-                    <div key={b.id} className="flex items-center justify-between p-4">
-                      <div>
-                        <p className="text-sm font-medium">{b.eventType.title}</p>
-                        <p className="text-xs text-gray-500">
-                          {b.inviteeName} ({b.inviteeEmail})
-                        </p>
+                  {/* Personal */}
+                  {personalBookings.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-gray-50">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Personal ({personalBookings.length})</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-500">
-                          {new Date(b.startTime).toLocaleDateString()}
-                        </span>
-                        <Badge className={cn('text-[10px]', statusColors[b.status] || 'bg-gray-100 text-gray-600')}>
-                          {b.status}
-                        </Badge>
+                      {personalBookings.map((b) => (
+                        <div key={b.id} className="flex items-center justify-between p-4">
+                          <div>
+                            <p className="text-sm font-medium">{b.eventType.title}</p>
+                            <p className="text-xs text-gray-500">
+                              {b.inviteeName} ({b.inviteeEmail})
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {new Date(b.startTime).toLocaleDateString()}
+                            </span>
+                            <Badge className={cn('text-[10px]', statusColors[b.status] || 'bg-gray-100 text-gray-600')}>
+                              {b.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {/* Team */}
+                  {teamBookings.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-gray-50">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Team ({teamBookings.length})</p>
                       </div>
-                    </div>
-                  ))}
+                      {teamBookings.map((b) => (
+                        <div key={b.id} className="flex items-center justify-between p-4">
+                          <div>
+                            <p className="text-sm font-medium">{b.eventType.title}</p>
+                            <p className="text-xs text-gray-500">
+                              {b.inviteeName} ({b.inviteeEmail})
+                              {b.eventType.team && (
+                                <span className="ml-1 text-purple-500">· {b.eventType.team.name}</span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              {new Date(b.startTime).toLocaleDateString()}
+                            </span>
+                            <Badge className="text-[10px] bg-purple-100 text-purple-700">Team</Badge>
+                            <Badge className={cn('text-[10px]', statusColors[b.status] || 'bg-gray-100 text-gray-600')}>
+                              {b.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Teams Tab */}
         <TabsContent value="teams" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -523,6 +670,85 @@ export default function AdminUserDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* Webhooks Tab */}
+        <TabsContent value="webhooks" className="mt-4">
+          <Card>
+            <CardContent className="p-0">
+              {user.webhooks.length === 0 ? (
+                <p className="p-6 text-sm text-gray-500 text-center">No webhooks</p>
+              ) : (
+                <div className="divide-y">
+                  {user.webhooks.map((wh) => (
+                    <div key={wh.id} className="flex items-start justify-between p-4">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{wh.name || 'Unnamed webhook'}</p>
+                        <p className="text-xs text-gray-500 truncate">{wh.url}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {wh.eventTriggers.join(', ')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4 shrink-0">
+                        <span className="text-xs text-gray-400">
+                          {new Date(wh.createdAt).toLocaleDateString()}
+                        </span>
+                        {wh.lockedByDowngrade && (
+                          <Badge className="text-[10px] bg-red-100 text-red-700">
+                            <Lock className="h-2.5 w-2.5 mr-0.5" />
+                            Locked
+                          </Badge>
+                        )}
+                        <Badge className={cn('text-[10px]', wh.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')}>
+                          {wh.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tickets Tab */}
+        <TabsContent value="tickets" className="mt-4">
+          <Card>
+            <CardContent className="p-0">
+              {user.supportTickets.length === 0 ? (
+                <p className="p-6 text-sm text-gray-500 text-center">No support tickets</p>
+              ) : (
+                <div className="divide-y">
+                  {user.supportTickets.map((ticket) => (
+                    <div key={ticket.id} className="flex items-center justify-between p-4">
+                      <div>
+                        <p className="text-sm font-medium">{ticket.subject}</p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(ticket.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={cn('text-[10px] capitalize', 'bg-gray-100 text-gray-600')}>
+                          {ticket.priority.toLowerCase()}
+                        </Badge>
+                        <Badge className={cn('text-[10px]', ticketStatusColors[ticket.status] || 'bg-gray-100 text-gray-600')}>
+                          {ticket.status.replace('_', ' ')}
+                        </Badge>
+                        <Link
+                          href={`/admin/tickets/${ticket.id}`}
+                          className="text-xs text-indigo-600 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          View
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Calendars Tab */}
         <TabsContent value="calendars" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -539,6 +765,52 @@ export default function AdminUserDetailPage() {
                       <Badge className={cn('text-[10px]', syncStatusColors[cal.syncStatus] || 'bg-gray-100 text-gray-600')}>
                         {cal.syncStatus}
                       </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Subscription History Tab */}
+        <TabsContent value="history" className="mt-4">
+          <Card>
+            <CardContent className="p-0">
+              {user.subscriptionHistory.length === 0 ? (
+                <p className="p-6 text-sm text-gray-500 text-center">No subscription history</p>
+              ) : (
+                <div className="divide-y">
+                  {user.subscriptionHistory.map((entry) => (
+                    <div key={entry.id} className="flex items-start justify-between p-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge className={cn('text-[10px] capitalize', historyActionColors[entry.action] || 'bg-gray-100 text-gray-600')}>
+                            {entry.action.replace('_', ' ')}
+                          </Badge>
+                          <span className="text-xs text-gray-500">
+                            by {formatInitiatedBy(entry.initiatedBy)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-700">
+                          <span className={cn('font-medium', planColors[entry.fromPlan]?.replace('bg-', 'text-').split(' ')[0] || '')}>
+                            {entry.fromPlan}
+                          </span>
+                          {' → '}
+                          <span className={cn('font-medium', planColors[entry.toPlan]?.replace('bg-', 'text-').split(' ')[0] || '')}>
+                            {entry.toPlan}
+                          </span>
+                          <span className="text-xs text-gray-400 ml-2">
+                            ({entry.fromStatus} → {entry.toStatus})
+                          </span>
+                        </p>
+                        {entry.reason && (
+                          <p className="text-xs text-gray-500 mt-0.5">{entry.reason}</p>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-400 shrink-0 ml-4">
+                        {new Date(entry.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -650,7 +922,7 @@ export default function AdminUserDetailPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-gray-500">
-                  This activates a 30-day billing period. If the user was locked, all resources will be restored.
+                  This activates a 30-day billing period. If the user is currently locked (LOCKED status), all locked resources will be restored.
                 </p>
               </div>
             </AlertDialogDescription>

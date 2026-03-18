@@ -71,11 +71,13 @@ function BillingContent() {
   useEffect(() => {
     if (success === 'true') {
       setStatusMessage({ type: 'success', text: 'Subscription activated! Your session will update shortly.' })
-      // Refresh session to pick up new plan
+      // Refresh session — retry a few times since webhook may still be processing
       updateSession()
-      // Clear message after 8 seconds
-      const timer = setTimeout(() => setStatusMessage(null), 8000)
-      return () => clearTimeout(timer)
+      const retry1 = setTimeout(() => updateSession(), 3000)
+      const retry2 = setTimeout(() => updateSession(), 8000)
+      // Clear message after 10 seconds
+      const clear = setTimeout(() => setStatusMessage(null), 10000)
+      return () => { clearTimeout(retry1); clearTimeout(retry2); clearTimeout(clear) }
     }
     if (canceled === 'true') {
       setStatusMessage({ type: 'info', text: 'Checkout cancelled. No changes were made.' })

@@ -116,7 +116,25 @@ export const authOptions: NextAuthOptions = {
 
     async jwt({ token, user, account, trigger, session }) {
       // Handle session updates
-      if (trigger === 'update' && session) {
+      if (trigger === 'update') {
+        // If no session payload, force a DB re-sync (used after Stripe checkout etc.)
+        if (!session) {
+          if (token.id) {
+            const dbUser = await prisma.user.findUnique({
+              where: { id: token.id as string },
+              select: { plan: true, subscriptionStatus: true, planExpiresAt: true, gracePeriodEndsAt: true, cleanupScheduledAt: true },
+            });
+            if (dbUser) {
+              token.plan = dbUser.plan ?? 'FREE';
+              token.subscriptionStatus = dbUser.subscriptionStatus ?? 'NONE';
+              token.planExpiresAt = dbUser.planExpiresAt?.getTime();
+              token.gracePeriodEndsAt = dbUser.gracePeriodEndsAt?.getTime();
+              token.cleanupScheduledAt = dbUser.cleanupScheduledAt?.getTime();
+              token.lastVerified = Date.now();
+            }
+          }
+          return token;
+        }
         // Handle impersonation start
         if (session.impersonateUserId && token.role === 'ADMIN') {
           const targetUser = await prisma.user.findUnique({

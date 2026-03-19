@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       apiVersion: event.api_version ?? null,
       livemode: event.livemode,
       processingStatus,
-      errorMessage: errorMessage || debugInfo,
+      errorMessage: errorMessage || (event as any)._debugAction || debugInfo,
       processingTimeMs,
       userId,
       stripeCustomerId,
@@ -194,25 +194,33 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
 
   const previousAttributes = (event.data as unknown as { previous_attributes?: Record<string, unknown> }).previous_attributes || {}
 
-  // Debug: log key fields to understand what Stripe sends
-  console.log(`[stripe-webhook] subscription.updated: user=${user.id} status=${user.subscriptionStatus} plan=${user.plan} cancel_at_period_end=${subscription.cancel_at_period_end} prev_attrs=${JSON.stringify(Object.keys(previousAttributes))}`)
+  // Store debug info in webhook log via thrown metadata
+  const debugParts = [
+    `cancel_at_period_end=${subscription.cancel_at_period_end}`,
+    `prev_attrs=[${Object.keys(previousAttributes).join(',')}]`,
+    `user_status=${user.subscriptionStatus}`,
+    `user_plan=${user.plan}`,
+  ]
 
   // Check if user scheduled a cancellation via portal
-  // Use both previous_attributes check AND direct state check for robustness
   if (subscription.cancel_at_period_end) {
     if (user.subscriptionStatus === 'ACTIVE') {
       await voluntaryUnsubscribe(user.id, 'user')
+      // Update debug info in the outer scope via the event object
+      ;(event as any)._debugAction = `UNSUBSCRIBED | ${debugParts.join(' ')}`
       console.log(`[stripe-webhook] User cancelled (period end): user=${user.id}`)
       return
     } else if (user.subscriptionStatus === 'DOWNGRADING') {
+      ;(event as any)._debugAction = `NOOP_DOWNGRADING | ${debugParts.join(' ')}`
       console.log(`[stripe-webhook] Cancel confirmed for DOWNGRADING user: user=${user.id}`)
       return
     }
-    // Already UNSUBSCRIBED or other status — no action needed
     if (['UNSUBSCRIBED', 'GRACE_PERIOD', 'LOCKED'].includes(user.subscriptionStatus)) {
+      ;(event as any)._debugAction = `NOOP_ALREADY_${user.subscriptionStatus} | ${debugParts.join(' ')}`
       return
     }
   }
+  ;(event as any)._debugAction = `NO_CANCEL_MATCH | ${debugParts.join(' ')}`
 
   // Check if user un-cancelled (reversed a pending cancellation)
   const cancelChanged = 'cancel_at_period_end' in previousAttributes || 'cancel_at' in previousAttributes

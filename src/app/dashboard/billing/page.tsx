@@ -8,6 +8,7 @@ import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CreditCard, CheckCircle2
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { PricingCard } from '@/components/pricing-card'
 import { cn } from '@/lib/utils'
 import {
@@ -65,9 +66,9 @@ function BillingContent() {
 
   const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
 
-  const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null)
   const [portalLoading, setPortalLoading] = useState(false)
-  const [downgradeLoading, setDowngradeLoading] = useState(false)
+  const [confirmPlan, setConfirmPlan] = useState<PlanTier | null>(null)
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'info'; text: string } | null>(null)
 
   // Show success/cancel feedback from Stripe redirect
@@ -133,7 +134,7 @@ function BillingContent() {
 
     // Cancelled user switching to lower plan → schedule at period end
     if (canScheduleDowngrade) {
-      setDowngradeLoading(true)
+      setLoadingPlan(plan)
       try {
         const res = await fetch('/api/billing/schedule-downgrade', {
           method: 'POST',
@@ -153,13 +154,25 @@ function BillingContent() {
       } catch {
         setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
       } finally {
-        setDowngradeLoading(false)
+        setLoadingPlan(null)
       }
       return
     }
 
-    // Normal upgrade or re-subscribe → checkout
-    setCheckoutLoading(true)
+    // If already on a paid plan (upgrade), show confirmation first
+    const isUpgrade = subscriptionStatus === 'ACTIVE' && currentPlan !== 'FREE' && TIER_ORDER.indexOf(plan) > TIER_ORDER.indexOf(currentPlan)
+    if (isUpgrade) {
+      setConfirmPlan(plan)
+      return
+    }
+
+    // Normal subscribe or re-subscribe → checkout
+    await proceedToCheckout(plan)
+  }
+
+  async function proceedToCheckout(plan: PlanTier) {
+    setConfirmPlan(null)
+    setLoadingPlan(plan)
     try {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
@@ -171,16 +184,16 @@ function BillingContent() {
         window.location.href = data.url
       } else {
         setStatusMessage({ type: 'info', text: data.error || 'Failed to start checkout' })
-        setCheckoutLoading(false)
+        setLoadingPlan(null)
       }
     } catch {
       setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
-      setCheckoutLoading(false)
+      setLoadingPlan(null)
     }
   }
 
   async function handleCancelDowngrade() {
-    setDowngradeLoading(true)
+    setLoadingPlan(currentPlan)
     try {
       const res = await fetch('/api/billing/schedule-downgrade', { method: 'DELETE' })
       const data = await res.json()
@@ -195,7 +208,7 @@ function BillingContent() {
     } catch {
       setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
     } finally {
-      setDowngradeLoading(false)
+      setLoadingPlan(null)
     }
   }
 
@@ -342,11 +355,11 @@ function BillingContent() {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={downgradeLoading}
+                      disabled={loadingPlan !== null}
                       onClick={handleCancelDowngrade}
                       className="ml-4 flex-shrink-0"
                     >
-                      {downgradeLoading ? 'Cancelling...' : 'Cancel Switch'}
+                      {loadingPlan !== null ? 'Cancelling...' : 'Cancel Switch'}
                     </Button>
                   </div>
                 )}
@@ -368,7 +381,17 @@ function BillingContent() {
         </CardHeader>
         <CardContent className="space-y-4">
           <UsageBar used={eventTypeCount} limit={limits.maxEventTypes} label="Event Types" icon={LinkIcon} />
-          <UsageBar used={webhookCount} limit={limits.maxWebhooks} label="Webhooks" icon={Webhook} />
+          {limits.maxWebhooks > 0 ? (
+            <UsageBar used={webhookCount} limit={limits.maxWebhooks} label="Webhooks" icon={Webhook} />
+          ) : (
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2 text-gray-400">
+                <Webhook className="h-4 w-4" />
+                Webhooks
+              </div>
+              <span className="text-gray-400 font-medium">Not included in plan</span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -376,7 +399,8 @@ function BillingContent() {
       <div className="grid md:grid-cols-3 gap-8">
         {PRICING_TIERS.map((tier) => {
           // Subscription is inactive or cancelled — allow subscribing to any paid plan
-          const subscriptionInactive = !subscriptionStatus || ['NONE', 'UNSUBSCRIBED', 'GRACE_PERIOD', 'LOCKED', 'DOWNGRADING'].includes(subscriptionStatus)
+          // But FREE users with NONE status are on their correct plan, not "inactive"
+          const subscriptionInactive = currentPlan !== 'FREE' && (!subscriptionStatus || ['NONE', 'UNSUBSCRIBED', 'GRACE_PERIOD', 'LOCKED', 'DOWNGRADING'].includes(subscriptionStatus))
           return (
             <PricingCard
               key={tier.id}
@@ -384,7 +408,8 @@ function BillingContent() {
               currentPlan={currentPlan}
               highlighted={highlightPlan === tier.id}
               onSelect={tier.id !== 'FREE' ? handlePlanSelect : undefined}
-              loading={checkoutLoading || downgradeLoading}
+              loading={loadingPlan === tier.id}
+              disabled={loadingPlan !== null && loadingPlan !== tier.id}
               subscriptionInactive={subscriptionInactive}
             />
           )
@@ -405,6 +430,28 @@ function BillingContent() {
           </>
         )}
       </p>
+
+      {/* Upgrade Confirmation Dialog */}
+      <Dialog open={confirmPlan !== null} onOpenChange={(open) => { if (!open) setConfirmPlan(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upgrade to {confirmPlan ? getPlanByTier(confirmPlan).name : ''}</DialogTitle>
+            <DialogDescription>
+              You&apos;re currently on the <strong>{currentTier.name}</strong> plan ({currentTier.priceLabel}{currentTier.priceSuffix}).
+              Upgrading to <strong>{confirmPlan ? getPlanByTier(confirmPlan).name : ''}</strong> ({confirmPlan ? getPlanByTier(confirmPlan).priceLabel : ''}{confirmPlan ? getPlanByTier(confirmPlan).priceSuffix : ''}) will
+              take effect immediately. Stripe will prorate the difference.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConfirmPlan(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => confirmPlan && proceedToCheckout(confirmPlan)}>
+              Confirm Upgrade
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

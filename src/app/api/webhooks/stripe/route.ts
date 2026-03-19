@@ -71,6 +71,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Webhook signature verification failed` }, { status: 400 })
   }
 
+  const startTime = Date.now()
+  let processingStatus = 'SUCCESS'
+  let errorMessage: string | null = null
+
+  // Resolve customer/user for logging
+  const stripeCustomerId = extractCustomerId(event.data.object as { customer?: string | Stripe.Customer | Stripe.DeletedCustomer | null }) ?? null
+  let userId: string | null = null
+  if (stripeCustomerId) {
+    const user = await getUserByStripeCustomerId(stripeCustomerId)
+    userId = user?.id ?? null
+  }
+
   try {
     switch (event.type) {
       case 'customer.subscription.created':
@@ -94,12 +106,32 @@ export async function POST(req: NextRequest) {
         break
 
       default:
+        processingStatus = 'UNHANDLED'
         console.log(`[stripe-webhook] Unhandled event type: ${event.type}`)
     }
   } catch (error) {
-    // Log but return 200 — Stripe retries on non-2xx and we don't want infinite retries
+    processingStatus = 'ERROR'
+    errorMessage = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[stripe-webhook] Error handling ${event.type}:`, error)
   }
+
+  // Log webhook event (fire-and-forget)
+  const processingTimeMs = Date.now() - startTime
+  prisma.stripeWebhookLog.create({
+    data: {
+      eventId: event.id,
+      eventType: event.type,
+      apiVersion: event.api_version ?? null,
+      livemode: event.livemode,
+      processingStatus,
+      errorMessage,
+      processingTimeMs,
+      userId,
+      stripeCustomerId,
+    },
+  }).catch((err) => {
+    console.error('[stripe-webhook] Failed to log webhook event:', err)
+  })
 
   return NextResponse.json({ received: true })
 }

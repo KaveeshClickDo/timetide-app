@@ -16,11 +16,13 @@ interface PricingCardProps {
   /** Called when user clicks upgrade/subscribe button. Takes priority over linkHref. */
   onSelect?: (plan: PlanTier) => void
   loading?: boolean
+  /** When true, another plan's button is loading — disable this card's button */
+  disabled?: boolean
   /** When true, subscription is inactive (grace/locked/none) — allow re-subscribe to any paid plan */
   subscriptionInactive?: boolean
 }
 
-export function PricingCard({ tier, currentPlan, highlighted, linkHref, onSelect, loading, subscriptionInactive }: PricingCardProps) {
+export function PricingCard({ tier, currentPlan, highlighted, linkHref, onSelect, loading, disabled, subscriptionInactive }: PricingCardProps) {
   const isCurrentPlan = currentPlan === tier.id && !subscriptionInactive
   const isDowngrade =
     currentPlan && !subscriptionInactive && TIER_ORDER.indexOf(tier.id) < TIER_ORDER.indexOf(currentPlan)
@@ -72,7 +74,7 @@ export function PricingCard({ tier, currentPlan, highlighted, linkHref, onSelect
         <Button
           variant={tier.ctaVariant}
           className="w-full"
-          disabled={loading}
+          disabled={loading || disabled}
           onClick={() => onSelect(tier.id)}
         >
           {loading ? 'Redirecting...' : subscriptionInactive ? `Subscribe to ${tier.name}` : currentPlan ? `Upgrade to ${tier.name}` : tier.ctaLabel}

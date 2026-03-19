@@ -14,6 +14,7 @@ import {
   BarChart3,
   Server,
   ScrollText,
+  Webhook,
   Menu,
   X,
   LogOut,
@@ -42,6 +43,7 @@ const navigation = [
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
   { name: 'System', href: '/admin/system', icon: Server },
   { name: 'Audit Log', href: '/admin/audit-log', icon: ScrollText },
+  { name: 'Webhook Logs', href: '/admin/webhook-logs', icon: Webhook },
 ]
 
 export default function AdminLayout({

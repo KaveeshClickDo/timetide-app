@@ -854,3 +854,26 @@ model AdminAuditLog {
   @@index([action])
   @@index([createdAt])
 }
+
+// ============================================================================
+// STRIPE WEBHOOK LOG
+// ============================================================================
+
+model StripeWebhookLog {
+  id               String   @id @default(cuid())
+  eventId          String   @unique
+  eventType        String
+  apiVersion       String?
+  livemode         Boolean  @default(false)
+  processingStatus String   @default("SUCCESS") // SUCCESS | ERROR | UNHANDLED
+  errorMessage     String?  @db.Text
+  processingTimeMs Int?
+  userId           String?
+  stripeCustomerId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([processingStatus])
+  @@index([createdAt])
+}

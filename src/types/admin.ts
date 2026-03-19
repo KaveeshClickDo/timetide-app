@@ -179,6 +179,20 @@ export interface AdminAuditLogEntry {
   admin: { id: string; name: string | null; email: string }
 }
 
+export interface StripeWebhookLogEntry {
+  id: string
+  eventId: string
+  eventType: string
+  apiVersion: string | null
+  livemode: boolean
+  processingStatus: string
+  errorMessage: string | null
+  processingTimeMs: number | null
+  userId: string | null
+  stripeCustomerId: string | null
+  createdAt: string
+}
+
 export interface PlatformAnalytics {
   signupTrends: { date: string; count: number }[]
   bookingTrends: { date: string; count: number }[]

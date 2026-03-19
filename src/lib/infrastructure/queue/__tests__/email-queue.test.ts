@@ -93,14 +93,17 @@ function makeRecurringData(overrides: Partial<RecurringBookingEmailData> = {}): 
     inviteeName: 'Bob Guest',
     inviteeEmail: 'bob@guest.com',
     eventTitle: 'Weekly Standup',
+    startTime: 'March 10, 2026 10:00 AM',
+    endTime: 'March 10, 2026 10:30 AM',
+    bookingUid: 'uid-1',
     timezone: 'UTC',
     totalOccurrences: 4,
     frequencyLabel: 'weekly',
-    occurrences: [
-      { startTime: 'March 10, 2026 10:00 AM', endTime: 'March 10, 2026 10:30 AM', bookingUid: 'uid-1' },
-      { startTime: 'March 17, 2026 10:00 AM', endTime: 'March 17, 2026 10:30 AM', bookingUid: 'uid-2' },
-      { startTime: 'March 24, 2026 10:00 AM', endTime: 'March 24, 2026 10:30 AM', bookingUid: 'uid-3' },
-      { startTime: 'March 31, 2026 10:00 AM', endTime: 'March 31, 2026 10:30 AM', bookingUid: 'uid-4' },
+    recurringDates: [
+      { startTime: 'March 10, 2026 10:00 AM', endTime: 'March 10, 2026 10:30 AM' },
+      { startTime: 'March 17, 2026 10:00 AM', endTime: 'March 17, 2026 10:30 AM' },
+      { startTime: 'March 24, 2026 10:00 AM', endTime: 'March 24, 2026 10:30 AM' },
+      { startTime: 'March 31, 2026 10:00 AM', endTime: 'March 31, 2026 10:30 AM' },
     ],
     ...overrides,
   };
@@ -409,9 +412,11 @@ describe('queueBulkConfirmedByHostEmail', () => {
 describe('queueTeamMemberAddedEmail', () => {
   it('sends team member added notification', async () => {
     const teamData: TeamEmailData = {
+      memberName: 'Charlie Team',
       teamName: 'Engineering',
-      inviterName: 'Alice Host',
+      actorName: 'Alice Host',
       role: 'MEMBER',
+      teamUrl: 'https://timetide.app/team/engineering',
     };
     await queueTeamMemberAddedEmail('charlie@team.com', teamData);
 
@@ -428,9 +433,11 @@ describe('queueTeamMemberAddedEmail', () => {
 describe('queueTeamInvitationEmail', () => {
   it('sends team invitation email', async () => {
     const teamData: TeamEmailData & { expiresIn: string; acceptUrl: string } = {
+      memberName: 'Dave Team',
       teamName: 'Design',
-      inviterName: 'Alice Host',
+      actorName: 'Alice Host',
       role: 'MEMBER',
+      teamUrl: 'https://timetide.app/team/design',
       expiresIn: '7 days',
       acceptUrl: 'https://timetide.app/invite/abc123',
     };

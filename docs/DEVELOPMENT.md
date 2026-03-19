@@ -396,7 +396,12 @@ timetide-app/
 | Client-Side Gating | Completed | Hook + badge + modal + page components |
 | Usage Dashboard | Completed | Event types, calendars, webhooks bars |
 | Dev Plan Switcher | Completed | Mock endpoint for testing |
-| Stripe Integration | Partial | Stub exists, not wired |
+| Stripe Integration | Completed | Checkout, portal, webhooks, subscription management |
+| Subscription Lifecycle | Completed | State machine: NONE→ACTIVE→UNSUBSCRIBED→GRACE→LOCKED |
+| Admin Subscription Mgmt | Completed | Upgrade, immediate/grace downgrade, cancel downgrade, preview |
+| Stripe Admin Sync | Completed | Non-blocking sync with failure warnings |
+| Resource Locking | Completed | Lock/unlock event types, webhooks, team events on plan change |
+| Downgrade Emails | Completed | Separate templates for immediate vs grace period |
 
 ### Other Features
 
@@ -441,8 +446,13 @@ interface Session {
     image?: string;
     username?: string;
     timezone: string;
-    plan: UserPlan;       // FREE | PRO | TEAM
+    plan: UserPlan;              // FREE | PRO | TEAM
+    role: UserRole;              // USER | ADMIN
     onboardingCompleted: boolean;
+    subscriptionStatus: string;  // NONE | ACTIVE | UNSUBSCRIBED | GRACE_PERIOD | DOWNGRADING | LOCKED
+    planExpiresAt?: string;
+    gracePeriodEndsAt?: string;
+    cleanupScheduledAt?: string;
   }
 }
 ```
@@ -516,6 +526,13 @@ EMAIL_FROM="TimeTide <noreply@yourdomain.com>"
 # Redis
 REDIS_URL="redis://localhost:6379"
 
+# Stripe
+STRIPE_SECRET_KEY="sk_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_..."
+STRIPE_PRICE_PRO_MONTHLY="price_..."
+STRIPE_PRICE_TEAM_MONTHLY="price_..."
+
 # Zoom
 ZOOM_CLIENT_ID="your-zoom-client-id"
 ZOOM_CLIENT_SECRET="your-zoom-client-secret"
@@ -524,6 +541,9 @@ ZOOM_CLIENT_SECRET="your-zoom-client-secret"
 MICROSOFT_CLIENT_ID="your-azure-app-id"
 MICROSOFT_CLIENT_SECRET="your-azure-client-secret"
 MICROSOFT_TENANT_ID="common"
+
+# Admin
+ADMIN_EMAILS="admin@yourdomain.com"
 ```
 
 ### Development Scripts
@@ -623,7 +643,6 @@ Generated to `src/generated/prisma/` (configured in `prisma.config.ts`). Path al
 
 | Feature | Description |
 |---------|-------------|
-| **Stripe Integration** | Payment processing for paid bookings |
 | **Structured Logging** | Replace console.log with LogTail/similar |
 | **Health Checks** | Endpoint for infrastructure monitoring |
 | **Test Coverage** | Expand unit and integration tests |
@@ -670,6 +689,12 @@ Generated to `src/generated/prisma/` (configured in `prisma.config.ts`). Path al
 | Queue system | `src/lib/infrastructure/queue/index.ts` |
 | Recurring utils | `src/lib/scheduling/recurring/utils.ts` |
 | Notifications | `src/lib/notifications.ts` |
+| Stripe client | `src/lib/stripe.ts` |
+| Stripe admin sync | `src/lib/stripe-admin-sync.ts` |
+| Subscription lifecycle | `src/lib/subscription-lifecycle.ts` |
+| Subscription queue | `src/lib/infrastructure/queue/subscription-queue.ts` |
+| Admin auth | `src/lib/admin-auth.ts` |
+| Admin audit | `src/lib/admin-audit.ts` |
 
 ---
 

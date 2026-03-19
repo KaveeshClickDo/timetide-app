@@ -101,15 +101,38 @@ export function checkEventTypeFeatures(
 }
 
 /**
- * Get the team owner's plan for a given team.
+ * Check if user's subscription status allows resource creation.
+ * LOCKED users should not be able to create new resources — their features are frozen
+ * pending cleanup. Returns a 403 NextResponse if blocked, or null if allowed.
+ */
+export function checkSubscriptionNotLocked(
+  subscriptionStatus: string | null | undefined,
+): NextResponse | null {
+  if (subscriptionStatus === 'LOCKED') {
+    return NextResponse.json(
+      {
+        error: 'Your subscription has expired. Please renew to create new resources.',
+        code: 'SUBSCRIPTION_LOCKED',
+      },
+      { status: 403 },
+    )
+  }
+  return null
+}
+
+/**
+ * Get the team owner's plan and subscription status for a given team.
  * Used to enforce team features based on who is paying (the owner), not the requesting user.
  */
-export async function getTeamOwnerPlan(teamId: string): Promise<PlanTier> {
+export async function getTeamOwnerPlan(teamId: string): Promise<{ plan: PlanTier; subscriptionStatus: string | null }> {
   const owner = await prisma.teamMember.findFirst({
     where: { teamId, role: 'OWNER' },
-    include: { user: { select: { plan: true } } },
+    include: { user: { select: { plan: true, subscriptionStatus: true } } },
   })
-  return (owner?.user?.plan as PlanTier) || 'FREE'
+  return {
+    plan: (owner?.user?.plan as PlanTier) || 'FREE',
+    subscriptionStatus: (owner?.user?.subscriptionStatus as string) || null,
+  }
 }
 
 // ---------------------------------------------------------------------------

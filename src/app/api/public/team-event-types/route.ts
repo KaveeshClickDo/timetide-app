@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find team
+    // Find team with owner's plan info
     const team = await prisma.team.findUnique({
       where: { slug: teamSlug },
       select: {
@@ -28,11 +29,22 @@ export async function GET(request: NextRequest) {
         slug: true,
         description: true,
         logo: true,
+        members: {
+          where: { role: 'OWNER' },
+          select: { user: { select: { plan: true } } },
+          take: 1,
+        },
       },
     });
 
     if (!team) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+    }
+
+    // Check if team owner has a plan that supports teams
+    const ownerPlan = (team.members[0]?.user?.plan || 'FREE') as PlanTier
+    if (!PLAN_LIMITS[ownerPlan]?.teams) {
+      return NextResponse.json({ error: 'Event type not found' }, { status: 404 });
     }
 
     // Find event type

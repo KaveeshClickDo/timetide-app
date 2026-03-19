@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createEventTypeSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
-import { checkNumericLimit, checkEventTypeFeatures } from '@/lib/plan-enforcement'
+import { checkNumericLimit, checkEventTypeFeatures, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
 import type { PlanTier } from '@/lib/pricing'
 
 // GET /api/event-types - List all event types for current user
@@ -60,7 +60,16 @@ export async function POST(request: Request) {
       )
     }
 
-    const plan = (session.user as any).plan as PlanTier
+    // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { plan: true, subscriptionStatus: true },
+    })
+    const plan = (dbUser?.plan as PlanTier) || 'FREE'
+
+    // Block LOCKED users from creating resources
+    const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus)
+    if (lockedDenied) return lockedDenied
 
     // Enforce event type limit
     const currentCount = await prisma.eventType.count({

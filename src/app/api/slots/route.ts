@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch event type with schedule and user
     const eventType = await prisma.eventType.findUnique({
-      where: { id: eventTypeId, isActive: true },
+      where: { id: eventTypeId, isActive: true, lockedByDowngrade: false },
       include: {
         user: { select: { id: true, timezone: true } },
         schedule: {

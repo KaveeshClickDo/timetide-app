@@ -14,7 +14,6 @@ import {
   Mail,
   AlertTriangle,
   Lock,
-  Trash2,
   ArrowDownCircle,
   RotateCcw,
 } from 'lucide-react'
@@ -41,7 +40,7 @@ const typeIcons: Record<string, typeof Calendar> = {
   PLAN_GRACE_PERIOD_STARTED: AlertTriangle,
   PLAN_GRACE_PERIOD_ENDING: AlertTriangle,
   PLAN_LOCKED: Lock,
-  PLAN_CLEANUP_WARNING: Trash2,
+  PLAN_CLEANUP_WARNING: AlertTriangle,
   PLAN_DOWNGRADED: ArrowDownCircle,
   PLAN_REACTIVATED: RotateCcw,
 }

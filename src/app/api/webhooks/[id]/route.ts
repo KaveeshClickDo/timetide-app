@@ -9,29 +9,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { z } from 'zod';
 import crypto from 'crypto';
-import { checkNumericLimit } from '@/lib/plan-enforcement';
+import { checkNumericLimit, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
+import { updateWebhookSchema } from '@/lib/validation/schemas';
 import type { PlanTier } from '@/lib/pricing';
-
-const updateWebhookSchema = z.object({
-  name: z.string().max(100).optional().nullable(),
-  url: z.string().url().optional(),
-  eventTriggers: z
-    .array(
-      z.enum([
-        'booking.created',
-        'booking.cancelled',
-        'booking.rescheduled',
-        'booking.confirmed',
-        'booking.rejected',
-      ])
-    )
-    .min(1)
-    .optional(),
-  isActive: z.boolean().optional(),
-  regenerateSecret: z.boolean().optional(),
-});
 
 /**
  * GET /api/webhooks/[id]
@@ -196,7 +177,17 @@ export async function PATCH(
       updateData.isActive = isActive;
       // Enforce plan limit when re-enabling a webhook
       if (isActive && !existing.isActive) {
-        const plan = (session.user as Record<string, unknown>).plan as PlanTier;
+        // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
+        const dbUser = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { plan: true, subscriptionStatus: true },
+        });
+        const plan = (dbUser?.plan as PlanTier) || 'FREE';
+
+        // Block LOCKED users from re-enabling webhooks
+        const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus);
+        if (lockedDenied) return lockedDenied;
+
         const activeCount = await prisma.webhook.count({
           where: { userId: session.user.id, isActive: true, id: { not: id } },
         });

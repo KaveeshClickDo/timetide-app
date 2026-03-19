@@ -45,6 +45,7 @@ export async function GET(request: NextRequest) {
         slug,
         userId: user.id,
         isActive: true,
+        lockedByDowngrade: false,
       },
       include: {
         questions: {

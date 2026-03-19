@@ -2,12 +2,11 @@
  * Subscription Lifecycle Queue
  *
  * BullMQ-based queue for handling subscription expirations,
- * grace periods, cleanup, and warning emails.
+ * grace periods, and warning emails.
  *
  * Repeatable jobs:
  *   - check_expirations:  every 15 min — transitions ACTIVE/UNSUBSCRIBED → GRACE_PERIOD
  *   - check_grace_periods: every 15 min — transitions GRACE_PERIOD/DOWNGRADING → LOCKED
- *   - check_cleanups:     every hour   — transitions LOCKED → NONE (deletes locked resources)
  *
  * One-off jobs:
  *   - send_warning: scheduled at specific times to send warning emails
@@ -19,7 +18,6 @@ import prisma from '../../prisma'
 import {
   startGracePeriod,
   lockResources,
-  cleanupResources,
 } from '@/lib/subscription-lifecycle'
 import { createNotification } from '@/lib/notifications'
 import { queueEmail } from './email-queue'
@@ -80,10 +78,6 @@ async function processSubscriptionJob(job: Job<SubscriptionJobData>): Promise<vo
 
     case 'check_grace_periods':
       await handleCheckGracePeriods()
-      break
-
-    case 'check_cleanups':
-      await handleCheckCleanups()
       break
 
     case 'send_warning':
@@ -165,15 +159,33 @@ async function handleCheckGracePeriods(): Promise<void> {
         user.downgradeInitiatedBy || 'system',
       )
 
-      // For paid→paid downgrades (e.g., TEAM→PRO), override to ACTIVE
+      // For paid→paid downgrades (e.g., TEAM→PRO), user needs to subscribe to the new plan
       if (targetPlan !== 'FREE') {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            subscriptionStatus: 'ACTIVE',
-            cleanupScheduledAt: null,
-          },
-        })
+        if (user.downgradeReason === 'user_scheduled_downgrade') {
+          // User-initiated: Stripe subscription was cancelled — give 7-day grace to subscribe to new plan
+          const graceDays = 7
+          const gracePeriodEndsAt = new Date(Date.now() + graceDays * 24 * 60 * 60 * 1000)
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              subscriptionStatus: 'GRACE_PERIOD',
+              gracePeriodEndsAt,
+              cleanupScheduledAt: null,
+              downgradeReason: 'needs_new_subscription',
+              downgradeInitiatedBy: 'system',
+            },
+          })
+          console.log(`[subscription] User downgrade complete: ${user.id} → ${targetPlan}, 7-day grace to subscribe`)
+        } else {
+          // Admin-initiated: Stripe subscription was re-priced, user is actively subscribed
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              subscriptionStatus: 'ACTIVE',
+              cleanupScheduledAt: null,
+            },
+          })
+        }
       }
 
       console.log(`[subscription] Resources locked for user ${user.id} (target: ${targetPlan}, status: ${targetPlan === 'FREE' ? 'LOCKED' : 'ACTIVE'})`)
@@ -184,34 +196,6 @@ async function handleCheckGracePeriods(): Promise<void> {
 
   if (expiredGraceUsers.length > 0) {
     console.log(`[subscription] Locked ${expiredGraceUsers.length} users after grace period`)
-  }
-}
-
-/**
- * Find users in LOCKED state whose cleanup time has passed and delete resources.
- */
-async function handleCheckCleanups(): Promise<void> {
-  const now = new Date()
-
-  const cleanupUsers = await prisma.user.findMany({
-    where: {
-      subscriptionStatus: 'LOCKED',
-      cleanupScheduledAt: { lte: now },
-    },
-    select: { id: true },
-  })
-
-  for (const user of cleanupUsers) {
-    try {
-      await cleanupResources(user.id)
-      console.log(`[subscription] Cleanup completed for user ${user.id}`)
-    } catch (error) {
-      console.error(`[subscription] Failed to cleanup resources for user ${user.id}:`, error)
-    }
-  }
-
-  if (cleanupUsers.length > 0) {
-    console.log(`[subscription] Cleaned up ${cleanupUsers.length} users`)
   }
 }
 
@@ -231,7 +215,6 @@ async function handleSendWarning(data: SubscriptionJobData): Promise<void> {
       subscriptionStatus: true,
       planExpiresAt: true,
       gracePeriodEndsAt: true,
-      cleanupScheduledAt: true,
       _count: { select: { eventTypes: { where: { lockedByDowngrade: true } }, webhooks: { where: { lockedByDowngrade: true } } } },
     },
   })
@@ -291,28 +274,6 @@ async function handleSendWarning(data: SubscriptionJobData): Promise<void> {
       break
     }
 
-    case 'cleanup_warning': {
-      if (user.subscriptionStatus !== 'LOCKED') return
-
-      const cleanupDate = user.cleanupScheduledAt?.toLocaleDateString() ?? 'soon'
-      const daysLeft = user.cleanupScheduledAt
-        ? Math.max(0, Math.ceil((user.cleanupScheduledAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
-        : 0
-
-      await createNotification({
-        userId: user.id,
-        type: 'PLAN_CLEANUP_WARNING',
-        title: 'Data deletion warning',
-        message: `Your locked event types and webhooks will be permanently deleted ${daysLeft <= 1 ? 'tomorrow' : `in ${daysLeft} days`} (${cleanupDate}). Reactivate now to save them.`,
-      })
-      await queueEmail({
-        type: 'cleanup_warning',
-        to: user.email,
-        subject: `Your data will be deleted ${daysLeft <= 1 ? 'tomorrow' : `in ${daysLeft} days`}`,
-        planData: { ...basePlanData, cleanupScheduledAt: cleanupDate },
-      })
-      break
-    }
   }
 }
 
@@ -326,7 +287,7 @@ async function handleSendWarning(data: SubscriptionJobData): Promise<void> {
  */
 export async function scheduleWarnings(
   userId: string,
-  warningType: 'expiring' | 'grace_ending' | 'cleanup_warning',
+  warningType: 'expiring' | 'grace_ending',
   dates: Date[],
 ): Promise<void> {
   const queue = await getSubscriptionQueue()
@@ -402,16 +363,6 @@ export async function scheduleSubscriptionJobs(): Promise<void> {
     {
       repeat: { every: 15 * 60 * 1000 },
       jobId: 'repeatable:check_grace_periods',
-    },
-  )
-
-  // Check cleanups every hour
-  await queue.add(
-    'check_cleanups',
-    { type: 'check_cleanups' },
-    {
-      repeat: { every: 60 * 60 * 1000 },
-      jobId: 'repeatable:check_cleanups',
     },
   )
 

@@ -14,6 +14,7 @@ export {
   checkSlotsRateLimit,
   checkAuthRateLimit,
   checkApiRateLimit,
+  checkAdminRateLimit,
   type RateLimitConfig,
   type RateLimitResult,
 } from './rate-limiter';

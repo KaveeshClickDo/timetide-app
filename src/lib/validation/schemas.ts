@@ -377,7 +377,14 @@ export const adminUpdateUserSchema = z.object({
   role: z.enum(['USER', 'ADMIN']).optional(),
   planAction: z.enum(['upgrade', 'downgrade_immediate', 'downgrade_grace', 'cancel_downgrade']).optional(),
   gracePeriodDays: z.number().int().min(1).max(365).optional(),
-});
+}).refine(
+  (data) => {
+    if (data.planAction === 'upgrade') return !!data.plan && data.plan !== 'FREE'
+    if (data.planAction === 'downgrade_immediate' || data.planAction === 'downgrade_grace') return !!data.plan
+    return true
+  },
+  { message: 'Plan is required for upgrade/downgrade actions (and cannot be FREE for upgrades)' },
+);
 
 // ============================================================================
 // TYPE EXPORTS

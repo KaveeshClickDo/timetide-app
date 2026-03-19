@@ -27,7 +27,7 @@ TimeTide is a modern, self-hostable scheduling platform built with Next.js 14 (A
 +------------------------------------------------------------------+
 |                       API LAYER                                   |
 |  Next.js API Routes (src/app/api/)                               |
-|  - 50+ endpoints across 12 resource groups                       |
+|  - 88 endpoints across 15 resource groups                        |
 |  - Zod validation on all inputs                                   |
 |  - Plan enforcement (server-side feature gating)                  |
 |  - Rate limiting (Redis-backed with in-memory fallback)           |
@@ -38,23 +38,25 @@ TimeTide is a modern, self-hostable scheduling platform built with Next.js 14 (A
 |  SlotCalculator    | TeamCalculator  | PlanEnforcement            |
 |  CalendarSync      | Notifications   | WebhookDelivery            |
 |  EmailService      | RecurringUtils  | ZoomIntegration            |
+|  StripeClient      | SubscriptionLifecycle | AdminSync              |
 +------------------------------------------------------------------+
          |                    |                    |
 +------------------------------------------------------------------+
 |                   BACKGROUND JOBS (BullMQ)                        |
 |  EmailQueue | WebhookQueue | CalendarSyncQueue | ReminderQueue    |
+|  SubscriptionQueue (expiration checks, grace period processing)   |
 |  Redis-backed with retry logic and rate limiting                  |
 +------------------------------------------------------------------+
          |
 +------------------------------------------------------------------+
 |                      DATA LAYER                                   |
 |  Prisma ORM v7.3 → PostgreSQL 16                                 |
-|  20 models, 8 enums, 12 migrations                                |
+|  24+ models, 12+ enums, 15 migrations                             |
 +------------------------------------------------------------------+
          |
 +------------------------------------------------------------------+
 |                   EXTERNAL SERVICES                               |
-|  Google Calendar API | Microsoft Graph API | Zoom API | Resend    |
+|  Google Calendar | Microsoft Graph | Zoom | Resend | Stripe       |
 +------------------------------------------------------------------+
 ```
 
@@ -74,11 +76,15 @@ src/
 │   │   ├── slots/                # Available slot calculation
 │   │   ├── teams/                # Team CRUD + members + invitations
 │   │   ├── users/                # User profile + avatar
-│   │   ├── webhooks/             # Webhook CRUD + test + retry
+│   │   ├── webhooks/             # Webhook CRUD + test + retry + Stripe handler
+│   │   ├── billing/              # Stripe checkout, portal, schedule downgrade
+│   │   ├── admin/                # Admin panel API (users, teams, tickets, audit)
+│   │   ├── tickets/              # User support tickets
 │   │   ├── zoom/                 # Zoom OAuth + status
 │   │   ├── public/               # Public event types + team info
 │   │   └── contact/              # Contact form
 │   ├── auth/                     # Auth pages (7 pages)
+│   ├── admin/                    # Admin panel pages (8 pages)
 │   ├── dashboard/                # Protected pages (10+ pages)
 │   ├── bookings/                 # Public booking views
 │   ├── team/                     # Public team booking pages
@@ -113,17 +119,23 @@ src/
 │   │   ├── google.ts             # Google Calendar OAuth + CRUD + busy times
 │   │   └── outlook.ts            # Outlook OAuth + CRUD + busy times
 │   ├── email/
-│   │   └── client.ts             # Resend email templates (9 types)
+│   │   └── client.ts             # Resend email templates (23 types)
 │   ├── slots/
 │   │   ├── calculator.ts         # Core slot calculation engine
 │   │   └── team-calculator.ts    # Team scheduling (RR/Collective/Managed)
+│   ├── stripe.ts                 # Stripe client, helpers, price mapping
+│   ├── stripe-admin-sync.ts      # Non-blocking admin→Stripe sync
+│   ├── subscription-lifecycle.ts  # Subscription state machine + resource locking
+│   ├── admin-auth.ts             # Admin authorization helper
+│   ├── admin-audit.ts            # Admin action logging
 │   ├── queue/
 │   │   ├── email-queue.ts        # BullMQ email queue with retry
 │   │   ├── webhook-queue.ts      # HMAC-signed webhook delivery
 │   │   ├── calendar-sync-queue.ts
 │   │   ├── reminder-queue.ts
+│   │   ├── subscription-queue.ts # Expiration + grace period checks (every 15m)
 │   │   ├── redis.ts              # Redis connection
-│   │   └── rate-limiter.ts       # IP-based rate limiting
+│   │   └── rate-limiter.ts       # IP-based + admin rate limiting
 │   ├── recurring/
 │   │   └── utils.ts              # Recurring date generation
 │   ├── validation/
@@ -217,13 +229,55 @@ Input: Event type config + Host availability + Calendar busy times
 ### 7. Background Job Architecture
 ```
 BullMQ Queues (Redis-backed):
-├── email-queue        # 3 retries, 1s backoff, 5 concurrent
-├── webhook-queue      # 5 retries, 10s backoff
-├── calendar-sync-queue
-└── reminder-queue
+├── email-queue           # 3 retries, 1s backoff, 5 concurrent
+├── webhook-queue         # 5 retries, 10s backoff
+├── calendar-sync-queue   # 15-min recurring sync
+├── reminder-queue        # Scheduled 24h + 1h before bookings
+└── subscription-queue    # 15-min checks: expirations + grace periods
 
 Fallback: Direct execution when Redis unavailable
 Worker initialization: src/instrumentation.ts (Next.js experimental)
+```
+
+### 8. Subscription Lifecycle
+
+> Full details: [docs/BILLING.md](docs/BILLING.md)
+
+```
+State Machine: NONE → ACTIVE → UNSUBSCRIBED → GRACE_PERIOD → LOCKED
+                              └→ DOWNGRADING → (lock at target plan)
+
+Key Functions (src/lib/subscription-lifecycle.ts):
+├── activateSubscription()      # Subscribe / upgrade / reactivate
+├── voluntaryUnsubscribe()      # User cancels
+├── startGracePeriod()          # 7-day grace after expiry
+├── lockResources()             # Lock event types, webhooks, team events
+├── reactivateResources()       # Unlock on upgrade from LOCKED
+├── adminDowngradeImmediate()   # Admin: immediate downgrade + lock
+├── adminDowngradeWithGrace()   # Admin: scheduled downgrade
+├── scheduleUserDowngrade()     # User: scheduled plan change
+└── cancelDowngrade()           # Cancel any scheduled downgrade
+```
+
+**Pattern**: DB changes first, Stripe sync second, warn on failure.
+
+### 9. Admin Panel Architecture
+```
+/admin/* routes → requireAdmin() middleware → Admin API routes
+                                              ├── User management (CRUD + plan actions)
+                                              ├── Team management
+                                              ├── Booking management
+                                              ├── Support tickets
+                                              ├── Analytics dashboard
+                                              ├── Audit log
+                                              └── System health
+
+Security:
+├── UserRole enum (USER | ADMIN)
+├── ADMIN_EMAILS env var for auto-promotion
+├── JWT-based impersonation (originalAdminId)
+├── Rate limiting (30 mutations/min per admin)
+└── AdminAuditLog model tracks all actions
 ```
 
 ## Data Flow: Booking Creation
@@ -298,6 +352,9 @@ Middleware Protection:
 | **Webhook Security** | HMAC-SHA256 signatures |
 | **Password Storage** | bcrypt with 12 salt rounds |
 | **Token Management** | OAuth tokens in database, automatic refresh |
+| **Stripe Webhooks** | Signature verification via `STRIPE_WEBHOOK_SECRET` |
+| **Admin Actions** | Rate limited, audit logged, role-gated |
+| **Plan Enforcement** | Server-side numeric + boolean limits, defense-in-depth `lockedByDowngrade` checks |
 
 ## State Management
 

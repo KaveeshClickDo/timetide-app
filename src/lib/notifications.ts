@@ -110,13 +110,13 @@ export function buildPlanNotification(
       };
     case 'PLAN_LOCKED':
       return {
-        title: 'PRO features locked',
-        message: `${data.lockedEvents ?? 0} event type(s) and ${data.lockedWebhooks ?? 0} webhook(s) have been deactivated. Reactivate within 7 days to keep your data.`,
+        title: `${data.plan || 'PRO'} features locked`,
+        message: `${data.lockedEvents ?? 0} event type(s) and ${data.lockedWebhooks ?? 0} webhook(s) have been deactivated. Upgrade to reactivate them.`,
       };
     case 'PLAN_CLEANUP_WARNING':
       return {
-        title: 'Data deletion warning',
-        message: `Your locked event types and webhooks will be permanently deleted on ${data.cleanupScheduledAt}. Reactivate now to save them.`,
+        title: 'Plan update',
+        message: 'Your subscription status has changed. Check your billing page for details.',
       };
     case 'PLAN_DOWNGRADED':
       return {

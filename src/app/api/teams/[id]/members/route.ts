@@ -6,7 +6,7 @@ import { addTeamMemberSchema } from '@/lib/validation/schemas'
 import { createNotification, buildTeamNotification } from '@/lib/notifications'
 import { queueTeamMemberAddedEmail } from '@/lib/infrastructure/queue/email-queue'
 import { logTeamAction } from '@/lib/team-audit'
-import { checkFeatureAccess, getTeamOwnerPlan } from '@/lib/plan-enforcement'
+import { checkFeatureAccess, getTeamOwnerPlan, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
 
 interface RouteParams {
   params: { id: string }
@@ -91,7 +91,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Enforce teams feature gate (check team owner's plan, not the requesting user's)
-    const ownerPlan = await getTeamOwnerPlan(params.id)
+    const { plan: ownerPlan, subscriptionStatus: ownerSubStatus } = await getTeamOwnerPlan(params.id)
+    const lockedDenied = checkSubscriptionNotLocked(ownerSubStatus)
+    if (lockedDenied) return lockedDenied
     const featureDenied = checkFeatureAccess(ownerPlan, 'teams')
     if (featureDenied) return featureDenied
 

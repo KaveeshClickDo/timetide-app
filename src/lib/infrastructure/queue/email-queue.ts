@@ -24,9 +24,12 @@ import {
   generateGracePeriodStartedEmail,
   generateGracePeriodEndingEmail,
   generatePlanLockedEmail,
-  generateCleanupWarningEmail,
-  generateCleanupCompleteEmail,
   generateAdminDowngradeEmail,
+  generateAdminDowngradeGraceEmail,
+  generateSubscriptionCancelledEmail,
+  generateUserDowngradeScheduledEmail,
+  generateDowngradeCancelledEmail,
+  generatePlanActivatedEmail,
   generatePlanReactivatedEmail,
 } from '@/lib/integrations/email/client';
 import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
@@ -207,19 +210,34 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
       html = generatePlanLockedEmail(job.data.planData);
       break;
 
-    case 'cleanup_warning':
-      if (!job.data.planData) throw new Error('Missing planData for cleanup_warning');
-      html = generateCleanupWarningEmail(job.data.planData);
-      break;
-
-    case 'plan_cleanup_complete':
-      if (!job.data.planData) throw new Error('Missing planData for plan_cleanup_complete');
-      html = generateCleanupCompleteEmail(job.data.planData);
-      break;
-
     case 'admin_downgrade_notice':
       if (!job.data.planData) throw new Error('Missing planData for admin_downgrade_notice');
       html = generateAdminDowngradeEmail(job.data.planData);
+      break;
+
+    case 'admin_downgrade_grace_notice':
+      if (!job.data.planData) throw new Error('Missing planData for admin_downgrade_grace_notice');
+      html = generateAdminDowngradeGraceEmail(job.data.planData);
+      break;
+
+    case 'subscription_cancelled':
+      if (!job.data.planData) throw new Error('Missing planData for subscription_cancelled');
+      html = generateSubscriptionCancelledEmail(job.data.planData);
+      break;
+
+    case 'user_downgrade_scheduled':
+      if (!job.data.planData) throw new Error('Missing planData for user_downgrade_scheduled');
+      html = generateUserDowngradeScheduledEmail(job.data.planData);
+      break;
+
+    case 'downgrade_cancelled':
+      if (!job.data.planData) throw new Error('Missing planData for downgrade_cancelled');
+      html = generateDowngradeCancelledEmail(job.data.planData);
+      break;
+
+    case 'plan_activated':
+      if (!job.data.planData) throw new Error('Missing planData for plan_activated');
+      html = generatePlanActivatedEmail(job.data.planData);
       break;
 
     case 'plan_reactivated':

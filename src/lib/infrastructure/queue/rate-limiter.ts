@@ -204,3 +204,15 @@ export async function checkApiRateLimit(ip: string): Promise<RateLimitResult> {
     prefix: 'api',
   });
 }
+
+/**
+ * Rate limiter for admin mutation endpoints
+ * 30 mutations per minute per admin user
+ */
+export async function checkAdminRateLimit(adminId: string): Promise<RateLimitResult> {
+  return checkRateLimit(adminId, {
+    limit: 30,
+    windowSeconds: 60,
+    prefix: 'admin_mutation',
+  });
+}

@@ -8,9 +8,54 @@ import {
   adminDowngradeImmediate,
   adminDowngradeWithGrace,
   cancelDowngrade,
+  SubscriptionError,
 } from '@/lib/subscription-lifecycle'
 import type { PlanTier } from '@/lib/pricing'
 import { syncAdminPlanAction } from '@/lib/stripe-admin-sync'
+import { checkAdminRateLimit } from '@/lib/infrastructure/queue'
+
+const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
+
+/** Which subscription statuses each admin plan action is allowed from */
+const VALID_ADMIN_TRANSITIONS: Record<string, string[]> = {
+  // Upgrade works from any status (lifecycle handles reactivation from LOCKED)
+  upgrade: ['NONE', 'ACTIVE', 'UNSUBSCRIBED', 'GRACE_PERIOD', 'DOWNGRADING', 'LOCKED'],
+  // Immediate downgrade: only from states that have an active/pending plan
+  downgrade_immediate: ['ACTIVE', 'UNSUBSCRIBED', 'GRACE_PERIOD', 'DOWNGRADING'],
+  // Grace downgrade: only from stable active states (not already transitioning)
+  downgrade_grace: ['ACTIVE', 'UNSUBSCRIBED'],
+  // Cancel downgrade: only from DOWNGRADING
+  cancel_downgrade: ['DOWNGRADING'],
+}
+
+function validateAdminTransition(
+  planAction: string,
+  currentStatus: string,
+  currentPlan: string,
+  targetPlan?: string,
+): string | null {
+  // Check status is valid for this action
+  const allowedStatuses = VALID_ADMIN_TRANSITIONS[planAction]
+  if (allowedStatuses && !allowedStatuses.includes(currentStatus)) {
+    return `Cannot ${planAction.replace('_', ' ')}: user is in ${currentStatus} status`
+  }
+
+  // For upgrade: target must be higher than current
+  if (planAction === 'upgrade' && targetPlan) {
+    if (TIER_ORDER.indexOf(targetPlan as PlanTier) <= TIER_ORDER.indexOf(currentPlan as PlanTier)) {
+      return `Cannot upgrade: ${targetPlan} is not higher than current plan ${currentPlan}`
+    }
+  }
+
+  // For downgrades: target must be lower than current
+  if ((planAction === 'downgrade_immediate' || planAction === 'downgrade_grace') && targetPlan) {
+    if (TIER_ORDER.indexOf(targetPlan as PlanTier) >= TIER_ORDER.indexOf(currentPlan as PlanTier)) {
+      return `Cannot downgrade: ${targetPlan} is not lower than current plan ${currentPlan}`
+    }
+  }
+
+  return null
+}
 
 export async function GET(
   req: NextRequest,
@@ -114,6 +159,15 @@ export async function PATCH(
   const { error, session } = await requireAdmin()
   if (error) return error
 
+  // Rate limit admin mutations
+  const rateLimit = await checkAdminRateLimit(session!.user.id)
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please slow down.' },
+      { status: 429, headers: { 'Retry-After': Math.ceil((rateLimit.resetAt - Date.now()) / 1000).toString() } },
+    )
+  }
+
   try {
     const { id } = await params
     const body = await req.json()
@@ -121,7 +175,7 @@ export async function PATCH(
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
-      select: { plan: true, role: true, isDisabled: true, email: true },
+      select: { plan: true, role: true, isDisabled: true, email: true, subscriptionStatus: true },
     })
 
     if (!existingUser) {
@@ -130,8 +184,27 @@ export async function PATCH(
 
     const adminId = session!.user.id
 
+    // Track Stripe sync status across all plan actions
+    let stripeSyncSuccess = true
+
     // Handle subscription lifecycle actions
     if (validated.planAction) {
+      // Validate transition is allowed for current status
+      const transitionError = validateAdminTransition(
+        validated.planAction,
+        existingUser.subscriptionStatus,
+        existingUser.plan,
+        validated.plan,
+      )
+      if (transitionError) {
+        return NextResponse.json({
+          error: transitionError,
+          code: 'INVALID_TRANSITION',
+          currentStatus: existingUser.subscriptionStatus,
+          currentPlan: existingUser.plan,
+        }, { status: 400 })
+      }
+
       try {
         switch (validated.planAction) {
           case 'upgrade': {
@@ -171,27 +244,97 @@ export async function PATCH(
           },
         })
 
-        // Sync admin action to Stripe (non-blocking — admin action succeeds even if Stripe fails)
-        await syncAdminPlanAction(id, validated.planAction, (validated.plan as PlanTier) || 'FREE').catch((err) => {
-          console.error('[admin] Stripe sync failed (non-blocking):', err)
-        })
-      } catch (err) {
+        // Sync admin action to Stripe
+        try {
+          await syncAdminPlanAction(id, validated.planAction, (validated.plan as PlanTier) || 'FREE')
+        } catch (err) {
+          console.error('[admin] Stripe sync failed:', err)
+          stripeSyncSuccess = false
+        }
+      } catch (err: unknown) {
+        if (err instanceof SubscriptionError) {
+          return NextResponse.json({
+            error: err.message,
+            code: err.code,
+            currentStatus: err.currentStatus,
+            currentPlan: err.currentPlan,
+          }, { status: 400 })
+        }
         const message = err instanceof Error ? err.message : 'Failed to update subscription'
         return NextResponse.json({ error: message }, { status: 400 })
       }
     }
 
-    // Handle non-subscription field updates (role, isDisabled, or direct plan change without planAction)
+    // Handle direct plan change without planAction — route through lifecycle functions
+    if (validated.plan && !validated.planAction && validated.plan !== existingUser.plan) {
+      try {
+        const newPlan = validated.plan as PlanTier
+        const isUpgrade = TIER_ORDER.indexOf(newPlan) > TIER_ORDER.indexOf(existingUser.plan as PlanTier)
+        const impliedAction = isUpgrade ? 'upgrade' : 'downgrade_immediate'
+
+        // Validate the implied transition
+        const transitionError = validateAdminTransition(
+          impliedAction,
+          existingUser.subscriptionStatus,
+          existingUser.plan,
+          newPlan,
+        )
+        if (transitionError) {
+          return NextResponse.json({
+            error: transitionError,
+            code: 'INVALID_TRANSITION',
+            currentStatus: existingUser.subscriptionStatus,
+            currentPlan: existingUser.plan,
+          }, { status: 400 })
+        }
+
+        if (isUpgrade) {
+          await activateSubscription(id, newPlan, 30, `admin:${adminId}`)
+        } else {
+          await adminDowngradeImmediate(id, adminId, newPlan)
+        }
+
+        await logAdminAction({
+          adminId,
+          action: 'UPDATE_USER',
+          targetType: 'User',
+          targetId: id,
+          details: {
+            planAction: impliedAction,
+            fromPlan: existingUser.plan,
+            toPlan: newPlan,
+            userEmail: existingUser.email,
+          },
+        })
+
+        // Sync direct plan change to Stripe
+        try {
+          await syncAdminPlanAction(id, impliedAction, newPlan)
+        } catch (err) {
+          console.error('[admin] Stripe sync failed:', err)
+          stripeSyncSuccess = false
+        }
+      } catch (err: unknown) {
+        if (err instanceof SubscriptionError) {
+          return NextResponse.json({
+            error: err.message,
+            code: err.code,
+            currentStatus: err.currentStatus,
+            currentPlan: err.currentPlan,
+          }, { status: 400 })
+        }
+        const message = err instanceof Error ? err.message : 'Failed to update plan'
+        return NextResponse.json({ error: message }, { status: 400 })
+      }
+    }
+
+    // Handle non-subscription field updates (role, isDisabled)
     const directUpdates: Record<string, unknown> = {}
     if (validated.role && validated.role !== existingUser.role) {
       directUpdates.role = validated.role
     }
     if (validated.isDisabled !== undefined && validated.isDisabled !== existingUser.isDisabled) {
       directUpdates.isDisabled = validated.isDisabled
-    }
-    // Backward compat: direct plan change without planAction
-    if (validated.plan && !validated.planAction && validated.plan !== existingUser.plan) {
-      directUpdates.plan = validated.plan
     }
 
     if (Object.keys(directUpdates).length > 0) {
@@ -223,7 +366,13 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json(user)
+    return NextResponse.json({
+      ...user,
+      stripeSyncSuccess,
+      ...(!stripeSyncSuccess && {
+        warning: 'Plan updated, but Stripe billing sync failed. Check Stripe dashboard.',
+      }),
+    })
   } catch (error) {
     console.error('Admin user update error:', error)
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })

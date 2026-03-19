@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { createTeamSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
-import { checkFeatureAccess } from '@/lib/plan-enforcement'
+import { checkFeatureAccess, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
 import type { PlanTier } from '@/lib/pricing'
 
 // GET /api/teams - List user's teams
@@ -74,8 +74,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Enforce teams feature gate
-    const plan = (session.user as any).plan as PlanTier
+    // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { plan: true, subscriptionStatus: true },
+    })
+    const plan = (dbUser?.plan as PlanTier) || 'FREE'
+
+    // Block LOCKED users from creating resources
+    const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus)
+    if (lockedDenied) return lockedDenied
+
     const featureDenied = checkFeatureAccess(plan, 'teams')
     if (featureDenied) return featureDenied
 

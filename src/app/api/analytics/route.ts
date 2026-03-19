@@ -13,8 +13,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Enforce analytics feature gate
-    const plan = (session.user as any).plan as PlanTier
+    // Read plan from DB (not session) to prevent stale JWT bypass
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { plan: true },
+    })
+    const plan = (dbUser?.plan as PlanTier) || 'FREE'
     const featureDenied = checkFeatureAccess(plan, 'analytics')
     if (featureDenied) return featureDenied
 

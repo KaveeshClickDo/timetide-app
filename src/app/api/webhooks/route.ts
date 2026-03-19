@@ -10,7 +10,7 @@ import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { createWebhookSchema } from '@/lib/validation/schemas';
 import crypto from 'crypto';
-import { checkNumericLimit } from '@/lib/plan-enforcement';
+import { checkNumericLimit, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
 import type { PlanTier } from '@/lib/pricing';
 
 /**
@@ -113,8 +113,17 @@ export async function POST(request: NextRequest) {
     const { url, eventTriggers, secret: providedSecret } = result.data;
     const name = body.name;
 
-    // Enforce plan-based webhook limit
-    const plan = (session.user as any).plan as PlanTier;
+    // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { plan: true, subscriptionStatus: true },
+    });
+    const plan = (dbUser?.plan as PlanTier) || 'FREE';
+
+    // Block LOCKED users from creating resources
+    const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus);
+    if (lockedDenied) return lockedDenied;
+
     const existingCount = await prisma.webhook.count({
       where: { userId: session.user.id },
     });

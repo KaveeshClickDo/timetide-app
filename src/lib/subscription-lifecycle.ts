@@ -5,10 +5,27 @@
  * All subscription changes should go through this module.
  *
  * State machine:
- *   NONE → ACTIVE → UNSUBSCRIBED → GRACE_PERIOD → LOCKED → NONE
- *   ACTIVE → DOWNGRADING → LOCKED → NONE
+ *   NONE → ACTIVE → UNSUBSCRIBED → GRACE_PERIOD → LOCKED (permanent)
+ *   ACTIVE → DOWNGRADING → LOCKED (permanent)
  *   Any paid state → ACTIVE (reactivation)
  */
+
+/**
+ * Structured error for subscription state machine violations.
+ * Carries context (code, currentStatus, currentPlan) for admin API structured responses.
+ */
+export class SubscriptionError extends Error {
+  code: string
+  currentStatus: string
+  currentPlan: string
+  constructor(message: string, opts: { code: string; currentStatus: string; currentPlan: string }) {
+    super(message)
+    this.name = 'SubscriptionError'
+    this.code = opts.code
+    this.currentStatus = opts.currentStatus
+    this.currentPlan = opts.currentPlan
+  }
+}
 
 import prisma from '@/lib/prisma'
 import { Prisma } from '@/generated/prisma/client'
@@ -19,7 +36,7 @@ import { PLAN_LIMITS } from '@/lib/pricing'
 // Lazy imports to avoid circular dependency with queue → lifecycle → queue
 async function lazyScheduleWarnings(
   userId: string,
-  warningType: 'expiring' | 'grace_ending' | 'cleanup_warning',
+  warningType: 'expiring' | 'grace_ending',
   dates: Date[],
 ): Promise<void> {
   try {
@@ -56,7 +73,6 @@ type SubscriptionAction =
   | 'unsubscribe'
   | 'grace_start'
   | 'locked'
-  | 'cleanup'
   | 'reactivate'
 
 interface LogHistoryParams {
@@ -182,11 +198,11 @@ export async function activateSubscription(
     await lazyScheduleWarnings(userId, 'expiring', [warningDate])
   }
 
-  // Send email
+  // Send email — use different template for reactivation vs first-time activation
   const dbEmail = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
   if (dbEmail?.email) {
     await enqueuePlanEmail(
-      'plan_reactivated',
+      wasLocked ? 'plan_reactivated' : 'plan_activated',
       dbEmail.email,
       wasLocked ? 'Welcome back! Your features are restored' : `Your ${plan} plan is now active`,
       {
@@ -215,7 +231,11 @@ export async function voluntaryUnsubscribe(
 
   if (!user) throw new Error('User not found')
   if (user.subscriptionStatus !== 'ACTIVE') {
-    throw new Error(`Cannot unsubscribe from status: ${user.subscriptionStatus}`)
+    throw new SubscriptionError(`Cannot unsubscribe from status: ${user.subscriptionStatus}`, {
+      code: 'INVALID_STATUS',
+      currentStatus: user.subscriptionStatus,
+      currentPlan: user.plan,
+    })
   }
 
   await prisma.user.update({
@@ -252,7 +272,7 @@ export async function voluntaryUnsubscribe(
   // Send cancellation confirmation email
   const dbEmail = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
   if (dbEmail?.email) {
-    await enqueuePlanEmail('plan_expiring_warning', dbEmail.email, `Your ${user.plan} subscription has been cancelled`, {
+    await enqueuePlanEmail('subscription_cancelled', dbEmail.email, `Your ${user.plan} subscription has been cancelled`, {
       userName: dbEmail.name || 'there',
       userEmail: dbEmail.email,
       currentPlan: user.plan,
@@ -341,7 +361,7 @@ export async function startGracePeriod(
  * subscription at the target plan. Excess resources are still locked but
  * no cleanup is scheduled — they're preserved for potential re-upgrade.
  *
- * For paid→FREE, the user enters LOCKED state with 7-day cleanup.
+ * For paid→FREE, the user enters LOCKED state (permanent, no auto-cleanup).
  */
 export async function adminDowngradeImmediate(
   userId: string,
@@ -376,7 +396,7 @@ export async function adminDowngradeImmediate(
     type: 'PLAN_DOWNGRADED',
     title: 'Plan downgraded',
     message: targetPlan === 'FREE'
-      ? `An administrator has downgraded your plan. Features exceeding your new plan have been locked. You have 7 days to reactivate before data is deleted.`
+      ? `An administrator has downgraded your plan. Features exceeding your new plan have been locked. Upgrade to reactivate them.`
       : `An administrator has downgraded your plan to ${targetPlan}. Features exceeding your new plan limits have been deactivated.`,
   })
 
@@ -468,7 +488,7 @@ export async function adminDowngradeWithGrace(
   // Send admin downgrade email
   const dbEmail = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
   if (dbEmail?.email) {
-    await enqueuePlanEmail('admin_downgrade_notice', dbEmail.email, 'Your plan has been changed', {
+    await enqueuePlanEmail('admin_downgrade_grace_notice', dbEmail.email, 'Your plan change has been scheduled', {
       userName: dbEmail.name || 'there',
       userEmail: dbEmail.email,
       currentPlan: user.plan,
@@ -477,6 +497,93 @@ export async function adminDowngradeWithGrace(
       reactivateUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
     })
   }
+}
+
+/**
+ * User-initiated scheduled downgrade.
+ * Keeps current plan active until planExpiresAt, then switches to targetPlan.
+ * Reuses DOWNGRADING status — the check_grace_periods background job handles the transition.
+ */
+export async function scheduleUserDowngrade(
+  userId: string,
+  targetPlan: PlanTier,
+): Promise<{ switchDate: Date }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { plan: true, subscriptionStatus: true, planExpiresAt: true, email: true, name: true },
+  })
+
+  if (!user) throw new Error('User not found')
+  if (user.subscriptionStatus !== 'UNSUBSCRIBED') {
+    throw new SubscriptionError('Can only schedule downgrade when subscription is cancelled', {
+      code: 'INVALID_STATUS',
+      currentStatus: user.subscriptionStatus,
+      currentPlan: user.plan,
+    })
+  }
+  if (!user.planExpiresAt || user.planExpiresAt <= new Date()) {
+    throw new Error('No active billing period to schedule downgrade for')
+  }
+
+  const switchDate = user.planExpiresAt
+
+  // Atomic conditional update: only succeeds if status is still UNSUBSCRIBED
+  // Prevents race condition from concurrent requests (multiple tabs, etc.)
+  const updateResult = await prisma.user.updateMany({
+    where: { id: userId, subscriptionStatus: 'UNSUBSCRIBED' },
+    data: {
+      subscriptionStatus: 'DOWNGRADING',
+      gracePeriodEndsAt: switchDate,
+      downgradeReason: 'user_scheduled_downgrade',
+      downgradeInitiatedBy: 'user',
+    },
+  })
+
+  if (updateResult.count === 0) {
+    throw new Error('Subscription status has already changed')
+  }
+
+  await logSubscriptionHistory({
+    userId,
+    action: 'downgrade',
+    fromPlan: user.plan,
+    toPlan: targetPlan,
+    fromStatus: user.subscriptionStatus,
+    toStatus: 'DOWNGRADING',
+    reason: `User scheduled downgrade to ${targetPlan} at period end`,
+    initiatedBy: 'user',
+    metadata: { targetPlan, switchDate: switchDate.toISOString() },
+  })
+
+  await createNotification({
+    userId,
+    type: 'PLAN_DOWNGRADED',
+    title: 'Plan switch scheduled',
+    message: `Your plan will switch to ${targetPlan} on ${switchDate.toLocaleDateString()}. You'll keep ${user.plan} features until then.`,
+  })
+
+  // Schedule warnings 2 days and 1 day before switch
+  const now = new Date()
+  const warningDates = [2, 1]
+    .map((d) => new Date(switchDate.getTime() - d * 24 * 60 * 60 * 1000))
+    .filter((d) => d > now)
+  if (warningDates.length > 0) {
+    await lazyScheduleWarnings(userId, 'grace_ending', warningDates)
+  }
+
+  // Send email
+  if (user.email) {
+    await enqueuePlanEmail('user_downgrade_scheduled', user.email, `Your plan will switch to ${targetPlan}`, {
+      userName: user.name || 'there',
+      userEmail: user.email,
+      currentPlan: user.plan,
+      newPlan: targetPlan,
+      gracePeriodEndsAt: switchDate.toLocaleDateString(),
+      reactivateUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
+    })
+  }
+
+  return { switchDate }
 }
 
 /**
@@ -494,11 +601,16 @@ export async function cancelDowngrade(
 
   if (!user) throw new Error('User not found')
   if (user.subscriptionStatus !== 'DOWNGRADING') {
-    throw new Error(`Cannot cancel downgrade from status: ${user.subscriptionStatus}`)
+    throw new SubscriptionError(`Cannot cancel downgrade from status: ${user.subscriptionStatus}`, {
+      code: 'INVALID_STATUS',
+      currentStatus: user.subscriptionStatus,
+      currentPlan: user.plan,
+    })
   }
 
-  await prisma.user.update({
-    where: { id: userId },
+  // Atomic conditional update: only succeeds if status is still DOWNGRADING
+  const updateResult = await prisma.user.updateMany({
+    where: { id: userId, subscriptionStatus: 'DOWNGRADING' },
     data: {
       subscriptionStatus: 'ACTIVE',
       gracePeriodEndsAt: null,
@@ -506,6 +618,10 @@ export async function cancelDowngrade(
       downgradeInitiatedBy: null,
     },
   })
+
+  if (updateResult.count === 0) {
+    throw new Error('Subscription status has already changed')
+  }
 
   await logSubscriptionHistory({
     userId,
@@ -528,7 +644,7 @@ export async function cancelDowngrade(
   // Send cancel downgrade email
   const dbEmail = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
   if (dbEmail?.email) {
-    await enqueuePlanEmail('plan_reactivated', dbEmail.email, `Your ${user.plan} downgrade has been cancelled`, {
+    await enqueuePlanEmail('downgrade_cancelled', dbEmail.email, `Your ${user.plan} plan switch has been cancelled`, {
       userName: dbEmail.name || 'there',
       userEmail: dbEmail.email,
       currentPlan: user.plan,
@@ -558,8 +674,6 @@ export async function lockResources(
 
   if (!user) return { lockedPersonalEvents: 0, lockedTeamEvents: 0, lockedWebhookCount: 0 }
 
-  const now = new Date()
-  const cleanupScheduledAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const targetLimits = PLAN_LIMITS[targetPlan]
 
   // --- Lock excess EVENT TYPES ---
@@ -659,14 +773,13 @@ export async function lockResources(
     data: {
       plan: targetPlan,
       subscriptionStatus: 'LOCKED',
-      cleanupScheduledAt,
+      cleanupScheduledAt: null,
       downgradeReason: reason,
       downgradeInitiatedBy: initiatedBy,
     },
   })
 
   const lockedPersonalEvents = eventIdsToLock.length
-  const totalLockedEvents = lockedPersonalEvents + lockedTeamEvents
 
   await logSubscriptionHistory({
     userId,
@@ -682,7 +795,6 @@ export async function lockResources(
       lockedPersonalEvents,
       lockedTeamEvents,
       lockedWebhooks: lockedWebhookCount,
-      cleanupScheduledAt: cleanupScheduledAt.toISOString(),
     },
   })
 
@@ -697,14 +809,8 @@ export async function lockResources(
       userId,
       type: 'PLAN_LOCKED',
       title: 'Features locked',
-      message: `Features exceeding your ${targetPlan} plan have been locked. ${lockedSummary} deactivated. Reactivate within 7 days to keep your data.`,
+      message: `Features exceeding your ${targetPlan} plan have been locked. ${lockedSummary} deactivated. Upgrade to reactivate them.`,
     })
-
-    // Schedule "cleanup warning" 2 days before cleanupScheduledAt
-    const cleanupWarningDate = new Date(cleanupScheduledAt.getTime() - 2 * 24 * 60 * 60 * 1000)
-    if (cleanupWarningDate > now) {
-      await lazyScheduleWarnings(userId, 'cleanup_warning', [cleanupWarningDate])
-    }
 
     // Send plan locked email
     const dbEmail = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
@@ -714,7 +820,6 @@ export async function lockResources(
         userEmail: dbEmail.email,
         currentPlan: user.plan,
         newPlan: targetPlan,
-        cleanupScheduledAt: cleanupScheduledAt.toLocaleDateString(),
         lockedEventCount: lockedPersonalEvents || undefined,
         lockedTeamEventCount: lockedTeamEvents || undefined,
         lockedWebhookCount: lockedWebhookCount || undefined,
@@ -768,131 +873,6 @@ export async function reactivateResources(userId: string): Promise<void> {
         message: 'The team owner has reactivated their plan. Team features are available again.',
       })
     }
-  }
-}
-
-/**
- * Cleanup: permanently delete locked resources.
- * Called 7 days after LOCKED state.
- * Preserves event types with future active bookings.
- */
-export async function cleanupResources(userId: string): Promise<void> {
-  // Use a transaction to avoid race conditions with reactivation
-  await prisma.$transaction(async (tx) => {
-    // Re-check status inside transaction
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { plan: true, subscriptionStatus: true },
-    })
-
-    if (!user || user.subscriptionStatus !== 'LOCKED') {
-      // User was reactivated in the meantime, abort
-      return
-    }
-
-    const now = new Date()
-
-    // Find teams owned by this user (for cleaning up team event types)
-    const ownedTeams = await tx.teamMember.findMany({
-      where: { userId, role: 'OWNER' },
-      select: { teamId: true },
-    })
-    const ownedTeamIds = ownedTeams.map((t) => t.teamId)
-
-    // Delete personal event types that are locked AND have no future active bookings
-    const lockedEvents = await tx.eventType.findMany({
-      where: {
-        lockedByDowngrade: true,
-        isActive: false,
-        OR: [
-          { userId },
-          ...(ownedTeamIds.length > 0 ? [{ teamId: { in: ownedTeamIds } }] : []),
-        ],
-      },
-      select: {
-        id: true,
-        bookings: {
-          where: {
-            startTime: { gte: now },
-            status: { in: ['PENDING', 'CONFIRMED'] },
-          },
-          select: { id: true },
-          take: 1,
-        },
-      },
-    })
-
-    const eventsToDelete = lockedEvents
-      .filter((et) => et.bookings.length === 0)
-      .map((et) => et.id)
-
-    const eventsPreserved = lockedEvents.length - eventsToDelete.length
-
-    if (eventsToDelete.length > 0) {
-      await tx.eventType.deleteMany({
-        where: { id: { in: eventsToDelete } },
-      })
-    }
-
-    // Delete locked webhooks
-    const deletedWebhooks = await tx.webhook.deleteMany({
-      where: {
-        userId,
-        lockedByDowngrade: true,
-        isActive: false,
-      },
-    })
-
-    // Update user status
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        subscriptionStatus: 'NONE',
-        planActivatedAt: null,
-        planExpiresAt: null,
-        gracePeriodEndsAt: null,
-        cleanupScheduledAt: null,
-        downgradeReason: null,
-        downgradeInitiatedBy: null,
-      },
-    })
-
-    await tx.subscriptionHistory.create({
-      data: {
-        userId,
-        action: 'cleanup',
-        fromPlan: 'FREE',
-        toPlan: 'FREE',
-        fromStatus: 'LOCKED',
-        toStatus: 'NONE',
-        reason: `Deleted ${eventsToDelete.length} events, ${deletedWebhooks.count} webhooks${eventsPreserved > 0 ? `. ${eventsPreserved} events preserved (have future bookings)` : ''}`,
-        initiatedBy: 'system',
-        metadata: {
-          deletedEventTypes: eventsToDelete.length,
-          deletedWebhooks: deletedWebhooks.count,
-          preservedEventTypes: eventsPreserved,
-        } as unknown as Prisma.InputJsonValue,
-      },
-    })
-  })
-
-  await createNotification({
-    userId,
-    type: 'PLAN_CLEANUP_WARNING',
-    title: 'Data cleanup complete',
-    message: 'Your locked event types and webhooks have been permanently removed. Upgrade to create new ones.',
-  })
-
-  // Send cleanup complete email
-  const dbEmail = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
-  if (dbEmail?.email) {
-    await enqueuePlanEmail('plan_cleanup_complete', dbEmail.email, 'Your extra resources have been removed', {
-      userName: dbEmail.name || 'there',
-      userEmail: dbEmail.email,
-      currentPlan: 'FREE',
-      newPlan: 'FREE',
-      reactivateUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/billing`,
-    })
   }
 }
 

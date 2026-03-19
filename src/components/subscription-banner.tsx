@@ -54,21 +54,20 @@ export function SubscriptionBanner() {
       break
     }
     case 'DOWNGRADING': {
-      variant = 'danger'
-      icon = AlertTriangle
-      title = 'Plan change scheduled'
+      variant = 'warning'
+      icon = Clock
+      title = 'Plan switch scheduled'
       const days = getDaysLeft(gracePeriodEndsAt)
-      message = `Your ${plan} features will be locked in ${days} day${days !== 1 ? 's' : ''} (${formatDate(gracePeriodEndsAt)}). Upgrade to keep access.`
-      ctaLabel = 'Upgrade'
+      message = `Your ${plan} features remain active for ${days} more day${days !== 1 ? 's' : ''} (until ${formatDate(gracePeriodEndsAt)}).`
+      ctaLabel = 'View Billing'
       break
     }
     case 'LOCKED': {
       variant = 'critical'
       icon = Lock
       title = 'Features locked'
-      const days = getDaysLeft(cleanupScheduledAt)
-      message = `Your locked event types and webhooks will be permanently deleted in ${days} day${days !== 1 ? 's' : ''} (${formatDate(cleanupScheduledAt)}). Reactivate now to restore them.`
-      ctaLabel = 'Reactivate Now'
+      message = 'Your locked event types and webhooks are inactive. Upgrade to reactivate them.'
+      ctaLabel = 'Upgrade Now'
       break
     }
     default:

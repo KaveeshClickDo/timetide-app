@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { checkEventTypeFeatures } from '@/lib/plan-enforcement'
+import { checkEventTypeFeatures, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
 import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
 
 interface RouteParams {
@@ -74,8 +74,17 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Event type not found' }, { status: 404 })
     }
 
-    // Enforce pro feature gates
-    const plan = (session.user as any).plan as PlanTier
+    // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { plan: true, subscriptionStatus: true },
+    })
+    const plan = (dbUser?.plan as PlanTier) || 'FREE'
+
+    // Block LOCKED users from modifying resources
+    const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus)
+    if (lockedDenied) return lockedDenied
+
     const featureDenied = checkEventTypeFeatures(plan, body as Record<string, unknown>)
     if (featureDenied) return featureDenied
 

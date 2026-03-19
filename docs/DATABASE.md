@@ -57,11 +57,22 @@ Core user account model.
 | `timezone` | String | User timezone (default: UTC) |
 | `timezoneAutoDetect` | Boolean | Auto-detect timezone from browser |
 | `plan` | UserPlan | FREE, PRO, or TEAM |
+| `role` | UserRole | USER or ADMIN |
+| `isDisabled` | Boolean | Account disabled by admin |
 | `onboardingCompleted` | Boolean | Completed setup wizard |
+| `stripeCustomerId` | String? | Stripe customer ID |
+| `stripeSubscriptionId` | String? | Stripe subscription ID |
+| `subscriptionStatus` | String | NONE, ACTIVE, UNSUBSCRIBED, GRACE_PERIOD, DOWNGRADING, LOCKED |
+| `planActivatedAt` | DateTime? | When current plan was activated |
+| `planExpiresAt` | DateTime? | When billing period ends |
+| `gracePeriodEndsAt` | DateTime? | When grace period ends |
+| `cleanupScheduledAt` | DateTime? | When resource cleanup is scheduled |
+| `downgradeReason` | String? | Why downgrade was initiated |
+| `downgradeInitiatedBy` | String? | Who initiated (user, system, admin:{id}) |
 | `createdAt` | DateTime | Account creation |
 | `updatedAt` | DateTime | Last update |
 
-**Relations:** accounts, sessions, eventTypes, availabilitySchedules, bookings, calendars, zoomCredential, teamMembers, webhooks, notifications
+**Relations:** accounts, sessions, eventTypes, availabilitySchedules, bookings, calendars, zoomCredential, teamMembers, webhooks, notifications, supportTickets, subscriptionHistory
 
 ### Account
 OAuth provider accounts linked to users (NextAuth adapter).
@@ -93,6 +104,7 @@ Bookable meeting templates.
 | `locationType` | LocationType | Meeting location type |
 | `locationValue` | String? | Custom location details |
 | `isActive` | Boolean | Active/visible |
+| `lockedByDowngrade` | Boolean | Locked due to plan downgrade |
 | `color` | String? | Display color |
 | `bufferBefore` | Int | Minutes before buffer (default: 0) |
 | `bufferAfter` | Int | Minutes after buffer (default: 0) |
@@ -328,8 +340,11 @@ Webhook endpoint configuration.
 | `url` | String | HTTPS endpoint URL |
 | `secret` | String | HMAC-SHA256 signing secret |
 | `events` | String[] | Subscribed event types |
+| `name` | String? | Webhook display name |
 | `isActive` | Boolean | Active flag |
+| `lockedByDowngrade` | Boolean | Locked due to plan downgrade |
 | `consecutiveFailures` | Int | Failure counter (auto-disable at 50) |
+| `eventTriggers` | String[] | Subscribed event types |
 | `userId` | String | Owner user ID |
 
 **Relations:** user, deliveries
@@ -360,6 +375,61 @@ In-app notification records.
 | `bookingId` | String? | Related booking |
 | `teamId` | String? | Related team |
 | `userId` | String | Recipient user ID |
+
+### SubscriptionHistory
+Tracks all subscription state changes for audit.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String (cuid) | Primary key |
+| `action` | String | upgrade, downgrade, unsubscribe, grace_start, locked, reactivate, cleanup |
+| `fromPlan` | String | Previous plan |
+| `toPlan` | String | New plan |
+| `fromStatus` | String | Previous subscription status |
+| `toStatus` | String | New subscription status |
+| `reason` | String? | Human-readable reason |
+| `initiatedBy` | String | user, system, or admin:{adminId} |
+| `metadata` | Json? | Additional context (grace days, target plan, etc.) |
+| `userId` | String | User ID |
+| `createdAt` | DateTime | When the change occurred |
+
+### SupportTicket
+User support tickets.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String (cuid) | Primary key |
+| `subject` | String | Ticket subject |
+| `status` | TicketStatus | OPEN, IN_PROGRESS, RESOLVED, CLOSED |
+| `priority` | TicketPriority | LOW, MEDIUM, HIGH, URGENT |
+| `userId` | String | Creator user ID |
+| `createdAt` | DateTime | Creation timestamp |
+| `updatedAt` | DateTime | Last update |
+
+### SupportTicketMessage
+Messages within support tickets.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String (cuid) | Primary key |
+| `content` | String | Message content |
+| `isAdminReply` | Boolean | Whether from admin |
+| `ticketId` | String | Parent ticket |
+| `userId` | String | Author user ID |
+| `createdAt` | DateTime | Send timestamp |
+
+### AdminAuditLog
+Tracks all admin panel actions.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String (cuid) | Primary key |
+| `action` | String | Action performed (UPDATE_USER, DELETE_USER, etc.) |
+| `targetType` | String | Entity type (User, Team, etc.) |
+| `targetId` | String | Entity ID |
+| `details` | Json? | Action details |
+| `adminId` | String | Admin user ID |
+| `createdAt` | DateTime | Action timestamp |
 
 ## Enums
 
@@ -413,10 +483,27 @@ PENDING | ACCEPTED | DECLINED | EXPIRED
 PENDING | SUCCESS | FAILED | RETRYING
 ```
 
+### UserRole
+```
+USER | ADMIN
+```
+
 ### NotificationType
 ```
 BOOKING_CREATED | BOOKING_CONFIRMED | BOOKING_REJECTED | BOOKING_CANCELLED |
-BOOKING_RESCHEDULED | BOOKING_REMINDER | TEAM_MEMBER_ADDED | TEAM_INVITATION_RECEIVED
+BOOKING_RESCHEDULED | BOOKING_REMINDER | TEAM_MEMBER_ADDED | TEAM_INVITATION_RECEIVED |
+PLAN_ACTIVATED | PLAN_REACTIVATED | PLAN_DOWNGRADED | PLAN_EXPIRING |
+PLAN_LOCKED | PLAN_CLEANUP_WARNING
+```
+
+### TicketStatus
+```
+OPEN | IN_PROGRESS | RESOLVED | CLOSED
+```
+
+### TicketPriority
+```
+LOW | MEDIUM | HIGH | URGENT
 ```
 
 ## Migration History
@@ -435,6 +522,9 @@ BOOKING_RESCHEDULED | BOOKING_REMINDER | TEAM_MEMBER_ADDED | TEAM_INVITATION_REC
 | `20260224130000_add_teams_capable_field` | Teams meeting capability |
 | `20260226112235_add_team_enhancements` | Team invitations, audit logs |
 | `20260227082316_add_recurring_v2_fields` | Enhanced recurring bookings |
+| `20260305000000_add_admin_panel` | Admin role, audit log, support tickets, impersonation |
+| `20260310000000_add_webhooks_enhancements` | Webhook name, lockedByDowngrade, event triggers |
+| `20260317000000_subscription_lifecycle` | Stripe fields, subscription status, grace period, subscription history, locked resources |
 
 ## Key Indexes
 

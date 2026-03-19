@@ -230,12 +230,7 @@ export default function EventTypesPage() {
                 </p>
                 <p className="text-sm text-red-700 mt-1">
                   Your plan was downgraded and excess event types have been locked.
-                  {session?.user?.cleanupScheduledAt && (
-                    <> Locked events will be permanently deleted on{' '}
-                      <strong>{new Date(session.user.cleanupScheduledAt).toLocaleDateString()}</strong>.
-                    </>
-                  )}
-                  {' '}You can activate one at a time by deactivating your current active event.
+                  {' '}You can activate one at a time by deactivating your current active event, or upgrade to unlock all.
                 </p>
                 <Link href="/dashboard/billing" className="inline-block mt-2">
                   <Button size="sm" variant="destructive">

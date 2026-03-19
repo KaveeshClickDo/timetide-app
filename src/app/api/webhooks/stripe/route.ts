@@ -160,24 +160,27 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
 
   // Check if user scheduled a cancellation via portal
   if (subscription.cancel_at_period_end && 'cancel_at_period_end' in previousAttributes) {
-    // User cancelled — keep access until period end
     if (user.subscriptionStatus === 'ACTIVE') {
+      // User cancelled — keep access until period end
       await voluntaryUnsubscribe(user.id, 'user')
       console.log(`[stripe-webhook] User cancelled (period end): user=${user.id}`)
+    } else if (user.subscriptionStatus === 'DOWNGRADING') {
+      // Already scheduled for downgrade — Stripe cancellation is expected, no DB change needed
+      console.log(`[stripe-webhook] Cancel confirmed for DOWNGRADING user: user=${user.id}`)
     }
     return
   }
 
   // Check if user un-cancelled (reversed a pending cancellation)
   if (!subscription.cancel_at_period_end && 'cancel_at_period_end' in previousAttributes) {
-    if (user.subscriptionStatus === 'UNSUBSCRIBED') {
+    if (['UNSUBSCRIBED', 'DOWNGRADING'].includes(user.subscriptionStatus)) {
       const periodEnd = getSubscriptionPeriodEnd(subscription)
       const expiresAt = periodEnd ? timestampToDate(periodEnd) : undefined
       const priceId = getPriceId(subscription)
       const plan = priceId ? planFromPriceId(priceId) : null
       if (plan) {
         await activateSubscription(user.id, plan, expiresAt ?? 30, 'system')
-        console.log(`[stripe-webhook] User un-cancelled: user=${user.id}`)
+        console.log(`[stripe-webhook] User un-cancelled: user=${user.id} (was ${user.subscriptionStatus})`)
       }
     }
     return
@@ -220,6 +223,9 @@ async function handleSubscriptionDeleted(event: Stripe.Event) {
   if (['ACTIVE', 'UNSUBSCRIBED'].includes(user.subscriptionStatus)) {
     await startGracePeriod(user.id)
     console.log(`[stripe-webhook] Subscription deleted, grace started: user=${user.id}`)
+  } else if (user.subscriptionStatus === 'DOWNGRADING') {
+    // DOWNGRADING users: background job handles the transition at gracePeriodEndsAt
+    console.log(`[stripe-webhook] Subscription deleted for DOWNGRADING user: user=${user.id} (background job will handle transition)`)
   }
 }
 

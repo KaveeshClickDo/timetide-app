@@ -9,7 +9,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import { checkFeatureAccess, checkEventTypeFeatures, getTeamOwnerPlan } from '@/lib/plan-enforcement';
+import { checkFeatureAccess, checkEventTypeFeatures, getTeamOwnerPlan, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
 import {
   slugSchema,
   locationTypeSchema,
@@ -142,7 +142,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Enforce teams feature gate based on team owner's plan (owner is paying)
-    const ownerPlan = await getTeamOwnerPlan(params.id);
+    const { plan: ownerPlan, subscriptionStatus: ownerSubStatus } = await getTeamOwnerPlan(params.id);
+
+    // Block if team owner's subscription is LOCKED
+    const lockedDenied = checkSubscriptionNotLocked(ownerSubStatus);
+    if (lockedDenied) return lockedDenied;
+
     const teamsDenied = checkFeatureAccess(ownerPlan, 'teams');
     if (teamsDenied) return teamsDenied;
 

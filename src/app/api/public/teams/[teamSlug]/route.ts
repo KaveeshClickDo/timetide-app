@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing';
 
 interface RouteParams {
   params: { teamSlug: string };
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Find team with active event types
+    // Find team with owner's plan info and active event types
     const team = await prisma.team.findUnique({
       where: { slug: teamSlug },
       select: {
@@ -34,18 +35,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
           where: { isActive: true },
           select: {
             id: true,
+            role: true,
             user: {
               select: {
                 id: true,
                 name: true,
                 image: true,
+                plan: true,
               },
             },
           },
           take: 10, // Limit to first 10 members for display
         },
         eventTypes: {
-          where: { isActive: true },
+          where: { isActive: true, lockedByDowngrade: false },
           select: {
             id: true,
             title: true,
@@ -78,6 +81,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     });
 
     if (!team) {
+      return NextResponse.json({ error: 'Team not found' }, { status: 404 });
+    }
+
+    // Check if team owner has a plan that supports teams
+    const owner = team.members.find((m) => m.role === 'OWNER');
+    const ownerPlan = (owner?.user?.plan || 'FREE') as PlanTier;
+    if (!PLAN_LIMITS[ownerPlan]?.teams) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 });
     }
 

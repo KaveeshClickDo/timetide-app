@@ -30,6 +30,7 @@ import {
 } from '@/lib/integrations/zoom';
 import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
 import { verifyCode } from '@/lib/email-verification';
+import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing';
 import {
   checkBookingRateLimit,
   queueBookingConfirmationEmails,
@@ -179,7 +180,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch event type with team member assignments
     const eventType = await prisma.eventType.findUnique({
-      where: { id: eventTypeId, isActive: true },
+      where: { id: eventTypeId, isActive: true, lockedByDowngrade: false },
       include: {
         user: {
           select: {
@@ -228,6 +229,21 @@ export async function POST(request: NextRequest) {
         { error: 'Event type not found or is not active' },
         { status: 404 }
       );
+    }
+
+    // For team event types, verify the team owner still has a TEAM plan
+    if (eventType.teamId) {
+      const teamOwner = await prisma.teamMember.findFirst({
+        where: { teamId: eventType.teamId, role: 'OWNER' },
+        select: { user: { select: { plan: true } } },
+      });
+      const ownerPlan = (teamOwner?.user?.plan || 'FREE') as PlanTier;
+      if (!PLAN_LIMITS[ownerPlan]?.teams) {
+        return NextResponse.json(
+          { error: 'This team event type is currently unavailable' },
+          { status: 404 }
+        );
+      }
     }
 
     // Validate recurring request

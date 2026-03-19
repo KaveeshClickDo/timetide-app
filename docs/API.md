@@ -611,6 +611,248 @@ All endpoints return consistent error formats:
 
 ---
 
+## Billing & Subscriptions
+
+> Full details: [docs/BILLING.md](BILLING.md)
+
+### `POST /api/billing/checkout`
+**Auth:** Required
+
+Create or update a Stripe subscription.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `plan` | string | Yes | `PRO` or `TEAM` |
+
+**Logic:**
+- Blocks downgrades (use schedule-downgrade instead)
+- Blocks same-plan if ACTIVE
+- Blocks if DOWNGRADING (cancel scheduled switch first)
+- Creates checkout session or updates existing subscription with proration
+
+**Response:**
+```json
+{ "url": "https://checkout.stripe.com/..." }
+```
+
+### `POST /api/billing/schedule-downgrade`
+**Auth:** Required
+
+Schedule a plan downgrade at end of billing period.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `plan` | string | Yes | Target plan (`FREE`, `PRO`) — must be lower than current |
+
+**Response:**
+```json
+{
+  "success": true,
+  "switchDate": "2026-04-19T00:00:00.000Z",
+  "message": "Your plan will switch to FREE on 4/19/2026"
+}
+```
+
+### `DELETE /api/billing/schedule-downgrade`
+**Auth:** Required
+
+Cancel a scheduled downgrade. Restores plan to ACTIVE.
+
+### `POST /api/billing/portal`
+**Auth:** Required
+
+Redirect to Stripe Customer Portal for invoice/payment management.
+
+**Response:**
+```json
+{ "url": "https://billing.stripe.com/..." }
+```
+
+### `POST /api/webhooks/stripe`
+**Auth:** Stripe webhook signature verification
+
+Handles Stripe webhook events:
+- `customer.subscription.created` — Activate subscription
+- `customer.subscription.updated` — Handle cancel/uncancel/plan change
+- `customer.subscription.deleted` — Start grace period
+- `invoice.payment_succeeded` — Renew subscription
+- `invoice.payment_failed` — Start grace period when retries exhausted
+
+Always returns `{ "received": true }`.
+
+---
+
+## Admin Endpoints
+
+### `GET /api/admin/stats`
+**Auth:** Admin only
+
+Dashboard statistics (user counts, booking counts, revenue metrics).
+
+### `GET /api/admin/analytics`
+**Auth:** Admin only
+
+Platform-wide analytics data.
+
+### `GET /api/admin/users`
+**Auth:** Admin only
+
+List all users with pagination, search, and filtering.
+
+### `GET /api/admin/users/[id]`
+**Auth:** Admin only
+
+Detailed user profile including event types, bookings, team memberships, calendars, webhooks, support tickets, and subscription history.
+
+### `PATCH /api/admin/users/[id]`
+**Auth:** Admin only (rate limited: 30/min)
+
+Update user fields or perform subscription actions.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `role` | string | No | `USER` or `ADMIN` |
+| `isDisabled` | boolean | No | Disable/enable account |
+| `plan` | string | No | Target plan (triggers implicit upgrade/downgrade) |
+| `planAction` | string | No | `upgrade`, `downgrade_immediate`, `downgrade_grace`, `cancel_downgrade` |
+| `gracePeriodDays` | number | No | Grace period days (for `downgrade_grace`) |
+
+**Transition validation:**
+- `upgrade`: allowed from any status; target must be higher than current
+- `downgrade_immediate`: allowed from ACTIVE, UNSUBSCRIBED, GRACE_PERIOD, DOWNGRADING
+- `downgrade_grace`: allowed from ACTIVE, UNSUBSCRIBED
+- `cancel_downgrade`: allowed from DOWNGRADING only
+
+**Response includes `stripeSyncSuccess` and optional `warning` if Stripe sync failed.**
+
+**Error (invalid transition):**
+```json
+{
+  "error": "Cannot downgrade: user is already in LOCKED status",
+  "code": "INVALID_TRANSITION",
+  "currentStatus": "LOCKED",
+  "currentPlan": "FREE"
+}
+```
+
+### `DELETE /api/admin/users/[id]`
+**Auth:** Admin only
+
+Delete user (cannot delete admin users).
+
+### `POST /api/admin/users/[id]/impersonate`
+**Auth:** Admin only
+
+Start impersonating a user. Modifies JWT with `originalAdminId`.
+
+### `GET /api/admin/users/[id]/subscription`
+**Auth:** Admin only
+
+Get user's Stripe subscription details.
+
+### `GET /api/admin/users/[id]/downgrade-preview`
+**Auth:** Admin only
+
+Preview what resources would be locked on downgrade.
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `targetPlan` | string | No | Target plan (default: FREE) |
+
+**Response:**
+```json
+{
+  "targetPlan": "FREE",
+  "currentPlan": "PRO",
+  "personalEventTypes": { "active": 5, "toLock": 4, "toKeep": 1, "items": [...] },
+  "webhooks": { "active": 3, "toLock": 3, "toKeep": 0, "items": [...] },
+  "teamEventTypes": { "active": 0, "toLock": 0, "items": [] },
+  "featuresLost": ["customQuestions", "groupBooking", "recurringBooking"]
+}
+```
+
+### `GET /api/admin/bookings`
+**Auth:** Admin only
+
+List all bookings with pagination and filtering.
+
+### `GET /api/admin/teams`
+**Auth:** Admin only
+
+List all teams with member counts.
+
+### `GET /api/admin/teams/[id]`
+**Auth:** Admin only
+
+Detailed team information.
+
+### `GET /api/admin/tickets`
+**Auth:** Admin only
+
+List support tickets with filtering.
+
+### `GET /api/admin/tickets/[id]`
+**Auth:** Admin only
+
+Get ticket details with messages.
+
+### `PATCH /api/admin/tickets/[id]`
+**Auth:** Admin only
+
+Update ticket status or priority.
+
+### `POST /api/admin/tickets/[id]/messages`
+**Auth:** Admin only
+
+Reply to a support ticket.
+
+### `GET /api/admin/audit-log`
+**Auth:** Admin only
+
+Admin action audit trail with pagination.
+
+### `GET /api/admin/system`
+**Auth:** Admin only
+
+System health information (queue stats, Redis status, etc.).
+
+### `POST /api/admin/system/webhooks/[deliveryId]/retry`
+**Auth:** Admin only
+
+Retry a failed webhook delivery.
+
+---
+
+## Support Tickets
+
+### `GET /api/tickets`
+**Auth:** Required
+
+List user's support tickets.
+
+### `POST /api/tickets`
+**Auth:** Required
+
+Create a new support ticket.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `subject` | string | Yes | Ticket subject |
+| `message` | string | Yes | Initial message |
+| `priority` | string | No | LOW, MEDIUM, HIGH, URGENT |
+
+### `GET /api/tickets/[id]`
+**Auth:** Required
+
+Get ticket details with messages.
+
+### `POST /api/tickets/[id]/messages`
+**Auth:** Required
+
+Add a message to a ticket.
+
+---
+
 ## Development-Only
 
 ### `GET /api/mock/switch-plan`

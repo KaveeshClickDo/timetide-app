@@ -1489,81 +1489,14 @@ export function generatePlanLockedEmail(data: PlanEmailData): string {
           <span class="detail-value">${esc(lockedRows.join(' and '))}</span>
         </div>` : ''}
         <div class="detail-row">
-          <span class="detail-label">Deleted On</span>
-          <span class="detail-value">${esc(data.cleanupScheduledAt)}</span>
-        </div>
-      </div>
-      <p style="text-align: center; color: #64748b;">
-        Your locked resources will be permanently deleted on the date above. Reactivate now to restore them.
-      </p>
-      ${planCta(data.reactivateUrl, 'Reactivate Now')}
-    ${planEmailFooter()}
-  `;
-}
-
-export function generateCleanupWarningEmail(data: PlanEmailData): string {
-  return `
-    ${planEmailHeader(
-      'Your data will be deleted soon',
-      `Hi ${esc(data.userName)}, this is your final warning.`,
-      '#dc2626',
-    )}
-      <div class="card" style="border: 2px solid #fecaca;">
-        <div class="detail-row">
-          <span class="detail-label">Deleted On</span>
-          <span class="detail-value" style="color: #dc2626; font-weight: 700;">${esc(data.cleanupScheduledAt)}</span>
-        </div>
-        ${data.lockedEventCount ? `
-        <div class="detail-row">
-          <span class="detail-label">Events</span>
-          <span class="detail-value">${data.lockedEventCount} locked event type${data.lockedEventCount !== 1 ? 's' : ''}</span>
-        </div>` : ''}
-        ${data.lockedTeamEventCount ? `
-        <div class="detail-row">
-          <span class="detail-label">Team Events</span>
-          <span class="detail-value">${data.lockedTeamEventCount} locked team event type${data.lockedTeamEventCount !== 1 ? 's' : ''}</span>
-        </div>` : ''}
-        ${data.lockedWebhookCount ? `
-        <div class="detail-row">
-          <span class="detail-label">Webhooks</span>
-          <span class="detail-value">${data.lockedWebhookCount} locked webhook${data.lockedWebhookCount !== 1 ? 's' : ''}</span>
-        </div>` : ''}
-      </div>
-      <p style="text-align: center; color: #dc2626; font-weight: 500;">
-        After this date, your locked event types and webhooks will be permanently deleted and cannot be recovered.
-      </p>
-      ${planCta(data.reactivateUrl, 'Reactivate Now')}
-    ${planEmailFooter()}
-  `;
-}
-
-export function generateCleanupCompleteEmail(data: PlanEmailData): string {
-  return `
-    ${planEmailHeader(
-      'Your extra resources have been removed',
-      `Hi ${esc(data.userName)}, your account has been adjusted to the ${esc(data.newPlan || 'FREE')} plan.`,
-      '#64748b',
-    )}
-      <div class="card">
-        <div class="detail-row">
-          <span class="detail-label">Plan</span>
+          <span class="detail-label">New Plan</span>
           <span class="detail-value">${esc(data.newPlan || 'FREE')}</span>
         </div>
-        ${data.lockedEventCount ? `
-        <div class="detail-row">
-          <span class="detail-label">Removed</span>
-          <span class="detail-value">${data.lockedEventCount} event type${data.lockedEventCount !== 1 ? 's' : ''} deleted</span>
-        </div>` : ''}
-        ${data.lockedTeamEventCount ? `
-        <div class="detail-row">
-          <span class="detail-label">Team Events</span>
-          <span class="detail-value">${data.lockedTeamEventCount} team event type${data.lockedTeamEventCount !== 1 ? 's' : ''} deleted</span>
-        </div>` : ''}
       </div>
       <p style="text-align: center; color: #64748b;">
-        You can upgrade anytime to create more event types and access PRO features.
+        Your locked resources are inactive but preserved. Upgrade anytime to reactivate them.
       </p>
-      ${planCta(data.reactivateUrl, 'View Plans', 'outline')}
+      ${planCta(data.reactivateUrl, 'Reactivate Now')}
     ${planEmailFooter()}
   `;
 }
@@ -1572,8 +1505,8 @@ export function generateAdminDowngradeEmail(data: PlanEmailData): string {
   return `
     ${planEmailHeader(
       'Your plan has been changed',
-      `Hi ${esc(data.userName)}, an administrator has changed your plan.`,
-      '#f97316',
+      `Hi ${esc(data.userName)}, an administrator has downgraded your plan effective immediately.`,
+      '#ef4444',
     )}
       <div class="card">
         <div class="detail-row">
@@ -1584,19 +1517,154 @@ export function generateAdminDowngradeEmail(data: PlanEmailData): string {
           <span class="detail-label">New Plan</span>
           <span class="detail-value">${esc(data.newPlan || 'FREE')}</span>
         </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        Features exceeding your new plan limits have been locked. Your data is preserved — upgrade anytime to reactivate locked resources.
+      </p>
+      ${planCta(data.reactivateUrl, 'View Billing')}
+    ${planEmailFooter('If you believe this is an error, please contact support.')}
+  `;
+}
+
+export function generateAdminDowngradeGraceEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Your plan change has been scheduled',
+      `Hi ${esc(data.userName)}, an administrator has scheduled a plan change for your account.`,
+      '#f97316',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Current Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">New Plan</span>
+          <span class="detail-value">${esc(data.newPlan || 'FREE')}</span>
+        </div>
         ${data.gracePeriodEndsAt ? `
         <div class="detail-row">
-          <span class="detail-label">Grace Until</span>
+          <span class="detail-label">Changes On</span>
           <span class="detail-value">${esc(data.gracePeriodEndsAt)}</span>
         </div>` : ''}
       </div>
       <p style="text-align: center; color: #64748b;">
-        ${data.gracePeriodEndsAt
-          ? 'You have a grace period to upgrade before your features are locked.'
-          : 'Your plan has been updated by an administrator.'}
+        Your current features remain fully active until the date above. After that, resources exceeding your new plan limits will be locked. You can upgrade anytime to keep your current plan.
       </p>
       ${planCta(data.reactivateUrl, 'View Billing')}
     ${planEmailFooter('If you believe this is an error, please contact support.')}
+  `;
+}
+
+export function generateSubscriptionCancelledEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Subscription cancelled',
+      `Hi ${esc(data.userName)}, your <strong>${esc(data.currentPlan)}</strong> subscription has been cancelled.`,
+      '#f59e0b',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Active Until</span>
+          <span class="detail-value">${esc(data.expiresAt)}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        Your ${esc(data.currentPlan)} features will remain available until the date above. After that, you'll enter a 7-day grace period to resubscribe before features are locked.
+      </p>
+      <p style="text-align: center; color: #64748b;">
+        Changed your mind? You can resubscribe anytime before your plan expires.
+      </p>
+      ${planCta(data.reactivateUrl, 'Resubscribe')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateUserDowngradeScheduledEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Plan switch scheduled',
+      `Hi ${esc(data.userName)}, your plan switch has been scheduled.`,
+      '#f59e0b',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Current Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Switching To</span>
+          <span class="detail-value">${esc(data.newPlan || 'FREE')}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Switch Date</span>
+          <span class="detail-value">${esc(data.gracePeriodEndsAt)}</span>
+        </div>
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        You'll keep your ${esc(data.currentPlan)} features until the switch date. After that, features exceeding the ${esc(data.newPlan || 'FREE')} plan limits will be locked.
+      </p>
+      <p style="text-align: center; color: #64748b;">
+        Changed your mind? You can cancel the switch from your billing page.
+      </p>
+      ${planCta(data.reactivateUrl, 'Manage Billing')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generateDowngradeCancelledEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Plan switch cancelled',
+      `Hi ${esc(data.userName)}, your scheduled plan switch has been cancelled.`,
+      '#16a34a',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        ${data.expiresAt ? `
+        <div class="detail-row">
+          <span class="detail-label">Renews</span>
+          <span class="detail-value">${esc(data.expiresAt)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        Your ${esc(data.currentPlan)} plan remains active. No changes will be made to your subscription.
+      </p>
+      ${planCta(data.reactivateUrl, 'Go to Dashboard', 'outline')}
+    ${planEmailFooter()}
+  `;
+}
+
+export function generatePlanActivatedEmail(data: PlanEmailData): string {
+  return `
+    ${planEmailHeader(
+      `Welcome to ${esc(data.currentPlan)}!`,
+      `Hi ${esc(data.userName)}, your <strong>${esc(data.currentPlan)}</strong> plan is now active.`,
+      '#16a34a',
+    )}
+      <div class="card">
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.currentPlan)}</span>
+        </div>
+        ${data.expiresAt ? `
+        <div class="detail-row">
+          <span class="detail-label">Renews</span>
+          <span class="detail-value">${esc(data.expiresAt)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        You now have access to all ${esc(data.currentPlan)} features. Enjoy your upgraded experience!
+      </p>
+      ${planCta(data.reactivateUrl, 'Go to Dashboard', 'outline')}
+    ${planEmailFooter()}
   `;
 }
 

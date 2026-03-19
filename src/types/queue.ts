@@ -22,9 +22,12 @@ export type EmailJobType =
   | 'grace_period_started'
   | 'grace_period_ending'
   | 'plan_locked'
-  | 'cleanup_warning'
-  | 'plan_cleanup_complete'
   | 'admin_downgrade_notice'
+  | 'admin_downgrade_grace_notice'
+  | 'user_downgrade_scheduled'
+  | 'subscription_cancelled'
+  | 'downgrade_cancelled'
+  | 'plan_activated'
   | 'plan_reactivated'
   | 'custom'
 
@@ -35,7 +38,6 @@ export interface PlanEmailData {
   newPlan?: string
   expiresAt?: string
   gracePeriodEndsAt?: string
-  cleanupScheduledAt?: string
   lockedEventCount?: number
   lockedTeamEventCount?: number
   lockedWebhookCount?: number
@@ -168,11 +170,10 @@ export interface RateLimitResult {
 export type SubscriptionJobType =
   | 'check_expirations'
   | 'check_grace_periods'
-  | 'check_cleanups'
   | 'send_warning'
 
 export interface SubscriptionJobData {
   type: SubscriptionJobType
   userId?: string          // For user-specific jobs like send_warning
-  warningType?: string     // For send_warning: 'expiring' | 'grace_ending' | 'cleanup_warning'
+  warningType?: string     // For send_warning: 'expiring' | 'grace_ending'
 }

@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Suspense, useState, useEffect } from 'react'
-import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CreditCard, CheckCircle2, type LucideIcon } from 'lucide-react'
+import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CreditCard, CheckCircle2, ArrowDown, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -63,8 +63,11 @@ function BillingContent() {
   const gracePeriodEndsAt = session?.user?.gracePeriodEndsAt
   const cleanupScheduledAt = session?.user?.cleanupScheduledAt
 
+  const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
+
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [portalLoading, setPortalLoading] = useState(false)
+  const [downgradeLoading, setDowngradeLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'info'; text: string } | null>(null)
 
   // Show success/cancel feedback from Stripe redirect
@@ -108,10 +111,54 @@ function BillingContent() {
   const eventTypeCount = (eventTypes as any)?.eventTypes?.length ?? 0
   const webhookCount = (webhooks as any)?.webhooks?.length ?? 0
 
-  const hasPaidSubscription = subscriptionStatus && !['NONE', 'LOCKED'].includes(subscriptionStatus) && currentPlan !== 'FREE'
+  // Only show "Manage Subscription" when user has an active/unsubscribed Stripe subscription
+  const hasPaidSubscription = (subscriptionStatus === 'ACTIVE' || subscriptionStatus === 'UNSUBSCRIBED') && currentPlan !== 'FREE'
 
   async function handlePlanSelect(plan: PlanTier) {
     if (plan === 'FREE') return
+
+    // DOWNGRADING: user already has a scheduled plan switch
+    if (subscriptionStatus === 'DOWNGRADING') {
+      if (plan === currentPlan) {
+        // Clicking current plan = cancel the downgrade and stay
+        await handleCancelDowngrade()
+        return
+      }
+      setStatusMessage({ type: 'info', text: 'Please cancel your scheduled plan switch first, then select a new plan.' })
+      return
+    }
+
+    const isDowngrade = TIER_ORDER.indexOf(plan) < TIER_ORDER.indexOf(currentPlan)
+    const canScheduleDowngrade = isDowngrade && subscriptionStatus === 'UNSUBSCRIBED'
+
+    // Cancelled user switching to lower plan → schedule at period end
+    if (canScheduleDowngrade) {
+      setDowngradeLoading(true)
+      try {
+        const res = await fetch('/api/billing/schedule-downgrade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan }),
+        })
+        const data = await res.json()
+        if (data.success) {
+          setStatusMessage({ type: 'success', text: data.warning || data.message })
+          updateSession()
+          const retry = setTimeout(() => updateSession(), 3000)
+          setTimeout(() => setStatusMessage(null), 8000)
+          return () => clearTimeout(retry)
+        } else {
+          setStatusMessage({ type: 'info', text: data.error || 'Failed to schedule downgrade' })
+        }
+      } catch {
+        setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+      } finally {
+        setDowngradeLoading(false)
+      }
+      return
+    }
+
+    // Normal upgrade or re-subscribe → checkout
     setCheckoutLoading(true)
     try {
       const res = await fetch('/api/billing/checkout', {
@@ -129,6 +176,26 @@ function BillingContent() {
     } catch {
       setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
       setCheckoutLoading(false)
+    }
+  }
+
+  async function handleCancelDowngrade() {
+    setDowngradeLoading(true)
+    try {
+      const res = await fetch('/api/billing/schedule-downgrade', { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        setStatusMessage({ type: 'success', text: 'Scheduled plan change cancelled.' })
+        updateSession()
+        setTimeout(() => updateSession(), 3000)
+        setTimeout(() => setStatusMessage(null), 8000)
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to cancel downgrade' })
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+    } finally {
+      setDowngradeLoading(false)
     }
   }
 
@@ -262,15 +329,30 @@ function BillingContent() {
                     Cancelled. {currentPlan} features remain active until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
                   </p>
                 )}
-                {(subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && gracePeriodEndsAt && (
+                {subscriptionStatus === 'GRACE_PERIOD' && gracePeriodEndsAt && (
                   <p className="text-sm text-orange-700">
                     Renew before <strong>{new Date(gracePeriodEndsAt).toLocaleDateString()}</strong> to keep your features.
                   </p>
                 )}
-                {subscriptionStatus === 'LOCKED' && cleanupScheduledAt && (
+                {subscriptionStatus === 'DOWNGRADING' && gracePeriodEndsAt && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-orange-700">
+                      Your plan will switch on <strong>{new Date(gracePeriodEndsAt).toLocaleDateString()}</strong>. Current features remain active until then.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={downgradeLoading}
+                      onClick={handleCancelDowngrade}
+                      className="ml-4 flex-shrink-0"
+                    >
+                      {downgradeLoading ? 'Cancelling...' : 'Cancel Switch'}
+                    </Button>
+                  </div>
+                )}
+                {subscriptionStatus === 'LOCKED' && (
                   <p className="text-sm text-red-700">
-                    Features locked. Data will be permanently deleted on <strong>{new Date(cleanupScheduledAt).toLocaleDateString()}</strong>.
-                    Reactivate now to restore them.
+                    Features locked. Upgrade to reactivate your event types and webhooks.
                   </p>
                 )}
               </div>
@@ -292,16 +374,21 @@ function BillingContent() {
 
       {/* Pricing Grid */}
       <div className="grid md:grid-cols-3 gap-8">
-        {PRICING_TIERS.map((tier) => (
-          <PricingCard
-            key={tier.id}
-            tier={tier}
-            currentPlan={currentPlan}
-            highlighted={highlightPlan === tier.id}
-            onSelect={tier.id !== 'FREE' ? handlePlanSelect : undefined}
-            loading={checkoutLoading}
-          />
-        ))}
+        {PRICING_TIERS.map((tier) => {
+          // Subscription is inactive or cancelled — allow subscribing to any paid plan
+          const subscriptionInactive = !subscriptionStatus || ['NONE', 'UNSUBSCRIBED', 'GRACE_PERIOD', 'LOCKED', 'DOWNGRADING'].includes(subscriptionStatus)
+          return (
+            <PricingCard
+              key={tier.id}
+              tier={tier}
+              currentPlan={currentPlan}
+              highlighted={highlightPlan === tier.id}
+              onSelect={tier.id !== 'FREE' ? handlePlanSelect : undefined}
+              loading={checkoutLoading || downgradeLoading}
+              subscriptionInactive={subscriptionInactive}
+            />
+          )
+        })}
       </div>
 
       <p className="text-center text-sm text-gray-400 mt-8">

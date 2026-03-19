@@ -127,6 +127,21 @@ export default function AdminUserDetailPage() {
     },
   })
 
+  const { data: downgradePreview, isLoading: previewLoading } = useQuery<{
+    personalEventTypes: { active: number; toLock: number; toKeep: number; items: { id: string; title: string; slug: string }[] }
+    webhooks: { active: number; toLock: number; toKeep: number; items: { id: string; name: string; url: string }[] }
+    teamEventTypes: { active: number; toLock: number; items: { id: string; title: string; teamName: string | null }[] }
+    featuresLost: string[]
+  }>({
+    queryKey: ['admin-downgrade-preview', id, downgradeTargetPlan],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/users/${id}/downgrade-preview?targetPlan=${downgradeTargetPlan}`)
+      if (!res.ok) throw new Error('Failed to fetch preview')
+      return res.json()
+    },
+    enabled: showDowngradeDialog !== null,
+  })
+
   const updateUser = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
       const res = await fetch(`/api/admin/users/${id}`, {
@@ -140,9 +155,13 @@ export default function AdminUserDetailPage() {
       }
       return res.json()
     },
-    onSuccess: () => {
+    onSuccess: (data: Record<string, unknown>) => {
       queryClient.invalidateQueries({ queryKey: ['admin-user', id] })
-      toast({ title: 'User updated successfully' })
+      if (data?.warning) {
+        toast({ title: 'User updated', description: String(data.warning), variant: 'destructive' })
+      } else {
+        toast({ title: 'User updated successfully' })
+      }
     },
     onError: (err: Error) => {
       toast({ title: err.message, variant: 'destructive' })
@@ -968,13 +987,53 @@ export default function AdminUserDetailPage() {
                 {downgradeTargets[user.plan]?.length === 1 && (
                   <Badge className={cn('text-xs', planColors[downgradeTargetPlan])}>{downgradeTargetPlan}</Badge>
                 )}
-                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 space-y-1">
+                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700 space-y-2">
                   <p className="font-medium">This action takes effect immediately:</p>
-                  <ul className="list-disc list-inside text-xs space-y-0.5">
-                    <li>Features exceeding the target plan will be locked</li>
-                    <li>Excess event types and webhooks will be deactivated</li>
-                    <li>User has 7 days to reactivate before data is deleted</li>
-                  </ul>
+                  {previewLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-red-600">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading impact preview…
+                    </div>
+                  ) : downgradePreview ? (
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      {downgradePreview.personalEventTypes.toLock > 0 && (
+                        <li>
+                          {downgradePreview.personalEventTypes.toLock} event type{downgradePreview.personalEventTypes.toLock !== 1 ? 's' : ''} will be locked
+                          {downgradePreview.personalEventTypes.items.length > 0 && (
+                            <span className="text-red-500"> ({downgradePreview.personalEventTypes.items.map(e => e.title).join(', ')})</span>
+                          )}
+                        </li>
+                      )}
+                      {downgradePreview.webhooks.toLock > 0 && (
+                        <li>
+                          {downgradePreview.webhooks.toLock} webhook{downgradePreview.webhooks.toLock !== 1 ? 's' : ''} will be deactivated
+                          {downgradePreview.webhooks.items.length > 0 && (
+                            <span className="text-red-500"> ({downgradePreview.webhooks.items.map(w => w.name || w.url).join(', ')})</span>
+                          )}
+                        </li>
+                      )}
+                      {downgradePreview.teamEventTypes.toLock > 0 && (
+                        <li>
+                          {downgradePreview.teamEventTypes.toLock} team event type{downgradePreview.teamEventTypes.toLock !== 1 ? 's' : ''} will be locked
+                        </li>
+                      )}
+                      {downgradePreview.featuresLost.length > 0 && (
+                        <li>Features lost: {downgradePreview.featuresLost.join(', ')}</li>
+                      )}
+                      {downgradePreview.personalEventTypes.toLock === 0 &&
+                       downgradePreview.webhooks.toLock === 0 &&
+                       downgradePreview.teamEventTypes.toLock === 0 &&
+                       downgradePreview.featuresLost.length === 0 && (
+                        <li>No resources will be locked by this downgrade</li>
+                      )}
+                    </ul>
+                  ) : (
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      <li>Features exceeding the target plan will be locked</li>
+                      <li>Excess event types and webhooks will be deactivated</li>
+                    </ul>
+                  )}
+                  <p className="text-xs text-red-500">Locked resources are preserved — user can upgrade to reactivate</p>
                 </div>
               </div>
             </AlertDialogDescription>
@@ -1061,6 +1120,50 @@ export default function AdminUserDetailPage() {
                   <p className="text-xs text-gray-500 mt-1">
                     User keeps current features for {gracePeriodDays} day{gracePeriodDays !== 1 ? 's' : ''}. After that, resources are locked.
                   </p>
+                </div>
+                <div className="rounded-md bg-orange-50 p-3 text-sm text-orange-700 space-y-2">
+                  <p className="font-medium">After grace period ends:</p>
+                  {previewLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-orange-600">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading impact preview…
+                    </div>
+                  ) : downgradePreview ? (
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      {downgradePreview.personalEventTypes.toLock > 0 && (
+                        <li>
+                          {downgradePreview.personalEventTypes.toLock} event type{downgradePreview.personalEventTypes.toLock !== 1 ? 's' : ''} will be locked
+                          {downgradePreview.personalEventTypes.items.length > 0 && (
+                            <span className="text-orange-500"> ({downgradePreview.personalEventTypes.items.map(e => e.title).join(', ')})</span>
+                          )}
+                        </li>
+                      )}
+                      {downgradePreview.webhooks.toLock > 0 && (
+                        <li>
+                          {downgradePreview.webhooks.toLock} webhook{downgradePreview.webhooks.toLock !== 1 ? 's' : ''} will be deactivated
+                        </li>
+                      )}
+                      {downgradePreview.teamEventTypes.toLock > 0 && (
+                        <li>
+                          {downgradePreview.teamEventTypes.toLock} team event type{downgradePreview.teamEventTypes.toLock !== 1 ? 's' : ''} will be locked
+                        </li>
+                      )}
+                      {downgradePreview.featuresLost.length > 0 && (
+                        <li>Features lost: {downgradePreview.featuresLost.join(', ')}</li>
+                      )}
+                      {downgradePreview.personalEventTypes.toLock === 0 &&
+                       downgradePreview.webhooks.toLock === 0 &&
+                       downgradePreview.teamEventTypes.toLock === 0 &&
+                       downgradePreview.featuresLost.length === 0 && (
+                        <li>No resources will be locked by this downgrade</li>
+                      )}
+                    </ul>
+                  ) : (
+                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                      <li>Features exceeding the target plan will be locked</li>
+                      <li>Excess event types and webhooks will be deactivated</li>
+                    </ul>
+                  )}
                 </div>
               </div>
             </AlertDialogDescription>

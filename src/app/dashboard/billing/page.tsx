@@ -3,8 +3,8 @@
 import { useSession } from 'next-auth/react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import { Suspense, useState, useEffect } from 'react'
-import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CreditCard, CheckCircle2, ArrowDown, type LucideIcon } from 'lucide-react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
+import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CheckCircle2, ArrowDown, type LucideIcon } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,10 +17,13 @@ import {
   getPlanBadgeStyles,
   getPlanLimits,
   type PlanTier,
+  type PlanConfig,
+  type PricingTier,
+  planConfigToTier,
 } from '@/lib/pricing'
 
 function UsageBar({ used, limit, label, icon: Icon }: { used: number; limit: number; label: string; icon: LucideIcon }) {
-  const isUnlimited = limit === Infinity
+  const isUnlimited = limit === Infinity || limit >= 999999
   const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100)
   const isAtLimit = !isUnlimited && used >= limit
 
@@ -56,39 +59,115 @@ function BillingContent() {
   const highlightPlan = searchParams.get('highlight') as PlanTier | null
   const success = searchParams.get('success')
   const canceled = searchParams.get('canceled')
+  const sessionId = searchParams.get('session_id')
+  const successPlan = searchParams.get('plan')
+  const cardUpdated = searchParams.get('card_updated')
+  const setupSessionId = searchParams.get('setup_session_id')
   const currentPlan = (session?.user?.plan as PlanTier) || 'FREE'
   const currentTier = getPlanByTier(currentPlan)
   const limits = getPlanLimits(currentPlan)
   const subscriptionStatus = session?.user?.subscriptionStatus
   const planExpiresAt = session?.user?.planExpiresAt
   const gracePeriodEndsAt = session?.user?.gracePeriodEndsAt
-  const cleanupScheduledAt = session?.user?.cleanupScheduledAt
 
   const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
 
   const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null)
-  const [portalLoading, setPortalLoading] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
   const [confirmPlan, setConfirmPlan] = useState<PlanTier | null>(null)
+  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [updateCardLoading, setUpdateCardLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'info'; text: string } | null>(null)
+
+  // Fetch plans from API (DB-backed)
+  const { data: plansData } = useQuery<PlanConfig[]>({
+    queryKey: ['plans'],
+    queryFn: async () => {
+      const res = await fetch('/api/plans')
+      if (!res.ok) return []
+      return res.json()
+    },
+  })
+
+  // Convert DB plans to PricingTier format for display, or fall back to hardcoded
+  const displayTiers: PricingTier[] = plansData && plansData.length > 0
+    ? plansData.map(planConfigToTier)
+    : PRICING_TIERS
+
+  // Handle checkout success — verify payment and activate plan
+  const handleCheckoutSuccess = useCallback(async () => {
+    if (!sessionId) return
+
+    try {
+      const res = await fetch('/api/billing/checkout/callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setStatusMessage({ type: 'success', text: `${successPlan || 'Plan'} activated! Your session will update shortly.` })
+        updateSession()
+        const retry1 = setTimeout(() => updateSession(), 3000)
+        const retry2 = setTimeout(() => updateSession(), 8000)
+        const clear = setTimeout(() => setStatusMessage(null), 10000)
+        return () => { clearTimeout(retry1); clearTimeout(retry2); clearTimeout(clear) }
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to activate plan. Please contact support.' })
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong activating your plan. Please refresh.' })
+    }
+  }, [sessionId, successPlan, updateSession])
 
   // Show success/cancel feedback from Stripe redirect
   useEffect(() => {
-    if (success === 'true') {
-      setStatusMessage({ type: 'success', text: 'Subscription activated! Your session will update shortly.' })
-      // Refresh session — retry a few times since webhook may still be processing
-      updateSession()
-      const retry1 = setTimeout(() => updateSession(), 3000)
-      const retry2 = setTimeout(() => updateSession(), 8000)
-      // Clear message after 10 seconds
-      const clear = setTimeout(() => setStatusMessage(null), 10000)
-      return () => { clearTimeout(retry1); clearTimeout(retry2); clearTimeout(clear) }
-    }
-    if (canceled === 'true') {
+    if (success === 'true' && sessionId) {
+      handleCheckoutSuccess()
+    } else if (cardUpdated === 'true' && setupSessionId) {
+      // Handle card update callback
+      fetch('/api/billing/update-payment-method/callback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: setupSessionId }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            setStatusMessage({ type: 'success', text: 'Payment method updated successfully.' })
+          } else {
+            setStatusMessage({ type: 'info', text: data.error || 'Failed to update payment method.' })
+          }
+          setTimeout(() => setStatusMessage(null), 8000)
+        })
+        .catch(() => {
+          setStatusMessage({ type: 'info', text: 'Something went wrong updating your payment method.' })
+        })
+    } else if (canceled === 'true') {
       setStatusMessage({ type: 'info', text: 'Checkout cancelled. No changes were made.' })
       const timer = setTimeout(() => setStatusMessage(null), 5000)
       return () => clearTimeout(timer)
     }
-  }, [success, canceled, updateSession])
+  }, [success, canceled, sessionId, handleCheckoutSuccess, cardUpdated, setupSessionId])
+
+  // Auto-recover unprocessed checkout sessions (handles redirect failures)
+  useEffect(() => {
+    if (currentPlan !== 'FREE' || success === 'true') return
+    let cancelled = false
+    fetch('/api/billing/recover-checkout', { method: 'POST' })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        if (data.recovered) {
+          setStatusMessage({ type: 'success', text: data.message || `Your ${data.plan} plan has been activated.` })
+          updateSession()
+          setTimeout(() => updateSession(), 3000)
+          setTimeout(() => setStatusMessage(null), 10000)
+        }
+      })
+      .catch(() => {}) // Silent — this is a best-effort recovery
+    return () => { cancelled = true }
+  }, [currentPlan, success, updateSession])
 
   // Fetch usage counts
   const { data: eventTypes } = useQuery<{ eventTypes: unknown[] }>({
@@ -112,16 +191,12 @@ function BillingContent() {
   const eventTypeCount = (eventTypes as any)?.eventTypes?.length ?? 0
   const webhookCount = (webhooks as any)?.webhooks?.length ?? 0
 
-  // Only show "Manage Subscription" when user has an active/unsubscribed Stripe subscription
-  const hasPaidSubscription = (subscriptionStatus === 'ACTIVE' || subscriptionStatus === 'UNSUBSCRIBED') && currentPlan !== 'FREE'
-
   async function handlePlanSelect(plan: PlanTier) {
     if (plan === 'FREE') return
 
     // DOWNGRADING: user already has a scheduled plan switch
     if (subscriptionStatus === 'DOWNGRADING') {
       if (plan === currentPlan) {
-        // Clicking current plan = cancel the downgrade and stay
         await handleCancelDowngrade()
         return
       }
@@ -143,7 +218,7 @@ function BillingContent() {
         })
         const data = await res.json()
         if (data.success) {
-          setStatusMessage({ type: 'success', text: data.warning || data.message })
+          setStatusMessage({ type: 'success', text: data.message })
           updateSession()
           const retry = setTimeout(() => updateSession(), 3000)
           setTimeout(() => setStatusMessage(null), 8000)
@@ -159,7 +234,7 @@ function BillingContent() {
       return
     }
 
-    // If already on a paid plan (upgrade), show confirmation first
+    // If already on a paid plan (upgrade), show confirmation with proration
     const isUpgrade = subscriptionStatus === 'ACTIVE' && currentPlan !== 'FREE' && TIER_ORDER.indexOf(plan) > TIER_ORDER.indexOf(currentPlan)
     if (isUpgrade) {
       setConfirmPlan(plan)
@@ -192,6 +267,69 @@ function BillingContent() {
     }
   }
 
+  async function handleUpgrade(plan: PlanTier) {
+    setConfirmPlan(null)
+    setLoadingPlan(plan)
+    try {
+      const res = await fetch('/api/billing/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setStatusMessage({ type: 'success', text: data.message })
+        updateSession()
+        setTimeout(() => updateSession(), 3000)
+        setTimeout(() => setStatusMessage(null), 10000)
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to upgrade' })
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+    } finally {
+      setLoadingPlan(null)
+    }
+  }
+
+  async function handleCancelSubscription() {
+    setConfirmCancel(false)
+    setCancelLoading(true)
+    try {
+      const res = await fetch('/api/billing/cancel', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        setStatusMessage({ type: 'success', text: data.message })
+        updateSession()
+        setTimeout(() => updateSession(), 3000)
+        setTimeout(() => setStatusMessage(null), 10000)
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to cancel subscription' })
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+    } finally {
+      setCancelLoading(false)
+    }
+  }
+
+  async function handleUpdatePaymentMethod() {
+    setUpdateCardLoading(true)
+    try {
+      const res = await fetch('/api/billing/update-payment-method', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        setStatusMessage({ type: 'info', text: data.error || 'Failed to start card update' })
+        setUpdateCardLoading(false)
+      }
+    } catch {
+      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
+      setUpdateCardLoading(false)
+    }
+  }
+
   async function handleCancelDowngrade() {
     setLoadingPlan(currentPlan)
     try {
@@ -212,23 +350,6 @@ function BillingContent() {
     }
   }
 
-  async function handleManageSubscription() {
-    setPortalLoading(true)
-    try {
-      const res = await fetch('/api/billing/portal', { method: 'POST' })
-      const data = await res.json()
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        setStatusMessage({ type: 'info', text: data.error || 'Failed to open subscription portal' })
-        setPortalLoading(false)
-      }
-    } catch {
-      setStatusMessage({ type: 'info', text: 'Something went wrong. Please try again.' })
-      setPortalLoading(false)
-    }
-  }
-
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -241,7 +362,7 @@ function BillingContent() {
         </p>
       </div>
 
-      {/* Status Message (success/cancel from Stripe redirect) */}
+      {/* Status Message */}
       {statusMessage && (
         <div className={cn(
           'mb-6 p-4 rounded-lg flex items-center gap-3',
@@ -273,15 +394,25 @@ function BillingContent() {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              {hasPaidSubscription && (
+              {currentPlan !== 'FREE' && (
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={portalLoading}
-                  onClick={handleManageSubscription}
+                  disabled={updateCardLoading}
+                  onClick={handleUpdatePaymentMethod}
                 >
-                  <CreditCard className="h-4 w-4 mr-2" />
-                  {portalLoading ? 'Opening...' : 'Manage Subscription'}
+                  {updateCardLoading ? 'Redirecting...' : 'Update Payment Method'}
+                </Button>
+              )}
+              {subscriptionStatus === 'ACTIVE' && currentPlan !== 'FREE' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={cancelLoading}
+                  onClick={() => setConfirmCancel(true)}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  {cancelLoading ? 'Cancelling...' : 'Cancel Subscription'}
                 </Button>
               )}
               <Badge className={getPlanBadgeStyles(currentPlan)}>
@@ -397,9 +528,7 @@ function BillingContent() {
 
       {/* Pricing Grid */}
       <div className="grid md:grid-cols-3 gap-8">
-        {PRICING_TIERS.map((tier) => {
-          // Subscription is inactive or cancelled — allow subscribing to any paid plan
-          // But FREE users with NONE status are on their correct plan, not "inactive"
+        {displayTiers.map((tier) => {
           const subscriptionInactive = currentPlan !== 'FREE' && (!subscriptionStatus || ['NONE', 'UNSUBSCRIBED', 'GRACE_PERIOD', 'LOCKED', 'DOWNGRADING'].includes(subscriptionStatus))
           return (
             <PricingCard
@@ -417,21 +546,10 @@ function BillingContent() {
       </div>
 
       <p className="text-center text-sm text-gray-400 mt-8">
-        {hasPaidSubscription ? (
-          <>
-            Manage your subscription, update payment method, or view invoices via{' '}
-            <button onClick={handleManageSubscription} className="text-ocean-600 hover:underline">
-              the subscription portal
-            </button>.
-          </>
-        ) : (
-          <>
-            Need help? <a href="/dashboard/support" className="text-ocean-600 hover:underline">Contact support</a>.
-          </>
-        )}
+        Need help? <a href="/dashboard/support" className="text-ocean-600 hover:underline">Contact support</a>.
       </p>
 
-      {/* Upgrade Confirmation Dialog */}
+      {/* Upgrade Confirmation Dialog (with proration) */}
       <Dialog open={confirmPlan !== null} onOpenChange={(open) => { if (!open) setConfirmPlan(null) }}>
         <DialogContent>
           <DialogHeader>
@@ -439,15 +557,38 @@ function BillingContent() {
             <DialogDescription>
               You&apos;re currently on the <strong>{currentTier.name}</strong> plan ({currentTier.priceLabel}{currentTier.priceSuffix}).
               Upgrading to <strong>{confirmPlan ? getPlanByTier(confirmPlan).name : ''}</strong> ({confirmPlan ? getPlanByTier(confirmPlan).priceLabel : ''}{confirmPlan ? getPlanByTier(confirmPlan).priceSuffix : ''}) will
-              take effect immediately. Stripe will prorate the difference.
+              take effect immediately. You&apos;ll be charged the prorated difference for the remaining days in your billing cycle.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setConfirmPlan(null)}>
               Cancel
             </Button>
-            <Button onClick={() => confirmPlan && proceedToCheckout(confirmPlan)}>
+            <Button onClick={() => confirmPlan && handleUpgrade(confirmPlan)}>
               Confirm Upgrade
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Subscription Confirmation Dialog */}
+      <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Subscription</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel your <strong>{currentTier.name}</strong> subscription?
+              {planExpiresAt && (
+                <> You&apos;ll keep access to all {currentPlan} features until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>. After that, your account will revert to the Free plan.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConfirmCancel(false)}>
+              Keep Subscription
+            </Button>
+            <Button variant="destructive" onClick={handleCancelSubscription}>
+              Cancel Subscription
             </Button>
           </DialogFooter>
         </DialogContent>

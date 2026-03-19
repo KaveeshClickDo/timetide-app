@@ -29,6 +29,9 @@ export type EmailJobType =
   | 'downgrade_cancelled'
   | 'plan_activated'
   | 'plan_reactivated'
+  | 'payment_success'
+  | 'payment_failed'
+  | 'payment_refunded'
   | 'custom'
 
 export interface PlanEmailData {
@@ -44,6 +47,30 @@ export interface PlanEmailData {
   reactivateUrl: string
 }
 
+export interface PaymentEmailData {
+  userName: string
+  userEmail: string
+  planName: string
+  planTier: string
+  amount: number          // cents
+  currency: string
+  invoiceNumber: string
+  paymentDate: string
+  billingPeriodStart?: string
+  billingPeriodEnd?: string
+  cardLast4?: string
+  cardBrand?: string
+  paymentType: 'initial' | 'renewal' | 'upgrade_proration'
+  // For failed payments
+  failureReason?: string
+  updatePaymentUrl: string
+  // For refunds
+  refundAmount?: number   // cents
+  refundReason?: string
+  originalAmount?: number // cents
+  billingUrl: string
+}
+
 export interface EmailJobData {
   type: EmailJobType
   to: string
@@ -52,6 +79,7 @@ export interface EmailJobData {
   recurringBookingData?: RecurringBookingEmailData
   teamData?: TeamEmailData & { expiresIn?: string; acceptUrl?: string }
   planData?: PlanEmailData
+  paymentData?: PaymentEmailData
   isHost?: boolean
   reason?: string
   hoursUntil?: number
@@ -171,9 +199,13 @@ export type SubscriptionJobType =
   | 'check_expirations'
   | 'check_grace_periods'
   | 'send_warning'
+  | 'process_renewals'
+  | 'retry_failed_payment'
+  | 'recover_unprocessed_checkouts'
 
 export interface SubscriptionJobData {
   type: SubscriptionJobType
-  userId?: string          // For user-specific jobs like send_warning
+  userId?: string          // For user-specific jobs like send_warning, retry_failed_payment
   warningType?: string     // For send_warning: 'expiring' | 'grace_ending'
+  attempt?: number         // For retry_failed_payment: retry attempt number (1-3)
 }

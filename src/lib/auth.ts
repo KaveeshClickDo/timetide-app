@@ -12,6 +12,8 @@ import bcrypt from 'bcryptjs';
 import prisma from './prisma';
 import { loginSchema } from './validation/schemas';
 import { sendWelcomeEmail } from './integrations/email/client';
+import { type PlanTier, type PlanLimits } from './pricing';
+import { getPlanLimitsAsync } from './pricing-server';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions['adapter'],
@@ -125,11 +127,13 @@ export const authOptions: NextAuthOptions = {
               select: { plan: true, subscriptionStatus: true, planExpiresAt: true, gracePeriodEndsAt: true, cleanupScheduledAt: true },
             });
             if (dbUser) {
-              token.plan = dbUser.plan ?? 'FREE';
+              const plan = (dbUser.plan ?? 'FREE') as PlanTier;
+              token.plan = plan;
               token.subscriptionStatus = dbUser.subscriptionStatus ?? 'NONE';
               token.planExpiresAt = dbUser.planExpiresAt?.getTime();
               token.gracePeriodEndsAt = dbUser.gracePeriodEndsAt?.getTime();
               token.cleanupScheduledAt = dbUser.cleanupScheduledAt?.getTime();
+              token.planLimits = await getPlanLimitsAsync(plan);
               token.lastVerified = Date.now();
             }
           }
@@ -208,7 +212,8 @@ export const authOptions: NextAuthOptions = {
         token.timezone = dbUser?.timezone ?? 'UTC';
         token.timezoneAutoDetect = dbUser?.timezoneAutoDetect ?? true;
         token.bio = dbUser?.bio ?? undefined;
-        token.plan = dbUser?.plan ?? 'FREE';
+        const userPlan = (dbUser?.plan ?? 'FREE') as PlanTier;
+        token.plan = userPlan;
         token.role = dbUser?.role ?? 'USER';
         token.onboardingCompleted = dbUser?.onboardingCompleted ?? false;
         // Only require email verification for credential users (have password)
@@ -217,6 +222,7 @@ export const authOptions: NextAuthOptions = {
         token.planExpiresAt = dbUser?.planExpiresAt?.getTime();
         token.gracePeriodEndsAt = dbUser?.gracePeriodEndsAt?.getTime();
         token.cleanupScheduledAt = dbUser?.cleanupScheduledAt?.getTime();
+        token.planLimits = await getPlanLimitsAsync(userPlan);
         token.lastVerified = Date.now();
 
         // Auto-assign ADMIN role based on ADMIN_EMAILS env variable
@@ -249,7 +255,8 @@ export const authOptions: NextAuthOptions = {
 
         // Sync fields in case they changed (skip during impersonation to avoid overwriting)
         if (!token.impersonatingUserId) {
-          token.plan = dbUser.plan ?? 'FREE';
+          const syncPlan = (dbUser.plan ?? 'FREE') as PlanTier;
+          token.plan = syncPlan;
           token.role = dbUser.role ?? 'USER';
           token.onboardingCompleted = dbUser.onboardingCompleted ?? false;
           token.emailVerified = !!dbUser.emailVerified || !dbUser.password;
@@ -257,6 +264,7 @@ export const authOptions: NextAuthOptions = {
           token.planExpiresAt = dbUser.planExpiresAt?.getTime();
           token.gracePeriodEndsAt = dbUser.gracePeriodEndsAt?.getTime();
           token.cleanupScheduledAt = dbUser.cleanupScheduledAt?.getTime();
+          token.planLimits = await getPlanLimitsAsync(syncPlan);
         }
         token.lastVerified = Date.now();
       }
@@ -282,6 +290,7 @@ export const authOptions: NextAuthOptions = {
         session.user.planExpiresAt = token.planExpiresAt as number | undefined;
         session.user.gracePeriodEndsAt = token.gracePeriodEndsAt as number | undefined;
         session.user.cleanupScheduledAt = token.cleanupScheduledAt as number | undefined;
+        session.user.planLimits = token.planLimits as PlanLimits | undefined;
         // Expose token issued time so client can show session expiry warning
         session.user.tokenIssuedAt = token.iat as number;
       }
@@ -393,6 +402,7 @@ declare module 'next-auth' {
       planExpiresAt?: number;
       gracePeriodEndsAt?: number;
       cleanupScheduledAt?: number;
+      planLimits?: PlanLimits;
       tokenIssuedAt?: number;
       impersonating?: boolean;
       originalAdminId?: string;
@@ -427,6 +437,7 @@ declare module 'next-auth/jwt' {
     planExpiresAt?: number;
     gracePeriodEndsAt?: number;
     cleanupScheduledAt?: number;
+    planLimits?: PlanLimits;
     impersonatingUserId?: string;
     originalAdminId?: string;
   }

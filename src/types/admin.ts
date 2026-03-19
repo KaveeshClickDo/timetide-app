@@ -179,17 +179,22 @@ export interface AdminAuditLogEntry {
   admin: { id: string; name: string | null; email: string }
 }
 
-export interface StripeWebhookLogEntry {
+export interface PaymentListItem {
   id: string
-  eventId: string
-  eventType: string
-  apiVersion: string | null
-  livemode: boolean
-  processingStatus: string
-  errorMessage: string | null
-  processingTimeMs: number | null
-  userId: string | null
-  stripeCustomerId: string | null
+  userId: string
+  user: { id: string; name: string | null; email: string; image: string | null }
+  amount: number
+  currency: string
+  status: string
+  stripePaymentIntentId: string | null
+  planTier: string
+  type: string
+  billingPeriodStart: string | null
+  billingPeriodEnd: string | null
+  refundedAmount: number
+  refundedAt: string | null
+  refundReason: string | null
+  failureReason: string | null
   createdAt: string
 }
 

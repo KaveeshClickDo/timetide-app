@@ -1,10 +1,10 @@
 # TimeTide Billing & Subscription System
 
-Complete documentation for Stripe integration, subscription lifecycle, plan enforcement, and admin subscription management.
+Complete documentation for the app-managed subscription system, payment processing, plan enforcement, and admin management.
 
 ## Overview
 
-TimeTide uses a three-tier plan system (FREE, PRO, TEAM) with Stripe for payment processing. The subscription lifecycle manages state transitions, grace periods, resource locking, and automatic cleanup via background jobs.
+TimeTide uses a three-tier plan system (FREE, PRO, TEAM) with **app-managed subscriptions**. The app controls all subscription lifecycle (plans, limits, billing cycles, cancellation, upgrades, downgrades, recurring payments). Stripe is used **only** to collect card details and process charges — no Stripe subscriptions, products, or webhooks are involved.
 
 ---
 
@@ -20,7 +20,7 @@ TimeTide uses a three-tier plan system (FREE, PRO, TEAM) with Stripe for payment
 | Team Scheduling | No | No | Yes |
 | Analytics | No | No | Yes |
 
-**Configuration**: All limits defined in `src/lib/pricing.ts` as `PLAN_LIMITS` object. This is the single source of truth — no hardcoded plan checks anywhere.
+**Configuration**: Plan tiers and limits are stored in the `Plan` database table and cached in memory (5-min TTL). Client-safe sync helpers in `src/lib/pricing.ts`, async DB functions in `src/lib/pricing-server.ts`. Admin can edit plans at `/admin/plans`.
 
 ---
 
@@ -82,101 +82,94 @@ TimeTide uses a three-tier plan system (FREE, PRO, TEAM) with Stripe for payment
 
 ---
 
-## Stripe Integration
+## Payment Architecture
+
+### Overview
+
+```
+App decides → charges Stripe → records result
+```
+
+Stripe is a **payment processor only**. No Stripe subscriptions, products, prices, webhooks, or Customer Portal. The app manages:
+- Plan activation/deactivation
+- Billing cycles (`planExpiresAt`)
+- Recurring charges (background job)
+- Upgrades with proration
+- Cancellation and downgrades
+- Invoice emails
 
 ### Environment Variables
 
 ```env
-# Required for billing
+# Only this is needed — no webhook secret, no price IDs, no publishable key
 STRIPE_SECRET_KEY="sk_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_..."
-
-# Price IDs from Stripe Dashboard
-STRIPE_PRICE_PRO_MONTHLY="price_..."
-STRIPE_PRICE_TEAM_MONTHLY="price_..."
 ```
+
+### Payment Flows
+
+#### First Subscription
+1. User selects plan → `POST /api/billing/checkout` → Stripe Checkout (`mode: 'payment'`, `setup_future_usage: 'off_session'`)
+2. Stripe charges first month AND saves payment method
+3. Redirect to `/dashboard/billing?success=true&session_id=cs_xxx`
+4. Billing page calls `POST /api/billing/checkout/callback` to verify and activate plan
+5. Payment recorded in `Payment` table, invoice email sent
+
+#### Recurring Renewal (Background Job)
+1. BullMQ job runs every hour, finds users with `planExpiresAt` within 24h
+2. Charges saved payment method via `stripe.paymentIntents.create({ off_session: true, confirm: true })`
+3. Success → extends plan by 30 days, records payment, sends invoice email
+4. Failure → retries up to 3 times over 3 days, then starts 7-day grace period
+
+#### Cancel
+1. User clicks "Cancel" → `POST /api/billing/cancel`
+2. App sets status = `UNSUBSCRIBED`, keeps `planExpiresAt` (features active until then)
+3. Background job stops renewing when period ends, starts grace period
+
+#### Upgrade (PRO → TEAM mid-cycle)
+1. User selects higher plan → `POST /api/billing/upgrade`
+2. App calculates proration: `remainingDays × (newPrice - oldPrice) / cycleDays`
+3. Charges proration via PaymentIntent
+4. Updates plan immediately, keeps same `planExpiresAt`
+5. Next renewal uses new plan's price
+
+#### Downgrade
+1. `POST /api/billing/schedule-downgrade` → `DOWNGRADING` status
+2. No Stripe calls — purely app-managed state transition
+3. At period end, resources locked at target plan level
+
+#### Payment Method Update
+1. `POST /api/billing/update-payment-method` → Stripe Checkout (`mode: 'setup'`)
+2. On redirect, `POST /api/billing/update-payment-method/callback` saves new card
+
+### Checkout Recovery (Edge Case Handling)
+
+If a user pays but the redirect/callback fails (browser closed, network error):
+- **Billing page**: On mount, calls `POST /api/billing/recover-checkout` to check Stripe for unprocessed sessions
+- **Background job**: `recover_unprocessed_checkouts` runs every 30 minutes
 
 ### API Endpoints
 
-#### `POST /api/billing/checkout`
-Create or update a Stripe subscription.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/billing/checkout` | POST | Create Stripe Checkout session (payment mode) |
+| `/api/billing/checkout/callback` | POST | Verify payment and activate plan |
+| `/api/billing/cancel` | POST | Cancel subscription (no Stripe calls) |
+| `/api/billing/upgrade` | POST | Upgrade with proration charge |
+| `/api/billing/schedule-downgrade` | POST | Schedule downgrade at period end |
+| `/api/billing/schedule-downgrade` | DELETE | Cancel scheduled downgrade |
+| `/api/billing/update-payment-method` | POST | Redirect to Stripe setup mode |
+| `/api/billing/update-payment-method/callback` | POST | Save new payment method |
+| `/api/billing/recover-checkout` | POST | Recover unprocessed checkout sessions |
+| `/api/plans` | GET | Public plans list (no auth) |
 
-**Request:**
-```json
-{ "plan": "PRO" | "TEAM" }
-```
+### Payment Emails
 
-**Logic:**
-1. Validates plan is PRO or TEAM
-2. Blocks downgrades (must use schedule-downgrade)
-3. Blocks if user already on same plan with ACTIVE status
-4. Blocks if DOWNGRADING (must cancel scheduled switch first)
-5. Gets or creates Stripe customer (stored in `User.stripeCustomerId`)
-6. If existing subscription: updates price with proration
-7. If new: creates Stripe checkout session
+Three HTML email templates sent via BullMQ email queue:
+- **Payment Success**: Green themed, invoice number, plan details, card info, billing period
+- **Payment Failed**: Red themed, failure reason, "Update Payment Method" CTA
+- **Payment Refunded**: Blue themed, refund/original amounts, reason
 
-**Response:**
-```json
-{ "url": "https://checkout.stripe.com/..." }
-```
-
-#### `POST /api/billing/schedule-downgrade`
-Schedule a plan downgrade at end of billing period.
-
-**Request:**
-```json
-{ "plan": "FREE" | "PRO" }
-```
-
-**Logic:**
-1. Validates target is lower than current plan
-2. Calls `voluntaryUnsubscribe()` if status is ACTIVE
-3. Calls `scheduleUserDowngrade()` → sets DOWNGRADING status
-4. Syncs to Stripe (non-blocking): `cancel_at_period_end: true`
-
-**Response:**
-```json
-{
-  "success": true,
-  "switchDate": "2026-04-19T00:00:00.000Z",
-  "message": "Your plan will switch to FREE on 4/19/2026"
-}
-```
-
-#### `DELETE /api/billing/schedule-downgrade`
-Cancel a scheduled downgrade.
-
-**Logic:**
-1. Calls `cancelDowngrade()` → restores ACTIVE status
-2. Syncs to Stripe (non-blocking): removes `cancel_at_period_end`
-
-#### `POST /api/billing/portal`
-Redirect to Stripe Customer Portal for invoice/payment management.
-
-#### `POST /api/webhooks/stripe`
-Handles Stripe webhook events. Always returns `{received: true}` to prevent retries.
-
-| Event | Handler |
-|-------|---------|
-| `customer.subscription.created` | Extract plan from price ID, call `activateSubscription()` |
-| `customer.subscription.updated` | Detect cancel/uncancel/plan change, route to appropriate lifecycle function |
-| `customer.subscription.deleted` | Clear subscription ID, start grace period |
-| `invoice.payment_succeeded` | Renew subscription (skip first invoice, handled by subscription.created) |
-| `invoice.payment_failed` | Start grace period when Stripe stops retrying |
-
-### Stripe Sync Pattern
-
-All plan changes follow: **DB first, Stripe second, warn on failure**.
-
-```
-1. Validate transition
-2. Update database (lifecycle function)
-3. Try sync to Stripe
-4. If Stripe fails: log error, return { ...data, stripeSyncSuccess: false, warning: "..." }
-```
-
-This ensures plan changes always succeed locally. Stripe sync failures are surfaced to the admin/user but don't block the action.
+Invoice numbers: `TT-YYYYMM-XXXXXX` (year-month + last 6 chars of payment ID)
 
 ---
 
@@ -271,9 +264,7 @@ Admin can perform plan actions via `planAction` field:
 {
   "id": "...",
   "plan": "PRO",
-  "subscriptionStatus": "ACTIVE",
-  "stripeSyncSuccess": true,
-  "warning": "Plan updated, but Stripe billing sync failed. Check Stripe dashboard."
+  "subscriptionStatus": "ACTIVE"
 }
 ```
 
@@ -302,16 +293,16 @@ Read-only preview of what resources would be locked on downgrade.
 }
 ```
 
-### Admin Stripe Sync (`src/lib/stripe-admin-sync.ts`)
+### Admin Payment Management
 
-| Admin Action | Stripe Action |
-|--------------|---------------|
-| Upgrade | Update subscription item to new price (prorate immediately) |
-| Downgrade Immediate → FREE | Cancel subscription immediately |
-| Downgrade Immediate → paid | Update to lower price |
-| Downgrade Grace → FREE | Schedule cancellation at grace end |
-| Downgrade Grace → paid | Update price now |
-| Cancel Downgrade | Remove scheduled cancellation |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/payments` | GET | Paginated payment history (filter by status, type, user) |
+| `/api/admin/payments/[id]/refund` | POST | Full or partial refund via Stripe |
+| `/api/admin/plans` | GET/POST | List/create plans |
+| `/api/admin/plans/[id]` | GET/PATCH/DELETE | Manage individual plan |
+
+Admin plan changes are purely app-side — no Stripe subscription sync needed.
 
 ### Structured Errors
 
@@ -333,16 +324,22 @@ Admin API returns these as structured 400 responses for frontend handling.
 
 ### Subscription Queue (`src/lib/infrastructure/queue/subscription-queue.ts`)
 
-BullMQ Redis-backed queue with two recurring jobs (every 15 minutes):
+BullMQ Redis-backed queue with recurring jobs:
 
-| Job | Checks | Action |
-|-----|--------|--------|
-| `check_expirations` | Users with `ACTIVE`/`UNSUBSCRIBED` and `planExpiresAt <= now` | Start 7-day grace period |
-| `check_grace_periods` | Users with `GRACE_PERIOD`/`DOWNGRADING` and `gracePeriodEndsAt <= now` | Lock resources at target plan |
+| Job | Frequency | Action |
+|-----|-----------|--------|
+| `check_expirations` | Every 15 min | Transitions ACTIVE/UNSUBSCRIBED → GRACE_PERIOD when `planExpiresAt` passed |
+| `check_grace_periods` | Every 15 min | Transitions GRACE_PERIOD/DOWNGRADING → LOCKED when `gracePeriodEndsAt` passed |
+| `process_renewals` | Every hour | Charges saved payment methods for users due within 24h |
+| `recover_unprocessed_checkouts` | Every 30 min | Recovers Stripe payments where callback failed |
+
+**One-off jobs:**
+- `retry_failed_payment` — scheduled after payment failure (up to 3 retries at +24h, +48h, +72h)
+- `send_warning` — scheduled at specific times for expiring/grace ending notifications
 
 **Grace period special cases:**
 - `DOWNGRADING` with user-scheduled downgrade (paid→paid): extends grace 7 more days for user to subscribe to new plan
-- `DOWNGRADING` with admin-initiated (paid→paid): reactivates to ACTIVE (subscription was re-priced in Stripe)
+- `DOWNGRADING` with admin-initiated (paid→paid): reactivates to ACTIVE at target plan
 
 ### Warning Emails
 
@@ -356,19 +353,28 @@ Scheduled as one-off delayed jobs:
 
 | Purpose | File |
 |---------|------|
-| Plan tiers & limits | `src/lib/pricing.ts` |
+| Plan tiers & limits (client-safe) | `src/lib/pricing.ts` |
+| Plan config from DB (server-only) | `src/lib/pricing-server.ts` |
 | Server-side enforcement | `src/lib/plan-enforcement.ts` |
 | Subscription lifecycle | `src/lib/subscription-lifecycle.ts` |
-| Stripe client & helpers | `src/lib/stripe.ts` |
-| Admin Stripe sync | `src/lib/stripe-admin-sync.ts` |
+| Stripe payment helpers | `src/lib/stripe.ts` |
 | Checkout endpoint | `src/app/api/billing/checkout/route.ts` |
+| Checkout callback | `src/app/api/billing/checkout/callback/route.ts` |
+| Cancel endpoint | `src/app/api/billing/cancel/route.ts` |
+| Upgrade endpoint | `src/app/api/billing/upgrade/route.ts` |
 | Schedule downgrade | `src/app/api/billing/schedule-downgrade/route.ts` |
-| Stripe webhooks | `src/app/api/webhooks/stripe/route.ts` |
+| Payment method update | `src/app/api/billing/update-payment-method/route.ts` |
+| Checkout recovery | `src/app/api/billing/recover-checkout/route.ts` |
+| Public plans API | `src/app/api/plans/route.ts` |
 | Subscription queue | `src/lib/infrastructure/queue/subscription-queue.ts` |
+| Admin plan management | `src/app/api/admin/plans/route.ts` |
+| Admin payments & refunds | `src/app/api/admin/payments/route.ts` |
 | Admin user management | `src/app/api/admin/users/[id]/route.ts` |
 | Downgrade preview | `src/app/api/admin/users/[id]/downgrade-preview/route.ts` |
 | Client-side feature gate | `src/hooks/use-feature-gate.ts` |
 | Billing page | `src/app/dashboard/billing/page.tsx` |
+| Admin plans page | `src/app/admin/plans/page.tsx` |
+| Admin payments page | `src/app/admin/payments/page.tsx` |
 
 ---
 

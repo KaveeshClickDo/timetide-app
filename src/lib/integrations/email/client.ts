@@ -5,7 +5,7 @@
 
 import { Resend } from 'resend';
 import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
-import type { PlanEmailData } from '@/types/queue';
+import type { PlanEmailData, PaymentEmailData } from '@/types/queue';
 
 export type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
 
@@ -1691,5 +1691,165 @@ export function generatePlanReactivatedEmail(data: PlanEmailData): string {
       </p>
       ${planCta(data.reactivateUrl, 'Go to Dashboard', 'outline')}
     ${planEmailFooter()}
+  `;
+}
+
+// ============================================================================
+// PAYMENT EMAIL TEMPLATES
+// ============================================================================
+
+const formatCurrency = (cents: number, currency: string) => {
+  const amount = (cents / 100).toFixed(2);
+  const symbol = currency.toUpperCase() === 'USD' ? '$' : currency.toUpperCase();
+  return `${symbol}${amount}`;
+};
+
+const paymentTypeLabel = (type: string) => {
+  switch (type) {
+    case 'initial': return 'New Subscription';
+    case 'renewal': return 'Subscription Renewal';
+    case 'upgrade_proration': return 'Plan Upgrade (Prorated)';
+    default: return 'Payment';
+  }
+};
+
+export function generatePaymentSuccessEmail(data: PaymentEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Payment Received',
+      `Hi ${esc(data.userName)}, thank you for your payment.`,
+      '#16a34a',
+    )}
+      <div class="card">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <span style="display: inline-block; background: #dcfce7; color: #16a34a; border-radius: 50%; width: 48px; height: 48px; line-height: 48px; font-size: 24px;">✓</span>
+        </div>
+        <div style="text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 4px;">
+          ${esc(formatCurrency(data.amount, data.currency))}
+        </div>
+        <div style="text-align: center; color: #64748b; font-size: 14px; margin-bottom: 16px;">
+          ${esc(paymentTypeLabel(data.paymentType))}
+        </div>
+        <div class="divider"></div>
+        <div class="detail-row">
+          <span class="detail-label">Invoice</span>
+          <span class="detail-value">${esc(data.invoiceNumber)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.planName)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Date</span>
+          <span class="detail-value">${esc(data.paymentDate)}</span>
+        </div>
+        ${data.cardLast4 ? `
+        <div class="detail-row">
+          <span class="detail-label">Paid with</span>
+          <span class="detail-value">${esc(data.cardBrand || 'Card')} ending in ${esc(data.cardLast4)}</span>
+        </div>` : ''}
+        ${data.billingPeriodStart && data.billingPeriodEnd ? `
+        <div class="detail-row">
+          <span class="detail-label">Period</span>
+          <span class="detail-value">${esc(data.billingPeriodStart)} — ${esc(data.billingPeriodEnd)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b; font-size: 13px;">
+        This is your receipt for the payment above. You can view your billing history and manage your subscription from your dashboard.
+      </p>
+      ${planCta(data.billingUrl, 'View Billing', 'outline')}
+    ${planEmailFooter('If you have any questions about this charge, please contact our support team.')}
+  `;
+}
+
+export function generatePaymentFailedEmail(data: PaymentEmailData): string {
+  return `
+    ${planEmailHeader(
+      'Payment Failed',
+      `Hi ${esc(data.userName)}, we were unable to process your payment.`,
+      '#dc2626',
+    )}
+      <div class="card">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <span style="display: inline-block; background: #fef2f2; color: #dc2626; border-radius: 50%; width: 48px; height: 48px; line-height: 48px; font-size: 24px;">✕</span>
+        </div>
+        <div style="text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 4px;">
+          ${esc(formatCurrency(data.amount, data.currency))}
+        </div>
+        <div style="text-align: center; color: #dc2626; font-size: 14px; margin-bottom: 16px;">
+          ${esc(paymentTypeLabel(data.paymentType))} — Unsuccessful
+        </div>
+        <div class="divider"></div>
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.planName)}</span>
+        </div>
+        ${data.cardLast4 ? `
+        <div class="detail-row">
+          <span class="detail-label">Card</span>
+          <span class="detail-value">${esc(data.cardBrand || 'Card')} ending in ${esc(data.cardLast4)}</span>
+        </div>` : ''}
+        ${data.failureReason ? `
+        <div class="detail-row">
+          <span class="detail-label">Reason</span>
+          <span class="detail-value" style="color: #dc2626;">${esc(data.failureReason)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        We'll retry the payment automatically over the next few days. To avoid any disruption to your service, please update your payment method.
+      </p>
+      ${planCta(data.updatePaymentUrl, 'Update Payment Method')}
+    ${planEmailFooter('If your payment method is valid and you believe this is an error, please contact support.')}
+  `;
+}
+
+export function generatePaymentRefundedEmail(data: PaymentEmailData): string {
+  const refundAmt = data.refundAmount ?? data.amount;
+  const isPartial = data.originalAmount ? refundAmt < data.originalAmount : false;
+  return `
+    ${planEmailHeader(
+      isPartial ? 'Partial Refund Issued' : 'Refund Issued',
+      `Hi ${esc(data.userName)}, a refund has been processed for your account.`,
+      '#2563eb',
+    )}
+      <div class="card">
+        <div style="text-align: center; margin-bottom: 16px;">
+          <span style="display: inline-block; background: #eff6ff; color: #2563eb; border-radius: 50%; width: 48px; height: 48px; line-height: 48px; font-size: 24px;">↩</span>
+        </div>
+        <div style="text-align: center; font-size: 28px; font-weight: 700; margin-bottom: 4px;">
+          ${esc(formatCurrency(refundAmt, data.currency))}
+        </div>
+        <div style="text-align: center; color: #2563eb; font-size: 14px; margin-bottom: 16px;">
+          ${isPartial ? 'Partial Refund' : 'Full Refund'}
+        </div>
+        <div class="divider"></div>
+        ${data.originalAmount ? `
+        <div class="detail-row">
+          <span class="detail-label">Original</span>
+          <span class="detail-value">${esc(formatCurrency(data.originalAmount, data.currency))}</span>
+        </div>` : ''}
+        <div class="detail-row">
+          <span class="detail-label">Refunded</span>
+          <span class="detail-value" style="color: #16a34a;">${esc(formatCurrency(refundAmt, data.currency))}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Plan</span>
+          <span class="detail-value">${esc(data.planName)}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Date</span>
+          <span class="detail-value">${esc(data.paymentDate)}</span>
+        </div>
+        ${data.refundReason ? `
+        <div class="detail-row">
+          <span class="detail-label">Reason</span>
+          <span class="detail-value">${esc(data.refundReason)}</span>
+        </div>` : ''}
+      </div>
+      <p style="text-align: center; color: #64748b;">
+        The refund will appear on your statement within 5-10 business days, depending on your bank.
+      </p>
+      ${planCta(data.billingUrl, 'View Billing', 'outline')}
+    ${planEmailFooter('If you have questions about this refund, please contact our support team.')}
   `;
 }

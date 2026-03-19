@@ -31,6 +31,9 @@ import {
   generateDowngradeCancelledEmail,
   generatePlanActivatedEmail,
   generatePlanReactivatedEmail,
+  generatePaymentSuccessEmail,
+  generatePaymentFailedEmail,
+  generatePaymentRefundedEmail,
 } from '@/lib/integrations/email/client';
 import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
 import type { EmailJobType, EmailJobData } from '@/types/queue';
@@ -243,6 +246,21 @@ async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
     case 'plan_reactivated':
       if (!job.data.planData) throw new Error('Missing planData for plan_reactivated');
       html = generatePlanReactivatedEmail(job.data.planData);
+      break;
+
+    case 'payment_success':
+      if (!job.data.paymentData) throw new Error('Missing paymentData for payment_success');
+      html = generatePaymentSuccessEmail(job.data.paymentData);
+      break;
+
+    case 'payment_failed':
+      if (!job.data.paymentData) throw new Error('Missing paymentData for payment_failed');
+      html = generatePaymentFailedEmail(job.data.paymentData);
+      break;
+
+    case 'payment_refunded':
+      if (!job.data.paymentData) throw new Error('Missing paymentData for payment_refunded');
+      html = generatePaymentRefundedEmail(job.data.paymentData);
       break;
 
     case 'custom':
@@ -614,5 +632,38 @@ export async function queueTeamInvitationEmail(
     to: email,
     subject: `You're invited to join ${data.teamName} on TimeTide`,
     teamData: data,
+  });
+}
+
+// ============================================================================
+// Payment Email Helpers
+// ============================================================================
+
+import type { PaymentEmailData } from '@/types/queue';
+
+export async function queuePaymentSuccessEmail(data: PaymentEmailData): Promise<void> {
+  await queueEmail({
+    type: 'payment_success',
+    to: data.userEmail,
+    subject: `Payment receipt — ${data.planName} plan (${data.invoiceNumber})`,
+    paymentData: data,
+  });
+}
+
+export async function queuePaymentFailedEmail(data: PaymentEmailData): Promise<void> {
+  await queueEmail({
+    type: 'payment_failed',
+    to: data.userEmail,
+    subject: `Payment failed — Action required for your ${data.planName} plan`,
+    paymentData: data,
+  });
+}
+
+export async function queuePaymentRefundedEmail(data: PaymentEmailData): Promise<void> {
+  await queueEmail({
+    type: 'payment_refunded',
+    to: data.userEmail,
+    subject: `Refund processed — ${data.planName} plan`,
+    paymentData: data,
   });
 }

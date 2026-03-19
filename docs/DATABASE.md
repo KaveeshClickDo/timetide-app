@@ -61,7 +61,8 @@ Core user account model.
 | `isDisabled` | Boolean | Account disabled by admin |
 | `onboardingCompleted` | Boolean | Completed setup wizard |
 | `stripeCustomerId` | String? | Stripe customer ID |
-| `stripeSubscriptionId` | String? | Stripe subscription ID |
+| `stripePaymentMethodId` | String? | Default payment method for recurring charges |
+| `lastPaymentAt` | DateTime? | Last successful payment timestamp |
 | `subscriptionStatus` | String | NONE, ACTIVE, UNSUBSCRIBED, GRACE_PERIOD, DOWNGRADING, LOCKED |
 | `planActivatedAt` | DateTime? | When current plan was activated |
 | `planExpiresAt` | DateTime? | When billing period ends |
@@ -72,7 +73,57 @@ Core user account model.
 | `createdAt` | DateTime | Account creation |
 | `updatedAt` | DateTime | Last update |
 
-**Relations:** accounts, sessions, eventTypes, availabilitySchedules, bookings, calendars, zoomCredential, teamMembers, webhooks, notifications, supportTickets, subscriptionHistory
+**Relations:** accounts, sessions, eventTypes, availabilitySchedules, bookings, calendars, zoomCredential, teamMembers, webhooks, notifications, supportTickets, subscriptionHistory, payments
+
+### Plan
+Configurable plan tiers with pricing and feature limits. Admin-editable at `/admin/plans`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String | Primary key (cuid) |
+| `tier` | String (unique) | FREE, PRO, TEAM |
+| `name` | String | Display name |
+| `price` | Int | Price in cents (0, 1200, 2000) |
+| `currency` | String | Currency code (default: usd) |
+| `intervalDays` | Int | Billing cycle length (default: 30) |
+| `isActive` | Boolean | Whether plan is available |
+| `sortOrder` | Int | Display order |
+| `description` | String? | Plan description |
+| `highlightText` | String? | Badge text (e.g., "Most Popular") |
+| `priceLabel` | String? | Display price (e.g., "$12") |
+| `priceSuffix` | String? | Price suffix (e.g., "/month") |
+| `maxEventTypes` | Int | Event type limit |
+| `maxWebhooks` | Int | Webhook limit |
+| `customQuestions` | Boolean | Custom booking questions |
+| `groupBooking` | Boolean | Group booking feature |
+| `recurringBooking` | Boolean | Recurring booking feature |
+| `teams` | Boolean | Team scheduling feature |
+| `analytics` | Boolean | Analytics feature |
+| `features` | Json | Display feature list (JSON array) |
+
+### Payment
+Records all payment transactions processed through Stripe.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | String | Primary key (cuid) |
+| `userId` | String | User who made the payment |
+| `amount` | Int | Amount in cents |
+| `currency` | String | Currency code |
+| `status` | String | succeeded, failed, refunded, partial_refund |
+| `stripePaymentIntentId` | String? (unique) | Stripe PaymentIntent ID |
+| `stripeChargeId` | String? | Stripe Charge ID |
+| `planTier` | String | Plan this payment is for |
+| `type` | String | initial, renewal, upgrade_proration |
+| `billingPeriodStart` | DateTime? | Start of billing period |
+| `billingPeriodEnd` | DateTime? | End of billing period |
+| `refundedAmount` | Int | Amount refunded in cents |
+| `refundedAt` | DateTime? | When refund was issued |
+| `refundReason` | String? | Reason for refund |
+| `failureReason` | String? | Why payment failed |
+| `metadata` | Json? | Additional data |
+
+**Indexes:** userId, status, createdAt
 
 ### Account
 OAuth provider accounts linked to users (NextAuth adapter).

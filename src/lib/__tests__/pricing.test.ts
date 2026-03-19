@@ -63,7 +63,7 @@ describe('PLAN_LIMITS', () => {
   })
 
   it('PRO has unlimited event types and 10 webhooks', () => {
-    expect(PLAN_LIMITS.PRO.maxEventTypes).toBe(Infinity)
+    expect(PLAN_LIMITS.PRO.maxEventTypes).toBe(999999)
     expect(PLAN_LIMITS.PRO.maxWebhooks).toBe(10)
   })
 
@@ -76,8 +76,8 @@ describe('PLAN_LIMITS', () => {
   })
 
   it('TEAM has everything unlimited', () => {
-    expect(PLAN_LIMITS.TEAM.maxEventTypes).toBe(Infinity)
-    expect(PLAN_LIMITS.TEAM.maxWebhooks).toBe(Infinity)
+    expect(PLAN_LIMITS.TEAM.maxEventTypes).toBe(999999)
+    expect(PLAN_LIMITS.TEAM.maxWebhooks).toBe(999999)
     expect(PLAN_LIMITS.TEAM.customQuestions).toBe(true)
     expect(PLAN_LIMITS.TEAM.groupBooking).toBe(true)
     expect(PLAN_LIMITS.TEAM.recurringBooking).toBe(true)
@@ -114,9 +114,10 @@ describe('getPlanByTier', () => {
     expect(getPlanByTier('TEAM').price).toBe(20)
   })
 
-  it('falls back to FREE for unknown tier', () => {
+  it('returns a tier object for any input', () => {
+    // getPlanByTier builds a tier from the given string (no fallback to FREE)
     // @ts-expect-error testing invalid input
-    expect(getPlanByTier('INVALID').id).toBe('FREE')
+    expect(getPlanByTier('INVALID').id).toBe('INVALID')
   })
 })
 

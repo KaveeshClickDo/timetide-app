@@ -1,6 +1,5 @@
 import Stripe from 'stripe'
 import prisma from '@/lib/prisma'
-import type { PlanTier } from '@/lib/pricing'
 
 // ---------------------------------------------------------------------------
 // Stripe client singleton (lazy — avoids crashing at build time without env vars)
@@ -28,23 +27,6 @@ export const stripe = new Proxy({} as Stripe, {
 })
 
 // ---------------------------------------------------------------------------
-// Price ID map — maps our plan tiers to Stripe Price IDs
-// ---------------------------------------------------------------------------
-
-export const STRIPE_PRICE_MAP: Partial<Record<PlanTier, string>> = {
-  PRO: process.env.STRIPE_PRICE_PRO_MONTHLY || undefined,
-  TEAM: process.env.STRIPE_PRICE_TEAM_MONTHLY || undefined,
-}
-
-/** Reverse lookup: Stripe Price ID → PlanTier */
-export function planFromPriceId(priceId: string): PlanTier | null {
-  for (const [plan, id] of Object.entries(STRIPE_PRICE_MAP)) {
-    if (id === priceId) return plan as PlanTier
-  }
-  return null
-}
-
-// ---------------------------------------------------------------------------
 // Customer management
 // ---------------------------------------------------------------------------
 
@@ -57,7 +39,6 @@ export async function getOrCreateStripeCustomer(
   email: string,
   name: string | null,
 ): Promise<string> {
-  // Check if user already has a Stripe customer
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { stripeCustomerId: true },
@@ -67,14 +48,12 @@ export async function getOrCreateStripeCustomer(
     return user.stripeCustomerId
   }
 
-  // Create new Stripe customer
   const customer = await stripe.customers.create({
     email,
     name: name || undefined,
     metadata: { userId },
   })
 
-  // Store on user record
   await prisma.user.update({
     where: { id: userId },
     data: { stripeCustomerId: customer.id },
@@ -84,35 +63,77 @@ export async function getOrCreateStripeCustomer(
 }
 
 // ---------------------------------------------------------------------------
-// Subscription helpers
+// Payment helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Get the first subscription item ID for a subscription.
- * Needed when updating the subscription's price.
+ * Charge a customer using their saved payment method.
+ * Used for recurring renewals and upgrade prorations.
  */
-export async function getSubscriptionItemId(
-  subscriptionId: string,
-): Promise<string | null> {
+export async function chargeCustomer(
+  customerId: string,
+  amount: number,
+  currency: string,
+  metadata: Record<string, string>,
+): Promise<Stripe.PaymentIntent> {
+  // Get the customer's default payment method
+  const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer
+  const paymentMethodId =
+    (typeof customer.invoice_settings?.default_payment_method === 'string'
+      ? customer.invoice_settings.default_payment_method
+      : customer.invoice_settings?.default_payment_method?.id) ?? null
+
+  if (!paymentMethodId) {
+    throw new Error('No payment method on file for this customer')
+  }
+
+  return stripe.paymentIntents.create({
+    amount,
+    currency,
+    customer: customerId,
+    payment_method: paymentMethodId,
+    off_session: true,
+    confirm: true,
+    metadata,
+  })
+}
+
+/**
+ * Issue a refund for a payment intent.
+ * If amount is omitted, issues a full refund.
+ */
+export async function refundPayment(
+  paymentIntentId: string,
+  amount?: number,
+): Promise<Stripe.Refund> {
+  return stripe.refunds.create({
+    payment_intent: paymentIntentId,
+    ...(amount ? { amount } : {}),
+  })
+}
+
+/**
+ * Get the last 4 digits and brand of a customer's default payment method.
+ */
+export async function getCustomerPaymentMethod(
+  customerId: string,
+): Promise<{ last4: string; brand: string; id: string } | null> {
   try {
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
-    return subscription.items.data[0]?.id ?? null
+    const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer
+    const pmId =
+      typeof customer.invoice_settings?.default_payment_method === 'string'
+        ? customer.invoice_settings.default_payment_method
+        : customer.invoice_settings?.default_payment_method?.id
+
+    if (!pmId) return null
+
+    const pm = await stripe.paymentMethods.retrieve(pmId)
+    return {
+      id: pm.id,
+      last4: pm.card?.last4 ?? '****',
+      brand: pm.card?.brand ?? 'unknown',
+    }
   } catch {
     return null
   }
-}
-
-/**
- * Calculate days until a Unix timestamp from now.
- */
-export function daysUntilTimestamp(unixTimestamp: number): number {
-  const now = Date.now() / 1000
-  return Math.max(1, Math.ceil((unixTimestamp - now) / 86400))
-}
-
-/**
- * Convert Stripe Unix timestamp to Date.
- */
-export function timestampToDate(unixTimestamp: number): Date {
-  return new Date(unixTimestamp * 1000)
 }

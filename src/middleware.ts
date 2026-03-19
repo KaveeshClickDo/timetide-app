@@ -53,11 +53,6 @@ export default withAuth(
 
         // API routes that require authentication
         if (path.startsWith('/api/')) {
-          // Public webhook endpoints (called by external services, no auth)
-          if (path.startsWith('/api/webhooks/stripe')) {
-            return true
-          }
-
           // Protected API routes (require auth)
           const protectedApiRoutes = [
             '/api/availability',

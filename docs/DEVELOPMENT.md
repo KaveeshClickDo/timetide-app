@@ -396,12 +396,15 @@ timetide-app/
 | Client-Side Gating | Completed | Hook + badge + modal + page components |
 | Usage Dashboard | Completed | Event types, calendars, webhooks bars |
 | Dev Plan Switcher | Completed | Mock endpoint for testing |
-| Stripe Integration | Completed | Checkout, portal, webhooks, subscription management |
+| App-Managed Subscriptions | Completed | Stripe processes payments only — no Stripe subscriptions/webhooks |
 | Subscription Lifecycle | Completed | State machine: NONE→ACTIVE→UNSUBSCRIBED→GRACE→LOCKED |
+| Recurring Payments | Completed | Background job charges saved cards, 3 retries, grace period |
 | Admin Subscription Mgmt | Completed | Upgrade, immediate/grace downgrade, cancel downgrade, preview |
-| Stripe Admin Sync | Completed | Non-blocking sync with failure warnings |
+| Admin Plan Management | Completed | CRUD plans with pricing and limits from admin panel |
+| Admin Payment History | Completed | Paginated payments, full/partial refunds via Stripe |
 | Resource Locking | Completed | Lock/unlock event types, webhooks, team events on plan change |
-| Downgrade Emails | Completed | Separate templates for immediate vs grace period |
+| Payment Emails | Completed | Invoice (success), failed payment, refund notification emails |
+| Checkout Recovery | Completed | Auto-recover unprocessed Stripe payments (page mount + background) |
 
 ### Other Features
 
@@ -526,12 +529,8 @@ EMAIL_FROM="TimeTide <noreply@yourdomain.com>"
 # Redis
 REDIS_URL="redis://localhost:6379"
 
-# Stripe
+# Stripe (app manages subscriptions; Stripe only processes payments)
 STRIPE_SECRET_KEY="sk_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_..."
-STRIPE_PRICE_PRO_MONTHLY="price_..."
-STRIPE_PRICE_TEAM_MONTHLY="price_..."
 
 # Zoom
 ZOOM_CLIENT_ID="your-zoom-client-id"
@@ -689,8 +688,8 @@ Generated to `src/generated/prisma/` (configured in `prisma.config.ts`). Path al
 | Queue system | `src/lib/infrastructure/queue/index.ts` |
 | Recurring utils | `src/lib/scheduling/recurring/utils.ts` |
 | Notifications | `src/lib/notifications.ts` |
-| Stripe client | `src/lib/stripe.ts` |
-| Stripe admin sync | `src/lib/stripe-admin-sync.ts` |
+| Stripe payment helpers | `src/lib/stripe.ts` |
+| Plan config (server) | `src/lib/pricing-server.ts` |
 | Subscription lifecycle | `src/lib/subscription-lifecycle.ts` |
 | Subscription queue | `src/lib/infrastructure/queue/subscription-queue.ts` |
 | Admin auth | `src/lib/admin-auth.ts` |

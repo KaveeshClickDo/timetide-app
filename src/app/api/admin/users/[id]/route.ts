@@ -11,7 +11,6 @@ import {
   SubscriptionError,
 } from '@/lib/subscription-lifecycle'
 import type { PlanTier } from '@/lib/pricing'
-import { syncAdminPlanAction } from '@/lib/stripe-admin-sync'
 import { checkAdminRateLimit } from '@/lib/infrastructure/queue'
 
 const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
@@ -184,9 +183,6 @@ export async function PATCH(
 
     const adminId = session!.user.id
 
-    // Track Stripe sync status across all plan actions
-    let stripeSyncSuccess = true
-
     // Handle subscription lifecycle actions
     if (validated.planAction) {
       // Validate transition is allowed for current status
@@ -244,13 +240,6 @@ export async function PATCH(
           },
         })
 
-        // Sync admin action to Stripe
-        try {
-          await syncAdminPlanAction(id, validated.planAction, (validated.plan as PlanTier) || 'FREE')
-        } catch (err) {
-          console.error('[admin] Stripe sync failed:', err)
-          stripeSyncSuccess = false
-        }
       } catch (err: unknown) {
         if (err instanceof SubscriptionError) {
           return NextResponse.json({
@@ -307,13 +296,6 @@ export async function PATCH(
           },
         })
 
-        // Sync direct plan change to Stripe
-        try {
-          await syncAdminPlanAction(id, impliedAction, newPlan)
-        } catch (err) {
-          console.error('[admin] Stripe sync failed:', err)
-          stripeSyncSuccess = false
-        }
       } catch (err: unknown) {
         if (err instanceof SubscriptionError) {
           return NextResponse.json({
@@ -366,13 +348,7 @@ export async function PATCH(
       },
     })
 
-    return NextResponse.json({
-      ...user,
-      stripeSyncSuccess,
-      ...(!stripeSyncSuccess && {
-        warning: 'Plan updated, but Stripe billing sync failed. Check Stripe dashboard.',
-      }),
-    })
+    return NextResponse.json(user)
   } catch (error) {
     console.error('Admin user update error:', error)
     return NextResponse.json({ error: 'Failed to update user' }, { status: 500 })

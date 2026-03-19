@@ -50,7 +50,8 @@ export function useFeatureGate(
   // correct target plan (e.g., PRO for TEAM→PRO, FREE for PRO→FREE).
   // No need to override based on subscriptionStatus.
   const currentPlan = (session?.user?.plan as PlanTier) || 'FREE'
-  const limits = getPlanLimits(currentPlan)
+  // Prefer session-embedded limits (DB-backed, synced every minute) over static fallback
+  const limits = (session?.user?.planLimits as PlanLimits) || getPlanLimits(currentPlan)
   const requiredPlan = getRequiredPlan(feature)
   const value = limits[feature]
 

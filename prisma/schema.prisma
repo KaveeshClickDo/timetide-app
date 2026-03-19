@@ -40,9 +40,10 @@ model User {
   downgradeReason       String?     // voluntary_unsub | payment_failed | admin_immediate | admin_grace
   downgradeInitiatedBy  String?     // admin userId, 'system', or 'user'
 
-  // Stripe (placeholders for future integration)
+  // Stripe (payment processing only)
   stripeCustomerId      String?  @unique
-  stripeSubscriptionId  String?  @unique
+  stripePaymentMethodId String?           // Default payment method for recurring charges
+  lastPaymentAt         DateTime?         // When last successful charge was recorded
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -64,6 +65,7 @@ model User {
   ticketMessages       SupportTicketMessage[] @relation("TicketMessages")
   adminAuditLogs       AdminAuditLog[]        @relation("AdminAuditLogs")
   subscriptionHistory  SubscriptionHistory[]
+  payments             Payment[]
 
   @@index([email])
   @@index([username])
@@ -856,24 +858,66 @@ model AdminAuditLog {
 }
 
 // ============================================================================
-// STRIPE WEBHOOK LOG
+// PLANS (replaces hardcoded PRICING_TIERS + PLAN_LIMITS)
 // ============================================================================
 
-model StripeWebhookLog {
+model Plan {
   id               String   @id @default(cuid())
-  eventId          String   @unique
-  eventType        String
-  apiVersion       String?
-  livemode         Boolean  @default(false)
-  processingStatus String   @default("SUCCESS") // SUCCESS | ERROR | UNHANDLED
-  errorMessage     String?  @db.Text
-  processingTimeMs Int?
-  userId           String?
-  stripeCustomerId String?
+  tier             String   @unique  // "FREE", "PRO", "TEAM"
+  name             String             // "Free", "Pro", "Team"
+  price            Int      @default(0)  // Price in cents (0, 1200, 2000)
+  currency         String   @default("usd")
+  intervalDays     Int      @default(30) // Billing cycle length
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
+  description      String?
+  highlightText    String?  // e.g., "Most Popular"
+  priceLabel       String?  // e.g., "$12", "Free"
+  priceSuffix      String?  // e.g., "/month"
 
-  createdAt DateTime @default(now())
+  // Feature limits
+  maxEventTypes    Int      @default(1)
+  maxWebhooks      Int      @default(0)
+  customQuestions   Boolean  @default(false)
+  groupBooking     Boolean  @default(false)
+  recurringBooking Boolean  @default(false)
+  teams            Boolean  @default(false)
+  analytics        Boolean  @default(false)
 
-  @@index([eventType])
-  @@index([processingStatus])
+  // Feature list for display (JSON array of strings)
+  features         Json     @default("[]")
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+model Payment {
+  id                    String   @id @default(cuid())
+  userId                String
+  amount                Int               // Amount in cents
+  currency              String   @default("usd")
+  status                String            // succeeded | failed | refunded | partial_refund
+  stripePaymentIntentId String?  @unique
+  stripeChargeId        String?
+  planTier              String            // Which plan this payment is for
+  type                  String            // initial | renewal | upgrade_proration
+  billingPeriodStart    DateTime?
+  billingPeriodEnd      DateTime?
+  refundedAmount        Int      @default(0) // Refunded amount in cents
+  refundedAt            DateTime?
+  refundReason          String?
+  failureReason         String?
+  metadata              Json?
+
+  createdAt             DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
   @@index([createdAt])
 }

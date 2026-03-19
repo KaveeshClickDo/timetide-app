@@ -105,12 +105,32 @@ TimeTide uses a BullMQ-based email queue backed by Redis (with direct-send fallb
 | `src/lib/subscription-lifecycle.ts` | `cancelDowngrade()` | `downgrade_cancelled` |
 | `src/lib/subscription-lifecycle.ts` | `lockResources()` (via startGracePeriod) | `plan_locked` |
 
+### Payment Emails
+
+| Type | Subject | Trigger | Generator |
+|------|---------|---------|-----------|
+| `payment_success` | "Payment receipt — {plan} — {invoice}" | After successful payment (checkout, renewal, upgrade) | `generatePaymentSuccessEmail()` |
+| `payment_failed` | "Action required: {plan} payment failed" | After failed recurring payment | `generatePaymentFailedEmail()` |
+| `payment_refunded` | "Refund processed — {plan}" | After admin issues refund | `generatePaymentRefundedEmail()` |
+
+**Payment email triggers:**
+
+| File | Trigger | Email Type |
+|------|---------|------------|
+| `src/app/api/billing/checkout/callback/route.ts` | Checkout success | `payment_success` |
+| `src/app/api/billing/upgrade/route.ts` | Upgrade proration charge | `payment_success` |
+| `src/app/api/billing/recover-checkout/route.ts` | Recovered checkout | `payment_success` |
+| `src/lib/infrastructure/queue/subscription-queue.ts` | Renewal success | `payment_success` |
+| `src/lib/infrastructure/queue/subscription-queue.ts` | Renewal failure (first + final) | `payment_failed` |
+| `src/app/api/admin/payments/[id]/refund/route.ts` | Admin refund | `payment_refunded` |
+
 ### Background Jobs
 
 | File | Job | Email Type |
 |------|-----|------------|
 | `src/lib/infrastructure/queue/subscription-queue.ts` | `send_warning` (expiring) | `plan_expiring_warning` |
 | `src/lib/infrastructure/queue/subscription-queue.ts` | `send_warning` (grace_ending) | `grace_period_ending` |
+| `src/lib/infrastructure/queue/subscription-queue.ts` | `process_renewals` | `payment_success` or `payment_failed` |
 | `src/lib/infrastructure/queue/reminder-queue.ts` | reminder job | `booking_reminder` |
 
 ---

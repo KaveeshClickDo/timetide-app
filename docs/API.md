@@ -615,10 +615,12 @@ All endpoints return consistent error formats:
 
 > Full details: [docs/BILLING.md](BILLING.md)
 
+App manages all subscription lifecycle. Stripe is used only for payment processing (no Stripe subscriptions/webhooks).
+
 ### `POST /api/billing/checkout`
 **Auth:** Required
 
-Create or update a Stripe subscription.
+Create Stripe Checkout session in `payment` mode (one-time charge + save card).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -626,14 +628,37 @@ Create or update a Stripe subscription.
 
 **Logic:**
 - Blocks downgrades (use schedule-downgrade instead)
+- Routes upgrades to `/api/billing/upgrade`
 - Blocks same-plan if ACTIVE
 - Blocks if DOWNGRADING (cancel scheduled switch first)
-- Creates checkout session or updates existing subscription with proration
 
 **Response:**
 ```json
 { "url": "https://checkout.stripe.com/..." }
 ```
+
+### `POST /api/billing/checkout/callback`
+**Auth:** Required
+
+Verify Stripe payment and activate plan after checkout redirect.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `sessionId` | string | Yes | Stripe Checkout session ID |
+
+### `POST /api/billing/cancel`
+**Auth:** Required
+
+Cancel subscription. No Stripe calls — app sets status to UNSUBSCRIBED, features remain active until `planExpiresAt`.
+
+### `POST /api/billing/upgrade`
+**Auth:** Required
+
+Upgrade to higher plan mid-cycle with proration charge.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `plan` | string | Yes | Target plan (`TEAM`) — must be higher than current |
 
 ### `POST /api/billing/schedule-downgrade`
 **Auth:** Required
@@ -644,41 +669,62 @@ Schedule a plan downgrade at end of billing period.
 |-------|------|----------|-------------|
 | `plan` | string | Yes | Target plan (`FREE`, `PRO`) — must be lower than current |
 
-**Response:**
-```json
-{
-  "success": true,
-  "switchDate": "2026-04-19T00:00:00.000Z",
-  "message": "Your plan will switch to FREE on 4/19/2026"
-}
-```
-
 ### `DELETE /api/billing/schedule-downgrade`
 **Auth:** Required
 
 Cancel a scheduled downgrade. Restores plan to ACTIVE.
 
-### `POST /api/billing/portal`
+### `POST /api/billing/update-payment-method`
 **Auth:** Required
 
-Redirect to Stripe Customer Portal for invoice/payment management.
+Create Stripe Checkout session in `setup` mode to update saved card.
 
-**Response:**
-```json
-{ "url": "https://billing.stripe.com/..." }
-```
+### `POST /api/billing/update-payment-method/callback`
+**Auth:** Required
 
-### `POST /api/webhooks/stripe`
-**Auth:** Stripe webhook signature verification
+Save new payment method after Stripe setup redirect.
 
-Handles Stripe webhook events:
-- `customer.subscription.created` — Activate subscription
-- `customer.subscription.updated` — Handle cancel/uncancel/plan change
-- `customer.subscription.deleted` — Start grace period
-- `invoice.payment_succeeded` — Renew subscription
-- `invoice.payment_failed` — Start grace period when retries exhausted
+### `POST /api/billing/recover-checkout`
+**Auth:** Required
 
-Always returns `{ "received": true }`.
+Recover unprocessed Stripe Checkout sessions (handles redirect failures).
+
+### `GET /api/plans`
+**Auth:** Public
+
+List all active plans with pricing, features, and limits.
+
+### Admin Billing Endpoints
+
+### `GET /api/admin/payments`
+**Auth:** Admin only
+
+Paginated payment history with search and filters (status, type, user).
+
+### `POST /api/admin/payments/[id]/refund`
+**Auth:** Admin only
+
+Issue full or partial refund via Stripe. Updates payment record and sends refund email.
+
+### `GET /api/admin/plans`
+**Auth:** Admin only
+
+List all plans (including inactive).
+
+### `POST /api/admin/plans`
+**Auth:** Admin only
+
+Create a new plan.
+
+### `PATCH /api/admin/plans/[id]`
+**Auth:** Admin only
+
+Update plan configuration (name, price, limits, features, active status).
+
+### `DELETE /api/admin/plans/[id]`
+**Auth:** Admin only
+
+Soft-delete plan (set inactive).
 
 ---
 
@@ -722,8 +768,6 @@ Update user fields or perform subscription actions.
 - `downgrade_immediate`: allowed from ACTIVE, UNSUBSCRIBED, GRACE_PERIOD, DOWNGRADING
 - `downgrade_grace`: allowed from ACTIVE, UNSUBSCRIBED
 - `cancel_downgrade`: allowed from DOWNGRADING only
-
-**Response includes `stripeSyncSuccess` and optional `warning` if Stripe sync failed.**
 
 **Error (invalid transition):**
 ```json

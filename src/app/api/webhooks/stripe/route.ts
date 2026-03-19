@@ -191,20 +191,25 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
   const previousAttributes = (event.data as unknown as { previous_attributes?: Record<string, unknown> }).previous_attributes || {}
 
   // Check if user scheduled a cancellation via portal
-  if (subscription.cancel_at_period_end && 'cancel_at_period_end' in previousAttributes) {
+  // Use both previous_attributes check AND direct state check for robustness
+  if (subscription.cancel_at_period_end) {
     if (user.subscriptionStatus === 'ACTIVE') {
-      // User cancelled — keep access until period end
       await voluntaryUnsubscribe(user.id, 'user')
       console.log(`[stripe-webhook] User cancelled (period end): user=${user.id}`)
+      return
     } else if (user.subscriptionStatus === 'DOWNGRADING') {
-      // Already scheduled for downgrade — Stripe cancellation is expected, no DB change needed
       console.log(`[stripe-webhook] Cancel confirmed for DOWNGRADING user: user=${user.id}`)
+      return
     }
-    return
+    // Already UNSUBSCRIBED or other status — no action needed
+    if (['UNSUBSCRIBED', 'GRACE_PERIOD', 'LOCKED'].includes(user.subscriptionStatus)) {
+      return
+    }
   }
 
   // Check if user un-cancelled (reversed a pending cancellation)
-  if (!subscription.cancel_at_period_end && 'cancel_at_period_end' in previousAttributes) {
+  const cancelChanged = 'cancel_at_period_end' in previousAttributes || 'cancel_at' in previousAttributes
+  if (!subscription.cancel_at_period_end && cancelChanged) {
     if (['UNSUBSCRIBED', 'DOWNGRADING'].includes(user.subscriptionStatus)) {
       const periodEnd = getSubscriptionPeriodEnd(subscription)
       const expiresAt = periodEnd ? timestampToDate(periodEnd) : undefined

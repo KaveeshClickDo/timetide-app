@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
   const startTime = Date.now()
   let processingStatus = 'SUCCESS'
   let errorMessage: string | null = null
+  let debugInfo: string | null = null
 
   // Resolve customer/user for logging
   const stripeCustomerId = extractCustomerId(event.data.object as { customer?: string | Stripe.Customer | Stripe.DeletedCustomer | null }) ?? null
@@ -81,6 +82,9 @@ export async function POST(req: NextRequest) {
   if (stripeCustomerId) {
     const user = await getUserByStripeCustomerId(stripeCustomerId)
     userId = user?.id ?? null
+    if (user) {
+      debugInfo = `user_plan=${user.plan} user_status=${user.subscriptionStatus}`
+    }
   }
 
   try {
@@ -124,7 +128,7 @@ export async function POST(req: NextRequest) {
       apiVersion: event.api_version ?? null,
       livemode: event.livemode,
       processingStatus,
-      errorMessage,
+      errorMessage: errorMessage || debugInfo,
       processingTimeMs,
       userId,
       stripeCustomerId,
@@ -189,6 +193,9 @@ async function handleSubscriptionUpdated(event: Stripe.Event) {
   if (!user) return
 
   const previousAttributes = (event.data as unknown as { previous_attributes?: Record<string, unknown> }).previous_attributes || {}
+
+  // Debug: log key fields to understand what Stripe sends
+  console.log(`[stripe-webhook] subscription.updated: user=${user.id} status=${user.subscriptionStatus} plan=${user.plan} cancel_at_period_end=${subscription.cancel_at_period_end} prev_attrs=${JSON.stringify(Object.keys(previousAttributes))}`)
 
   // Check if user scheduled a cancellation via portal
   // Use both previous_attributes check AND direct state check for robustness
@@ -291,6 +298,13 @@ async function handlePaymentSucceeded(event: Stripe.Event) {
 
   const plan = planFromPriceId(priceId)
   if (!plan) return
+
+  // Skip proration invoices from plan upgrades (subscription.updated already handled it)
+  // Renewals use 'subscription_cycle', upgrades use 'subscription_update'
+  if (invoice.billing_reason === 'subscription_update' && user.plan === plan && user.subscriptionStatus === 'ACTIVE') {
+    console.log(`[stripe-webhook] Proration payment for ${plan} — already handled by subscription.updated, skipping`)
+    return
+  }
 
   const periodEnd = getSubscriptionPeriodEnd(subscription)
   const expiresAt = periodEnd ? timestampToDate(periodEnd) : undefined

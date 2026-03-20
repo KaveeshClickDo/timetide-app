@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Zap, CheckCircle2 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { getPlanByTier, FEATURE_LABELS, type PlanTier, type PlanLimits } from '@/lib/pricing'
+import { getPlanByTier, FEATURE_LABELS, planConfigToTier, type PlanTier, type PlanLimits, type PlanConfig } from '@/lib/pricing'
 
 interface UpgradeModalProps {
   feature: keyof PlanLimits
@@ -21,8 +22,27 @@ interface UpgradeModalProps {
 }
 
 export function UpgradeModal({ feature, requiredPlan, open, onClose }: UpgradeModalProps) {
-  const plan = getPlanByTier(requiredPlan)
   const featureLabel = FEATURE_LABELS[feature]
+
+  // Fetch plans from API to get dynamic pricing
+  const { data: plansData } = useQuery<PlanConfig[]>({
+    queryKey: ['plans'],
+    queryFn: async () => {
+      const res = await fetch('/api/plans')
+      if (!res.ok) return []
+      return res.json()
+    },
+    enabled: open, // Only fetch when modal is open
+  })
+
+  // Use DB-backed plan data if available, otherwise fall back to hardcoded
+  const plan = (() => {
+    if (plansData && plansData.length > 0) {
+      const dbPlan = plansData.find((p) => p.tier === requiredPlan)
+      if (dbPlan) return planConfigToTier(dbPlan)
+    }
+    return getPlanByTier(requiredPlan)
+  })()
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -45,14 +65,16 @@ export function UpgradeModal({ feature, requiredPlan, open, onClose }: UpgradeMo
             <span className="text-3xl font-heading font-bold">{plan.priceLabel}</span>
             <span className="text-gray-500">{plan.priceSuffix}</span>
           </div>
-          <ul className="space-y-2">
-            {plan.features.map((f) => (
-              <li key={f} className="flex items-center gap-2 text-sm">
-                <CheckCircle2 className="h-4 w-4 text-ocean-500 flex-shrink-0" />
-                <span className="text-gray-600">{f}</span>
-              </li>
-            ))}
-          </ul>
+          {plan.features.length > 0 && (
+            <ul className="space-y-2">
+              {plan.features.map((f) => (
+                <li key={f} className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 text-ocean-500 flex-shrink-0" />
+                  <span className="text-gray-600">{f}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <DialogFooter className="flex-col gap-2 sm:flex-col">

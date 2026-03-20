@@ -88,6 +88,6 @@ export function useFeatureGate(
     requiredPlan: canAccess ? currentPlan : upgradePlan,
     currentPlan,
     limit,
-    limitLabel: limit === Infinity ? 'Unlimited' : String(limit),
+    limitLabel: limit === Infinity || limit >= 999999 ? 'Unlimited' : String(limit),
   }
 }

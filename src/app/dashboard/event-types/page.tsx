@@ -58,7 +58,7 @@ function EventTypesHeader({ eventTypeCount, onUpgradeNeeded }: { eventTypeCount:
         </h1>
         <p className="text-sm sm:text-base text-gray-600">
           Create and manage the types of meetings people can book with you.
-          {limit !== Infinity && (
+          {limit !== Infinity && limit < 999999 && (
             <span className={cn('ml-2 text-sm font-medium', isAtLimit ? 'text-amber-600' : 'text-gray-500')}>
               ({eventTypeCount}/{limitLabel} used)
             </span>
@@ -219,7 +219,7 @@ export default function EventTypesPage() {
       )}
 
       {/* Locked events callout */}
-      {eventTypes && eventTypes.some((et) => et.lockedByDowngrade) && (
+      {Array.isArray(eventTypes) && eventTypes.some((et) => et.lockedByDowngrade) && (
         <Card className="mb-6 border-red-200 bg-red-50">
           <CardContent className="py-4">
             <div className="flex items-start gap-3">

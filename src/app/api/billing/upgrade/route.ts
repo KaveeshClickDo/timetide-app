@@ -5,6 +5,7 @@ import { chargeCustomer, getCustomerPaymentMethod } from '@/lib/stripe'
 import { queuePaymentSuccessEmail } from '@/lib/infrastructure/queue/email-queue'
 import { type PlanTier } from '@/lib/pricing'
 import { getPlanConfig } from '@/lib/pricing-server'
+import { createNotification } from '@/lib/notifications'
 import prisma from '@/lib/prisma'
 
 const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
@@ -148,6 +149,41 @@ export async function POST(req: NextRequest) {
         },
       },
     })
+
+    // Send upgrade notification
+    await createNotification({
+      userId: session.user.id,
+      type: 'PLAN_REACTIVATED',
+      title: `Upgraded to ${targetConfig.name}`,
+      message: prorationAmount > 0
+        ? `Your plan has been upgraded to ${targetConfig.name}. You were charged $${(prorationAmount / 100).toFixed(2)} for the remaining days.`
+        : `Your plan has been upgraded to ${targetConfig.name}.`,
+    })
+
+    // Send upgrade confirmation email
+    const userForEmail = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { email: true, name: true },
+    })
+    if (userForEmail?.email) {
+      try {
+        const { queueEmail } = await import('@/lib/infrastructure/queue/email-queue')
+        await queueEmail({
+          type: 'plan_activated',
+          to: userForEmail.email,
+          subject: `Your plan has been upgraded to ${targetConfig.name}`,
+          planData: {
+            userName: userForEmail.name || 'there',
+            userEmail: userForEmail.email,
+            currentPlan: targetPlan,
+            expiresAt: expiresAt.toLocaleDateString(),
+            reactivateUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`,
+          },
+        })
+      } catch (err) {
+        console.error('[upgrade] Could not queue upgrade email:', err)
+      }
+    }
 
     // Record the proration payment and send invoice
     if (prorationAmount > 0) {

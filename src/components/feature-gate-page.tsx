@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { Lock } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { getPlanByTier, FEATURE_LABELS, type PlanTier, type PlanLimits } from '@/lib/pricing'
+import { getPlanByTier, FEATURE_LABELS, planConfigToTier, type PlanTier, type PlanLimits, type PlanConfig } from '@/lib/pricing'
 
 interface FeatureGatePageProps {
   feature: keyof PlanLimits
@@ -14,8 +15,25 @@ interface FeatureGatePageProps {
 }
 
 export function FeatureGatePage({ feature, requiredPlan, title, description }: FeatureGatePageProps) {
-  const plan = getPlanByTier(requiredPlan)
   const featureLabel = FEATURE_LABELS[feature]
+
+  // Fetch plans from API to get dynamic pricing
+  const { data: plansData } = useQuery<PlanConfig[]>({
+    queryKey: ['plans'],
+    queryFn: async () => {
+      const res = await fetch('/api/plans')
+      if (!res.ok) return []
+      return res.json()
+    },
+  })
+
+  const plan = (() => {
+    if (plansData && plansData.length > 0) {
+      const dbPlan = plansData.find((p) => p.tier === requiredPlan)
+      if (dbPlan) return planConfigToTier(dbPlan)
+    }
+    return getPlanByTier(requiredPlan)
+  })()
 
   return (
     <div className="max-w-lg mx-auto mt-16">

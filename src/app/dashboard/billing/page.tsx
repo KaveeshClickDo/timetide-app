@@ -237,6 +237,12 @@ function BillingContent() {
       return
     }
 
+    // Cancelled user clicking same plan → reactivate (no charge, already paid until expiry)
+    if (subscriptionStatus === 'UNSUBSCRIBED' && plan === currentPlan) {
+      await handleReactivateSubscription()
+      return
+    }
+
     const isDowngrade = TIER_ORDER.indexOf(plan) < TIER_ORDER.indexOf(currentPlan)
     const canScheduleDowngrade = isDowngrade && subscriptionStatus === 'UNSUBSCRIBED'
 

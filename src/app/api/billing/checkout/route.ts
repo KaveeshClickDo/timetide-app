@@ -47,6 +47,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Already on this plan' }, { status: 400 })
     }
 
+    // Block same-plan re-subscribe when cancelled — user should reactivate instead (no charge)
+    if (currentPlan === targetPlan && subscriptionStatus === 'UNSUBSCRIBED') {
+      return NextResponse.json(
+        { error: 'Your subscription is still active until your billing period ends. Use the Reactivate button instead.' },
+        { status: 400 },
+      )
+    }
+
     // Block DOWNGRADING users — must cancel scheduled switch first
     if (subscriptionStatus === 'DOWNGRADING') {
       return NextResponse.json(

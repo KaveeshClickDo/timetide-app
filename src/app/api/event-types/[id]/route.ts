@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { checkEventTypeFeatures, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
+import { checkEventTypeFeatures } from '@/lib/plan-enforcement'
 import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
 
 interface RouteParams {
@@ -81,10 +81,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     })
     const plan = (dbUser?.plan as PlanTier) || 'FREE'
 
-    // Block LOCKED users from modifying resources
-    const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus)
-    if (lockedDenied) return lockedDenied
-
+    // Allow LOCKED users to edit basic fields and toggle active/inactive
+    // so the lock-and-swap system works after downgrade. Pro features are
+    // still blocked by checkEventTypeFeatures based on the plan.
     const featureDenied = checkEventTypeFeatures(plan, body as Record<string, unknown>)
     if (featureDenied) return featureDenied
 

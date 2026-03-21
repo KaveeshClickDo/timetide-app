@@ -230,7 +230,7 @@ export default function EventTypesPage() {
                 </p>
                 <p className="text-sm text-red-700 mt-1">
                   Your plan was downgraded and excess event types have been locked.
-                  {' '}You can activate one at a time by deactivating your current active event, or upgrade to unlock all.
+                  {' '}You can deactivate your current active event and then activate a locked one, or upgrade to unlock all.
                 </p>
                 <Link href="/dashboard/billing" className="inline-block mt-2">
                   <Button size="sm" variant="destructive">
@@ -393,7 +393,7 @@ export default function EventTypesPage() {
                                 ) : (
                                   <>
                                     <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
-                                    {eventType.lockedByDowngrade ? 'Activate (Swap)' : 'Enable'}
+                                    {eventType.lockedByDowngrade ? 'Activate' : 'Enable'}
                                   </>
                                 )}
                               </DropdownMenuItem>

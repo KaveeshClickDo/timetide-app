@@ -1,15 +1,23 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
+import { z } from 'zod'
+
+const updateProfileSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  username: z.string().min(3).max(30).regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers, and hyphens only').optional(),
+  timezone: z.string().min(1).max(100).optional(),
+  timezoneAutoDetect: z.boolean().optional(),
+  bio: z.string().max(500).optional().nullable(),
+  image: z.string().url().optional().nullable(),
+  onboardingCompleted: z.boolean().optional(),
+})
 
 // GET /api/users/me - Get current user
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -45,31 +53,21 @@ export async function GET() {
 // PATCH /api/users/me - Update current user
 export async function PATCH(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
-    const { name, username, timezone, timezoneAutoDetect, bio, image, onboardingCompleted } = body
+    const parsed = updateProfileSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const { name, username, timezone, timezoneAutoDetect, bio, image, onboardingCompleted } = parsed.data
 
-    // Validate username if provided
+    // Check username availability if provided
     if (username !== undefined) {
-      // Check format
-      if (!/^[a-z0-9-]+$/.test(username)) {
-        return NextResponse.json(
-          { error: 'Username can only contain lowercase letters, numbers, and hyphens' },
-          { status: 400 }
-        )
-      }
-
-      if (username.length < 3 || username.length > 30) {
-        return NextResponse.json(
-          { error: 'Username must be between 3 and 30 characters' },
-          { status: 400 }
-        )
-      }
-
       // Check availability
       const existing = await prisma.user.findUnique({
         where: { username },

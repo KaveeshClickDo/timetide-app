@@ -244,7 +244,12 @@ export class SlotCalculator {
     // Create start and end times in host timezone
     const hostDate = toZonedTime(date, this.options.hostTimezone);
     let slotStart = setMinutes(setHours(hostDate, startHour), startMin);
-    const windowEnd = setMinutes(setHours(hostDate, endHour), endMin);
+    let windowEnd = setMinutes(setHours(hostDate, endHour), endMin);
+
+    // Handle midnight-crossing windows (e.g., 22:00-02:00)
+    if (endHour < startHour || (endHour === startHour && endMin <= startMin)) {
+      windowEnd = addDays(windowEnd, 1);
+    }
 
     // Convert to UTC for consistent comparison
     slotStart = fromZonedTime(slotStart, this.options.hostTimezone);

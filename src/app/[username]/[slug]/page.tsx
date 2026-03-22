@@ -86,6 +86,7 @@ export default function BookingPage() {
         />
       )}
       <BookingWidget
+        variant="user"
         user={{
           name: user.name || 'User',
           username: user.username,

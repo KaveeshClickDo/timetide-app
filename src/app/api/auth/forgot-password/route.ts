@@ -4,10 +4,11 @@
  */
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { sendPasswordResetEmail } from '@/lib/integrations/email/client';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';
+import { checkAuthRateLimit } from '@/lib/infrastructure/queue/rate-limiter';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -15,6 +16,14 @@ const forgotPasswordSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const { allowed, resetAt } = await checkAuthRateLimit(`forgot:${ip}`);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((resetAt - Date.now()) / 1000)) } }
+      );
+    }
     const body = await request.json();
     const result = forgotPasswordSchema.safeParse(body);
 
@@ -41,18 +50,9 @@ export async function POST(request: Request) {
       },
     });
 
-    // User exists but is OAuth-only (no password set)
-    if (user && !user.password) {
-      const providers = user.accounts.map((a) => a.provider);
-      return NextResponse.json({
-        message: 'This account uses a social login provider.',
-        oauthOnly: true,
-        providers,
-      });
-    }
-
-    // User exists and has a password - send reset email
-    if (user && user.password) {
+    // Only send reset email if user exists and has a password (not OAuth-only).
+    // Always return the same generic response to prevent email enumeration.
+    if (user?.password) {
       // Delete any existing tokens for this user
       await prisma.verificationToken.deleteMany({
         where: { identifier: user.email },

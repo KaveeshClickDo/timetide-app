@@ -1,34 +1,20 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import {
-  User,
-  Globe,
-  Link as LinkIcon,
-  Calendar,
-  Save,
-  Loader2,
-  Check,
-  AlertCircle,
-  AlertTriangle,
-  Video,
-  Camera,
-} from 'lucide-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Save, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { useToast } from '@/components/ui/use-toast'
-import { getInitials } from '@/lib/utils'
-import { TIMEZONES } from '@/lib/constants'
+import ProfileCard from '@/components/settings/profile-card'
+import TimezoneCard from '@/components/settings/timezone-card'
+import CalendarIntegrationCard from '@/components/settings/calendar-integration-card'
+import VideoConferencingCard from '@/components/settings/video-conferencing-card'
+import BookingLinkCard from '@/components/settings/booking-link-card'
 
 export default function SettingsPage() {
   const { data: session, update: updateSession } = useSession()
   const { toast } = useToast()
-  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     name: '',
@@ -42,7 +28,6 @@ export default function SettingsPage() {
   const [connectingGoogle, setConnectingGoogle] = useState(false)
   const [connectingOutlook, setConnectingOutlook] = useState(false)
   const [connectingZoom, setConnectingZoom] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch connected calendars
   const { data: calendarsData, refetch: refetchCalendars } = useQuery({
@@ -56,8 +41,8 @@ export default function SettingsPage() {
   })
 
   const calendars = calendarsData?.calendars || []
-  const googleCalendar = calendars.find((cal: any) => cal.provider === 'GOOGLE')
-  const outlookCalendar = calendars.find((cal: any) => cal.provider === 'OUTLOOK')
+  const googleCalendar = calendars.find((cal: any) => cal.provider === 'GOOGLE') || null
+  const outlookCalendar = calendars.find((cal: any) => cal.provider === 'OUTLOOK') || null
 
   // Fetch Zoom connection status
   const { data: zoomData, refetch: refetchZoom } = useQuery({
@@ -72,6 +57,7 @@ export default function SettingsPage() {
 
   const zoomConnected = zoomData?.connected || false
 
+  // Initialize form from session
   useEffect(() => {
     if (session?.user) {
       setFormData({
@@ -84,7 +70,7 @@ export default function SettingsPage() {
     }
   }, [session])
 
-  // Auto-detect timezone when auto-detect is enabled
+  // Auto-detect timezone
   useEffect(() => {
     if (formData.timezoneAutoDetect) {
       const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -117,6 +103,7 @@ export default function SettingsPage() {
     return () => clearTimeout(timer)
   }, [formData.username, session?.user?.username])
 
+  // Save profile mutation
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const res = await fetch('/api/users/me', {
@@ -146,13 +133,14 @@ export default function SettingsPage() {
     },
   })
 
+  // Avatar upload mutation
   const avatarMutation = useMutation({
     mutationFn: async (file: File) => {
-      const formData = new FormData()
-      formData.append('file', file)
+      const fd = new FormData()
+      fd.append('file', file)
       const res = await fetch('/api/users/me/avatar', {
         method: 'POST',
-        body: formData,
+        body: fd,
       })
       if (!res.ok) {
         const error = await res.json()
@@ -179,7 +167,6 @@ export default function SettingsPage() {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
     if (file.size > 2 * 1024 * 1024) {
       toast({
         title: 'File too large',
@@ -188,9 +175,7 @@ export default function SettingsPage() {
       })
       return
     }
-
     avatarMutation.mutate(file)
-    // Reset input so the same file can be selected again
     e.target.value = ''
   }
 
@@ -207,7 +192,7 @@ export default function SettingsPage() {
     saveMutation.mutate(formData)
   }
 
-  // Handle Google Calendar connection
+  // Calendar connection handlers
   const handleConnectGoogle = async () => {
     try {
       setConnectingGoogle(true)
@@ -216,15 +201,10 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: 'GOOGLE' }),
       })
-
       if (!res.ok) throw new Error('Failed to get auth URL')
-
       const data = await res.json()
-      if (data.authUrl) {
-        window.location.href = data.authUrl
-      }
-    } catch (error) {
-      console.error('Error connecting Google Calendar:', error)
+      if (data.authUrl) window.location.href = data.authUrl
+    } catch {
       toast({
         title: 'Connection failed',
         description: 'Failed to connect Google Calendar. Please try again.',
@@ -234,7 +214,6 @@ export default function SettingsPage() {
     }
   }
 
-  // Handle Outlook Calendar connection
   const handleConnectOutlook = async () => {
     try {
       setConnectingOutlook(true)
@@ -243,15 +222,10 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: 'OUTLOOK' }),
       })
-
       if (!res.ok) throw new Error('Failed to get auth URL')
-
       const data = await res.json()
-      if (data.authUrl) {
-        window.location.href = data.authUrl
-      }
-    } catch (error) {
-      console.error('Error connecting Outlook Calendar:', error)
+      if (data.authUrl) window.location.href = data.authUrl
+    } catch {
       toast({
         title: 'Connection failed',
         description: 'Failed to connect Outlook Calendar. Please try again.',
@@ -261,38 +235,26 @@ export default function SettingsPage() {
     }
   }
 
-  // Handle calendar disconnection
   const disconnectCalendarMutation = useMutation({
     mutationFn: async (calendarId: string) => {
-      const res = await fetch(`/api/calendars/${calendarId}`, {
-        method: 'DELETE',
-      })
+      const res = await fetch(`/api/calendars/${calendarId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to disconnect')
       return res.json()
     },
     onSuccess: () => {
       refetchCalendars()
-      toast({
-        title: 'Calendar disconnected',
-        description: 'Your calendar has been disconnected.',
-      })
+      toast({ title: 'Calendar disconnected', description: 'Your calendar has been disconnected.' })
     },
     onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to disconnect calendar.',
-        variant: 'destructive',
-      })
+      toast({ title: 'Error', description: 'Failed to disconnect calendar.', variant: 'destructive' })
     },
   })
 
-  // Handle Zoom connection
   const handleConnectZoom = async () => {
     try {
       setConnectingZoom(true)
       window.location.href = '/api/zoom/connect'
-    } catch (error) {
-      console.error('Error connecting Zoom:', error)
+    } catch {
       toast({
         title: 'Connection failed',
         description: 'Failed to connect Zoom. Please try again.',
@@ -302,70 +264,42 @@ export default function SettingsPage() {
     }
   }
 
-  // Handle Zoom disconnection
   const disconnectZoomMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch('/api/zoom/disconnect', {
-        method: 'POST',
-      })
+      const res = await fetch('/api/zoom/disconnect', { method: 'POST' })
       if (!res.ok) throw new Error('Failed to disconnect')
       return res.json()
     },
     onSuccess: () => {
       refetchZoom()
-      toast({
-        title: 'Zoom disconnected',
-        description: 'Your Zoom account has been disconnected.',
-      })
+      toast({ title: 'Zoom disconnected', description: 'Your Zoom account has been disconnected.' })
     },
     onError: () => {
-      toast({
-        title: 'Error',
-        description: 'Failed to disconnect Zoom.',
-        variant: 'destructive',
-      })
+      toast({ title: 'Error', description: 'Failed to disconnect Zoom.', variant: 'destructive' })
     },
   })
 
-  // Check for OAuth callback success/error
+  // OAuth callback handling
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const calendarConnected = params.get('calendar_connected')
     const calendarError = params.get('calendar_error')
-    const zoomConnected = params.get('zoom_connected')
+    const zoomConnectedParam = params.get('zoom_connected')
     const error = params.get('error')
 
     if (calendarConnected === 'true') {
-      toast({
-        title: 'Calendar connected!',
-        description: 'Your Google Calendar has been successfully connected.',
-      })
+      toast({ title: 'Calendar connected!', description: 'Your Google Calendar has been successfully connected.' })
       refetchCalendars()
-      // Clean up URL
       window.history.replaceState({}, '', '/dashboard/settings')
     } else if (calendarError) {
-      toast({
-        title: 'Connection failed',
-        description: `Failed to connect calendar: ${calendarError}`,
-        variant: 'destructive',
-      })
-      // Clean up URL
+      toast({ title: 'Connection failed', description: `Failed to connect calendar: ${calendarError}`, variant: 'destructive' })
       window.history.replaceState({}, '', '/dashboard/settings')
-    } else if (zoomConnected === 'true') {
-      toast({
-        title: 'Zoom connected!',
-        description: 'Your Zoom account has been successfully connected.',
-      })
+    } else if (zoomConnectedParam === 'true') {
+      toast({ title: 'Zoom connected!', description: 'Your Zoom account has been successfully connected.' })
       refetchZoom()
-      // Clean up URL
       window.history.replaceState({}, '', '/dashboard/settings')
     } else if (error) {
-      toast({
-        title: 'Connection failed',
-        description: `Failed to connect: ${error}`,
-        variant: 'destructive',
-      })
-      // Clean up URL
+      toast({ title: 'Connection failed', description: `Failed to connect: ${error}`, variant: 'destructive' })
       window.history.replaceState({}, '', '/dashboard/settings')
     }
   }, [])
@@ -380,486 +314,46 @@ export default function SettingsPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Profile Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <User className="h-5 w-5" />
-              Profile
-            </CardTitle>
-            <CardDescription>
-              Your public profile information.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Avatar */}
-            <div className="flex items-center gap-4">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
-                onChange={handleAvatarChange}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={avatarMutation.isPending}
-                className="relative group"
-              >
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={session?.user?.image || undefined} />
-                  <AvatarFallback className="text-xl">
-                    {session?.user?.name ? getInitials(session.user.name) : 'U'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                  {avatarMutation.isPending ? (
-                    <Loader2 className="h-6 w-6 text-white animate-spin" />
-                  ) : (
-                    <Camera className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                  )}
-                </div>
-              </button>
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={avatarMutation.isPending}
-                >
-                  {avatarMutation.isPending ? 'Uploading...' : 'Change photo'}
-                </Button>
-                <p className="text-xs text-gray-500 mt-1">
-                  JPG, PNG, WebP or GIF. Max 2MB.
-                </p>
-              </div>
-            </div>
+        <ProfileCard
+          userImage={session?.user?.image}
+          userName={session?.user?.name}
+          formData={formData}
+          setFormData={setFormData}
+          usernameAvailable={usernameAvailable}
+          checkingUsername={checkingUsername}
+          avatarUploading={avatarMutation.isPending}
+          onAvatarChange={handleAvatarChange}
+        />
 
-            {/* Name */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Your name"
-              />
-            </div>
+        <TimezoneCard
+          timezone={formData.timezone}
+          timezoneAutoDetect={formData.timezoneAutoDetect}
+          setFormData={setFormData}
+        />
 
-            {/* Username */}
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm sm:text-base">
-                  timetide.app/
-                </span>
-                <Input
-                  id="username"
-                  value={formData.username}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      username: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
-                    })
-                  }
-                  className="pl-[6.5rem] sm:pl-28"
-                  placeholder="username"
-                />
-                {checkingUsername && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
-                )}
-                {!checkingUsername && usernameAvailable === true && (
-                  <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
-                )}
-                {!checkingUsername && usernameAvailable === false && (
-                  <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
-                )}
-              </div>
-              {usernameAvailable === false && (
-                <p className="text-sm text-red-500">This username is already taken</p>
-              )}
-            </div>
+        <CalendarIntegrationCard
+          googleCalendar={googleCalendar}
+          outlookCalendar={outlookCalendar}
+          connectingGoogle={connectingGoogle}
+          connectingOutlook={connectingOutlook}
+          disconnecting={disconnectCalendarMutation.isPending}
+          onConnectGoogle={handleConnectGoogle}
+          onConnectOutlook={handleConnectOutlook}
+          onDisconnect={(id) => disconnectCalendarMutation.mutate(id)}
+        />
 
-            {/* Bio */}
-            <div className="space-y-2">
-              <Label htmlFor="bio">Bio</Label>
-              <textarea
-                id="bio"
-                value={formData.bio}
-                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[100px]"
-                placeholder="A short description about yourself..."
-              />
-            </div>
-          </CardContent>
-        </Card>
+        <VideoConferencingCard
+          zoomConnected={zoomConnected}
+          googleCalendarConnected={!!googleCalendar}
+          outlookCalendarConnected={!!outlookCalendar}
+          outlookTeamsCapable={outlookCalendar?.teamsCapable ?? false}
+          connectingZoom={connectingZoom}
+          disconnectingZoom={disconnectZoomMutation.isPending}
+          onConnectZoom={handleConnectZoom}
+          onDisconnectZoom={() => disconnectZoomMutation.mutate()}
+        />
 
-        {/* Timezone Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Timezone
-            </CardTitle>
-            <CardDescription>
-              Your timezone is used for displaying availability.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Auto-detect checkbox */}
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.timezoneAutoDetect}
-                onChange={(e) => {
-                  const autoDetect = e.target.checked
-                  setFormData((prev) => {
-                    const updated = { ...prev, timezoneAutoDetect: autoDetect }
-                    if (autoDetect) {
-                      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
-                      if (detected) updated.timezone = detected
-                    }
-                    return updated
-                  })
-                }}
-                className="h-4 w-4 rounded border-gray-300 text-ocean-600 focus:ring-ocean-500"
-              />
-              <span className="text-sm font-medium text-gray-700">
-                Automatically detect timezone
-              </span>
-            </label>
-
-            {formData.timezoneAutoDetect ? (
-              <div className="flex items-center gap-2 px-3 py-2.5 bg-ocean-50 border border-ocean-200 rounded-lg">
-                <Globe className="h-4 w-4 text-ocean-600" />
-                <span className="text-sm text-ocean-700 font-medium">
-                  {formData.timezone}
-                </span>
-                <span className="text-xs text-ocean-500">
-                  ({TIMEZONES.find((tz) => tz.value === formData.timezone)?.label || formData.timezone})
-                </span>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Timezone</Label>
-                <select
-                  id="timezone"
-                  value={formData.timezone}
-                  onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                  className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
-                >
-                  {TIMEZONES.map((tz) => (
-                    <option key={tz.value} value={tz.value}>
-                      {tz.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Connected Calendars */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Connected Calendars
-            </CardTitle>
-            <CardDescription>
-              Connect your calendars to check for conflicts automatically.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Google Calendar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Google Calendar</p>
-                    <p className="text-sm text-gray-500">
-                      {googleCalendar ? (
-                        <>
-                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
-                          {googleCalendar.name}
-                        </>
-                      ) : (
-                        'Not connected'
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                  {googleCalendar ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleConnectGoogle}
-                        disabled={connectingGoogle}
-                      >
-                        {connectingGoogle ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Connecting...
-                          </>
-                        ) : (
-                          'Reconnect'
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => disconnectCalendarMutation.mutate(googleCalendar.id)}
-                        disabled={disconnectCalendarMutation.isPending}
-                      >
-                        Disconnect
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleConnectGoogle}
-                      disabled={connectingGoogle}
-                    >
-                      {connectingGoogle ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        'Connect'
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Microsoft Outlook */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Microsoft Outlook</p>
-                    <p className="text-sm text-gray-500">
-                      {outlookCalendar ? (
-                        <>
-                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
-                          {outlookCalendar.name}
-                        </>
-                      ) : (
-                        'Not connected'
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {outlookCalendar ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleConnectOutlook}
-                        disabled={connectingOutlook}
-                      >
-                        {connectingOutlook ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Connecting...
-                          </>
-                        ) : (
-                          'Reconnect'
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => disconnectCalendarMutation.mutate(outlookCalendar.id)}
-                        disabled={disconnectCalendarMutation.isPending}
-                      >
-                        Disconnect
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleConnectOutlook}
-                      disabled={connectingOutlook}
-                    >
-                      {connectingOutlook ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        'Connect'
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Video Conferencing */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Video className="h-5 w-5" />
-              Video Conferencing
-            </CardTitle>
-            <CardDescription>
-              Connect video conferencing apps to auto-generate meeting links.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Zoom */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                    <Video className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Zoom</p>
-                    <p className="text-sm text-gray-500">
-                      {zoomConnected ? (
-                        <>
-                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
-                          Connected
-                        </>
-                      ) : (
-                        'Auto-generate Zoom meeting links'
-                      )}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {zoomConnected ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => disconnectZoomMutation.mutate()}
-                      disabled={disconnectZoomMutation.isPending}
-                    >
-                      Disconnect
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleConnectZoom}
-                      disabled={connectingZoom}
-                    >
-                      {connectingZoom ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        'Connect'
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Google Meet - Already handled by Google Calendar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg bg-green-50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
-                    <Video className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Google Meet</p>
-                    <p className="text-sm text-gray-500">
-                      {googleCalendar ? (
-                        <>
-                          <Check className="inline h-3 w-3 mr-1 text-green-500" />
-                          Auto-enabled via Google Calendar
-                        </>
-                      ) : (
-                        'Connect Google Calendar to enable'
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Microsoft Teams - Handled by Outlook Calendar */}
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-blue-50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                    <Video className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Microsoft Teams</p>
-                    <p className="text-sm text-gray-500">
-                      {outlookCalendar ? (
-                        outlookCalendar.teamsCapable ? (
-                          <>
-                            <Check className="inline h-3 w-3 mr-1 text-green-500" />
-                            Auto-enabled via Outlook Calendar
-                          </>
-                        ) : (
-                          <>
-                            <AlertTriangle className="inline h-3 w-3 mr-1 text-amber-500" />
-                            Your Outlook account doesn&apos;t support Teams meetings. A Microsoft 365 work/school account is required.
-                          </>
-                        )
-                      ) : (
-                        'Connect Outlook Calendar to enable'
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Booking Link */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <LinkIcon className="h-5 w-5" />
-              Booking Link
-            </CardTitle>
-            <CardDescription>Share this link to let others book time with you.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <Input
-                readOnly
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/${formData.username}`}
-                className="bg-gray-50"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/${formData.username}`
-                  )
-                  toast({ title: 'Link copied!' })
-                }}
-              >
-                Copy
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <BookingLinkCard username={formData.username} />
 
         {/* Save Button */}
         <div className="flex justify-end">

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
+import { updateAvailabilityScheduleSchema } from '@/lib/validation/schemas'
 
 interface RouteParams {
   params: { id: string }
@@ -10,10 +10,8 @@ interface RouteParams {
 // GET /api/availability/[id] - Get single schedule
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const schedule = await prisma.availabilitySchedule.findFirst({
       where: {
@@ -47,13 +45,18 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PUT /api/availability/[id] - Update schedule slots
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
-    const { slots, name, isDefault } = body
+    const parsed = updateAvailabilityScheduleSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const { slots, name, isDefault } = parsed.data
 
     // Verify ownership
     const existing = await prisma.availabilitySchedule.findFirst({
@@ -98,7 +101,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
         // Create new slots
         if (slots.length > 0) {
           await tx.availabilitySlot.createMany({
-            data: slots.map((slot: any) => ({
+            data: slots.map((slot) => ({
               scheduleId: params.id,
               dayOfWeek: slot.dayOfWeek,
               startTime: slot.startTime,
@@ -132,10 +135,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
 // DELETE /api/availability/[id] - Delete schedule
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Verify ownership and not default
     const existing = await prisma.availabilitySchedule.findFirst({

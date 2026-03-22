@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import TeamBookingWidget from '@/components/booking/team-booking-widget';
+import BookingWidget from '@/components/booking/booking-widget';
 import Link from 'next/link';
 import type { TeamPublic, TeamMemberBooking } from '@/types/team';
 import type { EventTypeDetail } from '@/types/event-type';
@@ -71,7 +71,8 @@ export default function TeamBookingPage() {
 
   return (
     <div className={isEmbed ? '' : 'min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50'}>
-      <TeamBookingWidget
+      <BookingWidget
+        variant="team"
         team={{
           id: team.id,
           name: team.name,

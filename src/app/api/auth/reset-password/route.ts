@@ -4,17 +4,14 @@
  */
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
+import { passwordSchema } from '@/lib/validation/schemas';
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Token is required'),
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(/[0-9]/, 'Password must contain at least one number')
-    .regex(/[^a-zA-Z0-9]/, 'Password must contain at least one special character'),
+  password: passwordSchema,
 });
 
 export async function POST(request: Request) {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/admin-auth'
 import { voluntaryUnsubscribe, scheduleUserDowngrade, cancelDowngrade } from '@/lib/subscription-lifecycle'
 import prisma from '@/lib/prisma'
 import type { PlanTier } from '@/lib/pricing'
@@ -12,10 +11,8 @@ const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
  * User keeps current plan features until period ends, then switches to targetPlan.
  */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error, session } = await requireAuth()
+  if (error) return error
 
   try {
     const { plan } = (await req.json()) as { plan?: string }
@@ -51,9 +48,8 @@ export async function POST(req: NextRequest) {
       message: `Your plan will switch to ${targetPlan} on ${switchDate.toLocaleDateString()}`,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to schedule downgrade'
     console.error('Schedule downgrade error:', error)
-    return NextResponse.json({ error: message }, { status: 400 })
+    return NextResponse.json({ error: 'Failed to schedule downgrade' }, { status: 400 })
   }
 }
 
@@ -61,17 +57,15 @@ export async function POST(req: NextRequest) {
  * DELETE - Cancel a scheduled downgrade.
  */
 export async function DELETE() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error: authError, session } = await requireAuth()
+  if (authError) return authError
 
   try {
     await cancelDowngrade(session.user.id, 'user')
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to cancel downgrade'
-    return NextResponse.json({ error: message }, { status: 400 })
+    console.error('Cancel downgrade error:', error)
+    return NextResponse.json({ error: 'Failed to cancel downgrade' }, { status: 400 })
   }
 }

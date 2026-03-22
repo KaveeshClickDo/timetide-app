@@ -206,6 +206,18 @@ export async function checkApiRateLimit(ip: string): Promise<RateLimitResult> {
 }
 
 /**
+ * Rate limiter for contact form submissions
+ * 3 submissions per 10 minutes per IP
+ */
+export async function checkContactRateLimit(ip: string): Promise<RateLimitResult> {
+  return checkRateLimit(ip, {
+    limit: 3,
+    windowSeconds: 600,
+    prefix: 'contact',
+  });
+}
+
+/**
  * Rate limiter for admin mutation endpoints
  * 30 mutations per minute per admin user
  */

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { checkEventTypeFeatures } from '@/lib/plan-enforcement'
 import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
 
@@ -12,10 +11,8 @@ interface RouteParams {
 // GET /api/event-types/[id] - Get single event type
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const eventType = await prisma.eventType.findFirst({
       where: {
@@ -55,10 +52,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PATCH /api/event-types/[id] - Update event type
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
 
@@ -207,10 +202,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 // DELETE /api/event-types/[id] - Delete event type
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Verify ownership
     const existing = await prisma.eventType.findFirst({

@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
+import { z } from 'zod'
+
+const updateCalendarSchema = z.object({
+  isEnabled: z.boolean().optional(),
+})
 
 interface RouteParams {
   params: { id: string }
@@ -10,10 +14,8 @@ interface RouteParams {
 // GET /api/calendars/[id] - Get single calendar
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const calendar = await prisma.calendar.findFirst({
       where: {
@@ -47,13 +49,18 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PATCH /api/calendars/[id] - Update calendar settings
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
-    const { isEnabled, checkForConflicts } = body
+    const parsed = updateCalendarSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const { isEnabled } = parsed.data
 
     // Verify ownership
     const existing = await prisma.calendar.findFirst({
@@ -87,10 +94,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 // DELETE /api/calendars/[id] - Disconnect calendar
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Verify ownership and get credential
     const calendar = await prisma.calendar.findFirst({

@@ -6,6 +6,7 @@
 import prisma from '../../prisma'
 import type { BusyTime } from '@/types/slots'
 import type { CreateCalendarEventParams, CreateCalendarEventResult, MicrosoftTokenResponse, MicrosoftUserResponse, MicrosoftCalendarResponse, MicrosoftEventRequest, MicrosoftEventResponse } from '@/types/calendar'
+import { withRefreshLock } from './token-refresh-lock'
 
 // Microsoft Graph API base URL
 const GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0'
@@ -84,7 +85,11 @@ export async function exchangeCodeForTokens(code: string): Promise<MicrosoftToke
   return response.json()
 }
 
-export async function refreshOutlookAccessToken(calendarId: string): Promise<string | null> {
+export function refreshOutlookAccessToken(calendarId: string): Promise<string | null> {
+  return withRefreshLock(calendarId, () => refreshOutlookAccessTokenUnsafe(calendarId));
+}
+
+async function refreshOutlookAccessTokenUnsafe(calendarId: string): Promise<string | null> {
   const calendar = await prisma.calendar.findUnique({
     where: { id: calendarId },
     include: { credentials: true },
@@ -291,7 +296,7 @@ export async function getOutlookBusyTimes(
 
     const response = await fetch(
       `${GRAPH_API_BASE}/me/calendarView?startDateTime=${startDateTime}&endDateTime=${endDateTime}&$select=start,end,showAs`,
-      { headers }
+      { headers: { ...headers, 'Prefer': 'outlook.timezone="UTC"' } }
     )
 
     if (!response.ok) {

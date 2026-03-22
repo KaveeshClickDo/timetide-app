@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { sendWelcomeEmail } from '@/lib/integrations/email/client';
 import { z } from 'zod';
 

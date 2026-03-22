@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/admin-auth'
 import prisma from '@/lib/prisma'
 import { startOfMonth, endOfMonth, subDays, startOfDay, format } from 'date-fns'
 import { checkFeatureAccess } from '@/lib/plan-enforcement'
@@ -8,10 +7,8 @@ import type { PlanTier } from '@/lib/pricing'
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Read plan from DB (not session) to prevent stale JWT bypass
     const dbUser = await prisma.user.findUnique({

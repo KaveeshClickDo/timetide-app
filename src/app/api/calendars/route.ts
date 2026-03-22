@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { getGoogleAuthUrl, connectGoogleCalendar } from '@/lib/integrations/calendar/google'
 import { getOutlookAuthUrl, connectOutlookCalendar } from '@/lib/integrations/calendar/outlook'
 
 // GET /api/calendars - List connected calendars
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const calendars = await prisma.calendar.findMany({
       where: {
@@ -43,20 +40,23 @@ export async function GET() {
 // POST /api/calendars/connect - Initiate calendar connection
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
     const { provider, code, returnTo } = body
+
+    // Validate returnTo is a safe internal path (defense-in-depth — also checked on decode)
+    const safeReturnTo = typeof returnTo === 'string' && returnTo.startsWith('/dashboard/')
+      ? returnTo
+      : undefined;
 
     if (provider === 'GOOGLE') {
       if (code) {
         const calendar = await connectGoogleCalendar(session.user.id, code)
         return NextResponse.json({ calendar })
       } else {
-        const authUrl = getGoogleAuthUrl(session.user.id, returnTo)
+        const authUrl = getGoogleAuthUrl(session.user.id, safeReturnTo)
         return NextResponse.json({ authUrl })
       }
     }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         const calendar = await connectOutlookCalendar(session.user.id, code)
         return NextResponse.json({ calendar })
       } else {
-        const authUrl = getOutlookAuthUrl(session.user.id, returnTo)
+        const authUrl = getOutlookAuthUrl(session.user.id, safeReturnTo)
         return NextResponse.json({ authUrl })
       }
     }

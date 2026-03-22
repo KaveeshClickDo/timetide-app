@@ -364,7 +364,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Slots API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

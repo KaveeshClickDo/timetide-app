@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { logTeamAction } from '@/lib/team-audit'
 
 interface RouteParams {
@@ -11,10 +10,8 @@ interface RouteParams {
 // DELETE /api/teams/[id]/invitations/[invitationId] - Cancel invitation
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const membership = await prisma.teamMember.findUnique({
       where: {

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/admin-auth'
 import { voluntaryUnsubscribe } from '@/lib/subscription-lifecycle'
 import prisma from '@/lib/prisma'
 
@@ -11,10 +10,8 @@ import prisma from '@/lib/prisma'
  * Background job handles the transition to grace period when the period ends.
  */
 export async function POST() {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error, session } = await requireAuth()
+  if (error) return error
 
   try {
     // Read from DB (not session)
@@ -48,8 +45,7 @@ export async function POST() {
         : 'Subscription cancelled.',
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to cancel subscription'
     console.error('Cancel subscription error:', error)
-    return NextResponse.json({ error: message }, { status: 400 })
+    return NextResponse.json({ error: 'Failed to cancel subscription' }, { status: 400 })
   }
 }

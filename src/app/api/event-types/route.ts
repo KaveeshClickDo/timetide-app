@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { createEventTypeSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
 import { checkNumericLimit, checkEventTypeFeatures, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
@@ -10,10 +9,8 @@ import type { PlanTier } from '@/lib/pricing'
 // GET /api/event-types - List all event types for current user
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const eventTypes = await prisma.eventType.findMany({
       where: {
@@ -45,10 +42,8 @@ export async function GET() {
 // POST /api/event-types - Create new event type
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
     const result = createEventTypeSchema.safeParse(body)

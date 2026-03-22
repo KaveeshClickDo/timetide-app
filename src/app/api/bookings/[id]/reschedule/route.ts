@@ -8,6 +8,7 @@ import { getServerSession } from 'next-auth';
 import { formatInTimeZone } from 'date-fns-tz';
 import { addMinutes } from 'date-fns';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@/generated/prisma/client';
 import { authOptions } from '@/lib/auth';
 import { rescheduleBookingSchema } from '@/lib/validation/schemas';
 import { verifyCode } from '@/lib/email-verification';
@@ -159,49 +160,87 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         bulkConflictUserIds = [booking.hostId];
       }
 
-      // Validate ALL shifted times for conflicts first (all-or-nothing)
-      for (const fb of futureBookings) {
-        const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
-        const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
+      // Atomic bulk reschedule: validate ALL conflicts and apply ALL updates in a single
+      // Serializable transaction. Prevents race conditions where another reschedule claims
+      // a slot between our conflict check and update.
+      const MAX_RESCHEDULE_RETRIES = 3;
+      let bulkConflictDate: Date | null = null;
+      let bulkConflictTz: string | null = null;
 
-        const conflict = await prisma.booking.findFirst({
-          where: {
-            OR: [
-              { hostId: { in: bulkConflictUserIds } },
-              { assignedUserId: { in: bulkConflictUserIds } },
-            ],
-            id: { notIn: futureBookings.map(b => b.id) },
-            status: { in: ['PENDING', 'CONFIRMED'] },
-            startTime: { lt: shiftedEnd },
-            endTime: { gt: shiftedStart },
-          },
-        });
+      for (let attempt = 0; attempt < MAX_RESCHEDULE_RETRIES; attempt++) {
+        try {
+          await prisma.$transaction(
+            async (tx) => {
+              // Validate ALL shifted times for conflicts (all-or-nothing)
+              for (const fb of futureBookings) {
+                const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
+                const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
 
-        if (conflict) {
-          return NextResponse.json(
-            {
-              error: `Conflict on ${formatInTimeZone(shiftedStart, fb.timezone, 'EEEE, MMMM d')}. Cannot reschedule all future occurrences.`,
-              conflictDate: shiftedStart,
+                const conflict = await tx.booking.findFirst({
+                  where: {
+                    OR: [
+                      { hostId: { in: bulkConflictUserIds } },
+                      { assignedUserId: { in: bulkConflictUserIds } },
+                    ],
+                    id: { notIn: futureBookings.map(b => b.id) },
+                    status: { in: ['PENDING', 'CONFIRMED'] },
+                    startTime: { lt: shiftedEnd },
+                    endTime: { gt: shiftedStart },
+                  },
+                });
+
+                if (conflict) {
+                  bulkConflictDate = shiftedStart;
+                  bulkConflictTz = fb.timezone;
+                  throw new Error('BULK_RESCHEDULE_CONFLICT');
+                }
+              }
+
+              // Apply shifts to all future bookings (inside same transaction)
+              for (const fb of futureBookings) {
+                const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
+                const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
+
+                await tx.booking.update({
+                  where: { id: fb.id },
+                  data: {
+                    startTime: shiftedStart,
+                    endTime: shiftedEnd,
+                    rescheduleReason: reason || null,
+                    lastRescheduledAt: new Date(),
+                  },
+                });
+              }
             },
-            { status: 409 }
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
           );
+          break; // Transaction succeeded
+        } catch (txError) {
+          if (txError instanceof Error && txError.message === 'BULK_RESCHEDULE_CONFLICT') {
+            return NextResponse.json(
+              {
+                error: `Conflict on ${formatInTimeZone(bulkConflictDate!, bulkConflictTz!, 'EEEE, MMMM d')}. Cannot reschedule all future occurrences.`,
+                conflictDate: bulkConflictDate,
+              },
+              { status: 409 }
+            );
+          }
+          const isSerializationFailure =
+            txError instanceof Error &&
+            'code' in txError &&
+            (txError as { code: string }).code === 'P2034';
+          if (isSerializationFailure && attempt < MAX_RESCHEDULE_RETRIES - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+            continue;
+          }
+          throw txError;
         }
       }
 
-      // Apply shifts to all future bookings
+      // Calendar updates and reminders (external side effects, outside transaction)
       for (const fb of futureBookings) {
         const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
         const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
-
-        await prisma.booking.update({
-          where: { id: fb.id },
-          data: {
-            startTime: shiftedStart,
-            endTime: shiftedEnd,
-            rescheduleReason: reason || null,
-            lastRescheduledAt: new Date(),
-          },
-        });
 
         // Update calendar events on all calendars
         await updateAllCalendarEvents(
@@ -336,28 +375,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       conflictUserIds = [booking.hostId];
     }
 
-    // Check for conflicting bookings at the new time (exclude this booking)
-    const conflict = await prisma.booking.findFirst({
-      where: {
-        OR: [
-          { hostId: { in: conflictUserIds } },
-          { assignedUserId: { in: conflictUserIds } },
-        ],
-        id: { not: booking.id },
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        startTime: { lt: newEnd },
-        endTime: { gt: newStart },
-      },
-    });
-
-    if (conflict) {
-      return NextResponse.json(
-        { error: 'This time slot conflicts with another booking' },
-        { status: 409 }
-      );
-    }
-
-    // Store old times for email (invitee's timezone)
+    // Store old times for email before updating (invitee's timezone)
     const oldStartFormatted = formatInTimeZone(
       booking.startTime,
       booking.timezone,
@@ -382,16 +400,69 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       'h:mm a'
     );
 
-    // Update the booking
-    const updatedBooking = await prisma.booking.update({
-      where: { id: booking.id },
-      data: {
-        startTime: newStart,
-        endTime: newEnd,
-        rescheduleReason: reason || null,
-        lastRescheduledAt: new Date(),
-      },
-    });
+    // Atomic reschedule: conflict check + update in a single Serializable transaction.
+    // Prevents race condition where two reschedules both pass conflict check then both update.
+    const MAX_RESCHEDULE_RETRIES = 3;
+    let updatedBooking: Awaited<ReturnType<typeof prisma.booking.update>> | undefined;
+
+    for (let attempt = 0; attempt < MAX_RESCHEDULE_RETRIES; attempt++) {
+      try {
+        updatedBooking = await prisma.$transaction(
+          async (tx) => {
+            // Check for conflicting bookings at the new time (exclude this booking)
+            const conflict = await tx.booking.findFirst({
+              where: {
+                OR: [
+                  { hostId: { in: conflictUserIds } },
+                  { assignedUserId: { in: conflictUserIds } },
+                ],
+                id: { not: booking.id },
+                status: { in: ['PENDING', 'CONFIRMED'] },
+                startTime: { lt: newEnd },
+                endTime: { gt: newStart },
+              },
+            });
+
+            if (conflict) {
+              throw new Error('RESCHEDULE_CONFLICT');
+            }
+
+            // Update the booking
+            return tx.booking.update({
+              where: { id: booking.id },
+              data: {
+                startTime: newStart,
+                endTime: newEnd,
+                rescheduleReason: reason || null,
+                lastRescheduledAt: new Date(),
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+        );
+        break; // Transaction succeeded
+      } catch (txError) {
+        if (txError instanceof Error && txError.message === 'RESCHEDULE_CONFLICT') {
+          return NextResponse.json(
+            { error: 'This time slot conflicts with another booking' },
+            { status: 409 }
+          );
+        }
+        const isSerializationFailure =
+          txError instanceof Error &&
+          'code' in txError &&
+          (txError as { code: string }).code === 'P2034';
+        if (isSerializationFailure && attempt < MAX_RESCHEDULE_RETRIES - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+          continue;
+        }
+        throw txError;
+      }
+    }
+
+    if (!updatedBooking) {
+      throw new Error('Reschedule transaction failed unexpectedly');
+    }
 
     // Update calendar events on all calendars
     await updateAllCalendarEvents(

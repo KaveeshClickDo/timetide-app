@@ -15,6 +15,7 @@ export {
   checkAuthRateLimit,
   checkApiRateLimit,
   checkAdminRateLimit,
+  checkContactRateLimit,
   type RateLimitConfig,
   type RateLimitResult,
 } from './rate-limiter';

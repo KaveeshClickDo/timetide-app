@@ -6,39 +6,29 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { addMinutes, addDays, parseISO, startOfDay } from 'date-fns';
-import { generateRecurringDates, FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/scheduling/recurring/utils';
-import { formatInTimeZone } from 'date-fns-tz';
+import { addMinutes, addDays, parseISO } from 'date-fns';
+import { generateRecurringDates, type RecurringFrequency } from '@/lib/scheduling/recurring/utils';
 import { nanoid } from 'nanoid';
 import prisma from '@/lib/prisma';
-import { type Prisma, BookingStatus } from '@/generated/prisma/client';
+import { Prisma, BookingStatus } from '@/generated/prisma/client';
 import { authOptions } from '@/lib/auth';
 import { createBookingSchema } from '@/lib/validation/schemas';
-import { isSlotAvailable, mergeBusyTimes } from '@/lib/scheduling/slots/calculator';
-import { createNotification, buildBookingNotification } from '@/lib/notifications';
-import { getAllBusyTimes } from '@/lib/integrations/calendar/google';
-import {
-  createGoogleCalendarEvent,
-  CreateCalendarEventParams,
-  CreateCalendarEventResult,
-} from '@/lib/integrations/calendar/google';
-import { createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
-import { buildCalendarEventIdsUpdate, type CalendarEventIds } from '@/lib/integrations/calendar/event-ids';
-import {
-  createZoomMeeting,
-  hasZoomConnected,
-} from '@/lib/integrations/zoom';
-import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
+import { isSlotAvailable } from '@/lib/scheduling/slots/calculator';
 import { verifyCode } from '@/lib/email-verification';
 import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing';
+import { checkBookingRateLimit } from '@/lib/infrastructure/queue';
 import {
-  checkBookingRateLimit,
-  queueBookingConfirmationEmails,
-  queueRecurringBookingConfirmationEmails,
-  queueBookingPendingEmails,
-  scheduleBookingReminders,
-  triggerBookingCreatedWebhook,
-} from '@/lib/infrastructure/queue';
+  selectTeamMember,
+  TeamSelectionError,
+  validateSlotAvailability,
+  SlotUnavailableError,
+  MinimumNoticeError,
+  validateRecurringSlots,
+  RecurringSlotError,
+  createCalendarEvents,
+  sendBookingNotifications,
+  type HostInfo,
+} from '@/lib/services/booking';
 
 /**
  * GET /api/bookings
@@ -293,8 +283,10 @@ export async function POST(request: NextRequest) {
     const startDate = parseISO(startTime);
     const endDate = addMinutes(startDate, eventType.length);
 
-    // Determine the host based on whether this is a team event
-    let selectedHost = {
+    // ========================================================================
+    // TEAM MEMBER SELECTION
+    // ========================================================================
+    const eventOwner: HostInfo = {
       id: eventType.userId,
       name: eventType.user.name,
       email: eventType.user.email,
@@ -302,273 +294,45 @@ export async function POST(request: NextRequest) {
       timezone: eventType.user.timezone,
     };
 
-    // Track assigned user for team events
+    let selectedHost = eventOwner;
     let assignedUserId: string | undefined;
     let shouldUpdateRoundRobinState = false;
 
-    // Handle team scheduling
     if (eventType.teamId && eventType.schedulingType && eventType.teamMemberAssignments.length > 0) {
-      const assignedMembers = eventType.teamMemberAssignments.map(a => a.teamMember);
-
-      if (eventType.schedulingType === 'ROUND_ROBIN') {
-        // Find the next available member using round-robin rotation
-        // Start from the member after lastAssignedMemberId
-        const lastAssignedIndex = eventType.lastAssignedMemberId
-          ? assignedMembers.findIndex(m => m.id === eventType.lastAssignedMemberId)
-          : -1;
-
-        let memberIndex = lastAssignedIndex;
-
-        // Try each member in rotation order
-        for (let i = 0; i < assignedMembers.length; i++) {
-          memberIndex = (memberIndex + 1) % assignedMembers.length;
-          const member = assignedMembers[memberIndex];
-
-          // Check if member is available
-          let memberBusyTimes: { start: Date; end: Date }[] = [];
-          try {
-            memberBusyTimes = await getAllBusyTimes(
-              member.user.id,
-              addMinutes(startDate, -60),
-              addMinutes(endDate, 60)
-            );
-          } catch {
-            // Calendar not connected, continue
-          }
-
-          const memberBookings = await prisma.booking.findMany({
-            where: {
-              OR: [
-                { hostId: member.user.id },
-                { assignedUserId: member.user.id },
-                { attendees: { some: { userId: member.user.id } } },
-              ],
-              status: { in: ['PENDING', 'CONFIRMED'] },
-              startTime: { lt: endDate },
-              endTime: { gt: startDate },
-            },
-          });
-
-          const memberBusyFromBookings = memberBookings.map(b => ({
-            start: b.startTime,
-            end: b.endTime,
-          }));
-
-          const allMemberBusy = mergeBusyTimes([...memberBusyTimes, ...memberBusyFromBookings]);
-          const isAvailable = isSlotAvailable(
-            { start: startDate, end: endDate },
-            allMemberBusy,
-            eventType.bufferTimeBefore,
-            eventType.bufferTimeAfter
-          );
-
-          if (isAvailable) {
-            selectedHost = {
-              id: member.user.id,
-              name: member.user.name,
-              email: member.user.email,
-              username: member.user.username,
-              timezone: member.user.timezone,
-            };
-            assignedUserId = member.user.id;
-            shouldUpdateRoundRobinState = true;
-            break;
-          }
-        }
-
-        if (!assignedUserId) {
-          return NextResponse.json(
-            { error: 'No team members are available at this time.' },
-            { status: 409 }
-          );
-        }
-      } else if (eventType.schedulingType === 'COLLECTIVE') {
-        // For collective, all members must be available
-        let allAvailable = true;
-
-        for (const member of assignedMembers) {
-          let memberBusyTimes: { start: Date; end: Date }[] = [];
-          try {
-            memberBusyTimes = await getAllBusyTimes(
-              member.user.id,
-              addMinutes(startDate, -60),
-              addMinutes(endDate, 60)
-            );
-          } catch {
-            // Calendar not connected, continue
-          }
-
-          const memberBookings = await prisma.booking.findMany({
-            where: {
-              OR: [
-                { hostId: member.user.id },
-                { assignedUserId: member.user.id },
-                { attendees: { some: { userId: member.user.id } } },
-              ],
-              status: { in: ['PENDING', 'CONFIRMED'] },
-              startTime: { lt: endDate },
-              endTime: { gt: startDate },
-            },
-          });
-
-          const memberBusyFromBookings = memberBookings.map(b => ({
-            start: b.startTime,
-            end: b.endTime,
-          }));
-
-          const allMemberBusy = mergeBusyTimes([...memberBusyTimes, ...memberBusyFromBookings]);
-          const isAvailable = isSlotAvailable(
-            { start: startDate, end: endDate },
-            allMemberBusy,
-            eventType.bufferTimeBefore,
-            eventType.bufferTimeAfter
-          );
-
-          if (!isAvailable) {
-            allAvailable = false;
-            break;
-          }
-        }
-
-        if (!allAvailable) {
-          return NextResponse.json(
-            { error: 'This time slot is no longer available for all team members.' },
-            { status: 409 }
-          );
-        }
-
-        // Use the meeting organizer as host if set, otherwise first assigned member
-        const organizerMember = eventType.meetingOrganizerUserId
-          ? assignedMembers.find(m => m.user.id === eventType.meetingOrganizerUserId)
-          : null;
-        const hostMember = organizerMember || assignedMembers[0];
-        selectedHost = {
-          id: hostMember.user.id,
-          name: hostMember.user.name,
-          email: hostMember.user.email,
-          username: hostMember.user.username,
-          timezone: hostMember.user.timezone,
-        };
-      } else if (eventType.schedulingType === 'MANAGED') {
-        // For MANAGED: booking is created but assignment happens later by host/admin
-        // Use the event type owner as the initial host
-        // The booking will need to be assigned to a specific member later
-        selectedHost = {
-          id: eventType.user.id,
-          name: eventType.user.name,
-          email: eventType.user.email,
-          username: eventType.user.username,
-          timezone: eventType.user.timezone,
-        };
-        // assignedUserId remains undefined - will be set by host/admin later
-      }
-    }
-
-    // Verify the slot is still available for the selected host
-    const calendarBusyTimes = await getAllBusyTimes(
-      selectedHost.id,
-      addMinutes(startDate, -60),
-      addMinutes(endDate, 60)
-    );
-
-    // CRITICAL: Check ALL bookings for this host (across all event types) to prevent double booking
-    // Also check bookings where this user is a collective team member attendee
-    const existingBookings = await prisma.booking.findMany({
-      where: {
-        OR: [
-          { hostId: selectedHost.id },
-          { assignedUserId: selectedHost.id },
-          { attendees: { some: { userId: selectedHost.id } } },
-        ],
-        status: { in: ['PENDING', 'CONFIRMED'] },
-        startTime: { lt: endDate },
-        endTime: { gt: startDate },
-      },
-    });
-
-    const isGroupEvent = (eventType.seatsPerSlot ?? 1) > 1;
-    const seatsPerSlot = eventType.seatsPerSlot ?? 1;
-
-    // For group events: check seat capacity separately, exclude same-event bookings from busy times
-    if (isGroupEvent) {
-      // Count existing bookings for THIS event type at THIS exact slot
-      const slotBookingCount = await prisma.booking.count({
-        where: {
-          eventTypeId,
-          startTime: startDate,
-          status: { in: ['PENDING', 'CONFIRMED'] },
-        },
+      const result = await selectTeamMember({
+        schedulingType: eventType.schedulingType as 'ROUND_ROBIN' | 'COLLECTIVE' | 'MANAGED',
+        teamMemberAssignments: eventType.teamMemberAssignments,
+        lastAssignedMemberId: eventType.lastAssignedMemberId,
+        meetingOrganizerUserId: eventType.meetingOrganizerUserId,
+        eventOwner,
+        startDate,
+        endDate,
+        bufferTimeBefore: eventType.bufferTimeBefore,
+        bufferTimeAfter: eventType.bufferTimeAfter,
       });
 
-      if (slotBookingCount >= seatsPerSlot) {
-        return NextResponse.json(
-          { error: 'All seats for this time slot are taken. Please select another time.' },
-          { status: 409 }
-        );
-      }
-    }
-
-    // Build busy times: for group events, exclude this event type's bookings
-    // (they don't block the host since multiple people share the same slot)
-    const bookingBusyTimes = existingBookings
-      .filter((b) => !isGroupEvent || b.eventTypeId !== eventTypeId)
-      .map((b) => ({
-        start: b.startTime,
-        end: b.endTime,
-      }));
-
-    const allBusyTimes = mergeBusyTimes([
-      ...calendarBusyTimes,
-      ...bookingBusyTimes,
-    ]);
-
-    const slotAvailable = isSlotAvailable(
-      { start: startDate, end: endDate },
-      allBusyTimes,
-      eventType.bufferTimeBefore,
-      eventType.bufferTimeAfter
-    );
-
-    if (!slotAvailable) {
-      return NextResponse.json(
-        { error: 'This time slot is no longer available. Please select another time.' },
-        { status: 409 }
-      );
-    }
-
-    // Check minimum notice
-    const minimumNoticeTime = addMinutes(new Date(), eventType.minimumNotice);
-    if (startDate < minimumNoticeTime) {
-      return NextResponse.json(
-        { error: 'This time slot is too soon. Please select a later time.' },
-        { status: 400 }
-      );
-    }
-
-    // Check daily booking limit
-    if (eventType.maxBookingsPerDay) {
-      const dateKey = startDate.toISOString().split('T')[0];
-      const dayStart = startOfDay(startDate);
-      const dayEnd = addMinutes(dayStart, 24 * 60);
-
-      const dayBookings = await prisma.booking.count({
-        where: {
-          eventTypeId,
-          status: { in: ['PENDING', 'CONFIRMED'] },
-          startTime: { gte: dayStart, lt: dayEnd },
-        },
-      });
-
-      if (dayBookings >= eventType.maxBookingsPerDay) {
-        return NextResponse.json(
-          { error: 'No more bookings available for this day.' },
-          { status: 409 }
-        );
-      }
+      selectedHost = result.selectedHost;
+      assignedUserId = result.assignedUserId;
+      shouldUpdateRoundRobinState = result.shouldUpdateRoundRobinState;
     }
 
     // ========================================================================
-    // RECURRING: Validate additional slots if recurring booking
+    // SLOT AVAILABILITY VALIDATION
+    // ========================================================================
+    await validateSlotAvailability({
+      hostId: selectedHost.id,
+      eventTypeId,
+      startDate,
+      endDate,
+      bufferTimeBefore: eventType.bufferTimeBefore,
+      bufferTimeAfter: eventType.bufferTimeAfter,
+      minimumNotice: eventType.minimumNotice,
+      maxBookingsPerDay: eventType.maxBookingsPerDay,
+      seatsPerSlot: eventType.seatsPerSlot ?? 1,
+    });
+
+    // ========================================================================
+    // RECURRING SLOT VALIDATION
     // ========================================================================
     const occurrenceCount = recurring ? recurring.weeks : 1;
     const recurringGroupId = recurring ? nanoid() : undefined;
@@ -582,75 +346,23 @@ export async function POST(request: NextRequest) {
         })
       : [startDate];
 
-    // For recurring bookings, validate all future occurrence slots
     if (recurring && occurrenceCount > 1) {
-      for (let i = 1; i < occurrenceCount; i++) {
-        const occStart = allOccurrenceDates[i];
-        const occEnd = addMinutes(occStart, eventType.length);
-
-        // Check availability for each recurring occurrence
-        const occBusyTimes = await getAllBusyTimes(
-          selectedHost.id,
-          addMinutes(occStart, -60),
-          addMinutes(occEnd, 60)
-        );
-
-        const occBookings = await prisma.booking.findMany({
-          where: {
-            hostId: selectedHost.id,
-            status: { in: ['PENDING', 'CONFIRMED'] },
-            startTime: { lt: occEnd },
-            endTime: { gt: occStart },
-          },
-        });
-
-        const occBookingBusy = occBookings
-          .filter((b) => !isGroupEvent || b.eventTypeId !== eventTypeId)
-          .map((b) => ({ start: b.startTime, end: b.endTime }));
-
-        const occAllBusy = mergeBusyTimes([...occBusyTimes, ...occBookingBusy]);
-        const occAvailable = isSlotAvailable(
-          { start: occStart, end: occEnd },
-          occAllBusy,
-          eventType.bufferTimeBefore,
-          eventType.bufferTimeAfter
-        );
-
-        if (!occAvailable) {
-          return NextResponse.json(
-            {
-              error: `The time slot on ${formatInTimeZone(occStart, timezone, 'EEEE, MMMM d, yyyy')} (week ${i + 1}) is not available. Please choose a different time.`,
-              conflictWeek: i + 1,
-            },
-            { status: 409 }
-          );
-        }
-
-        // Check daily booking limit for recurring slot
-        if (eventType.maxBookingsPerDay) {
-          const occDayStart = startOfDay(occStart);
-          const occDayEnd = addMinutes(occDayStart, 24 * 60);
-          const occDayBookings = await prisma.booking.count({
-            where: {
-              eventTypeId,
-              status: { in: ['PENDING', 'CONFIRMED'] },
-              startTime: { gte: occDayStart, lt: occDayEnd },
-            },
-          });
-          if (occDayBookings >= eventType.maxBookingsPerDay) {
-            return NextResponse.json(
-              {
-                error: `No more bookings available on ${formatInTimeZone(occStart, timezone, 'EEEE, MMMM d, yyyy')} (week ${i + 1}).`,
-                conflictWeek: i + 1,
-              },
-              { status: 409 }
-            );
-          }
-        }
-      }
+      await validateRecurringSlots({
+        hostId: selectedHost.id,
+        eventTypeId,
+        allOccurrenceDates,
+        eventLength: eventType.length,
+        timezone,
+        bufferTimeBefore: eventType.bufferTimeBefore,
+        bufferTimeAfter: eventType.bufferTimeAfter,
+        maxBookingsPerDay: eventType.maxBookingsPerDay,
+        seatsPerSlot: eventType.seatsPerSlot ?? 1,
+      });
     }
 
-    // Determine location
+    // ========================================================================
+    // DETERMINE LOCATION
+    // ========================================================================
     let location: string | undefined;
     let meetingUrl: string | undefined;
 
@@ -676,11 +388,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================================
-    // CREATE BOOKINGS (single or recurring)
+    // CREATE BOOKINGS (single or recurring) — Serializable transaction
     // ========================================================================
-    // MANAGED team events should always start as PENDING until a member is assigned
     const isManagedUnassigned = eventType.schedulingType === 'MANAGED' && !assignedUserId;
     const bookingStatus = (eventType.requiresConfirmation || isManagedUnassigned) ? 'PENDING' : 'CONFIRMED';
+    const isGroupEvent = (eventType.seatsPerSlot ?? 1) > 1;
+    const seatsPerSlot = eventType.seatsPerSlot ?? 1;
+
     const createdBookings: Array<{
       id: string;
       uid: string;
@@ -690,438 +404,355 @@ export async function POST(request: NextRequest) {
       meetingUrl: string | null;
     }> = [];
 
-    for (let i = 0; i < occurrenceCount; i++) {
-      const occStart = allOccurrenceDates[i];
-      const occEnd = addMinutes(occStart, eventType.length);
+    // All-or-nothing transaction with serialization conflict retry
+    const MAX_SERIALIZATION_RETRIES = 3;
+    const conflictedMemberIds = new Set<string>();
 
-      const booking = await prisma.$transaction(async (tx) => {
-        // Re-check seat availability inside transaction to prevent race conditions
-        if (isGroupEvent) {
-          const currentCount = await tx.booking.count({
-            where: {
-              eventTypeId,
-              startTime: occStart,
-              status: { in: ['PENDING', 'CONFIRMED'] },
-            },
-          });
-          if (currentCount >= seatsPerSlot) {
-            throw new Error('SEATS_FULL');
-          }
-        }
+    for (let attempt = 0; attempt < MAX_SERIALIZATION_RETRIES; attempt++) {
+      try {
+        const txResult = await prisma.$transaction(
+          async (tx) => {
+            const txBookings: Array<{
+              id: string;
+              uid: string;
+              status: string;
+              startTime: Date;
+              endTime: Date;
+              meetingUrl: string | null;
+            }> = [];
 
-        return tx.booking.create({
-          data: {
-            eventTypeId,
-            hostId: selectedHost.id,
-            assignedUserId: assignedUserId,
-            startTime: occStart,
-            endTime: occEnd,
-            timezone,
-            inviteeName: name,
-            inviteeEmail: email,
-            inviteePhone: phone,
-            inviteeNotes: notes,
-            responses: responses ?? undefined,
-            status: bookingStatus,
-            location,
-            source: 'web',
-            recurringGroupId,
-            recurringIndex: recurring ? i : undefined,
-            recurringCount: recurring ? occurrenceCount : undefined,
-            recurringFrequency: recurring ? recurringFrequency : undefined,
-            recurringInterval: recurring ? recurringInterval : undefined,
-          },
-        });
-      });
+            for (let i = 0; i < occurrenceCount; i++) {
+              const occStart = allOccurrenceDates[i];
+              const occEnd = addMinutes(occStart, eventType.length);
 
-      createdBookings.push({
-        id: booking.id,
-        uid: booking.uid,
-        status: booking.status,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        meetingUrl: null,
-      });
-    }
+              // Re-check seat availability inside Serializable transaction
+              if (isGroupEvent) {
+                const currentCount = await tx.booking.count({
+                  where: {
+                    eventTypeId,
+                    startTime: occStart,
+                    status: { in: ['PENDING', 'CONFIRMED'] },
+                  },
+                });
+                if (currentCount >= seatsPerSlot) {
+                  throw new Error('SEATS_FULL');
+                }
+              }
 
-    // Create BookingAttendee records for collective team members (non-host)
-    // This ensures availability checks catch all members, preventing double-booking
-    if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
-      const nonHostMembers = eventType.teamMemberAssignments.filter(
-        a => a.teamMember.user.id !== selectedHost.id
-      );
-      for (const booking of createdBookings) {
-        await prisma.bookingAttendee.createMany({
-          data: nonHostMembers.map(a => ({
-            bookingId: booking.id,
-            email: a.teamMember.user.email!,
-            name: a.teamMember.user.name ?? undefined,
-            userId: a.teamMember.user.id,
-          })),
-        });
-      }
-    }
+              // Guard against round-robin race condition
+              if (assignedUserId) {
+                const memberConflict = await tx.booking.findFirst({
+                  where: {
+                    OR: [
+                      { hostId: assignedUserId },
+                      { assignedUserId: assignedUserId },
+                      { attendees: { some: { userId: assignedUserId } } },
+                    ],
+                    status: { in: ['PENDING', 'CONFIRMED'] },
+                    startTime: { lt: occEnd },
+                    endTime: { gt: occStart },
+                  },
+                });
+                if (memberConflict) {
+                  throw new Error('MEMBER_CONFLICT');
+                }
+              }
 
-    // Update round-robin state for team events (once)
-    if (shouldUpdateRoundRobinState && assignedUserId && eventType.teamId) {
-      const assignedMemberRecord = eventType.teamMemberAssignments.find(
-        a => a.teamMember.user.id === assignedUserId
-      );
-      if (assignedMemberRecord) {
-        await prisma.eventType.update({
-          where: { id: eventTypeId },
-          data: { lastAssignedMemberId: assignedMemberRecord.teamMember.id },
-        });
-      }
-    }
+              const booking = await tx.booking.create({
+                data: {
+                  eventTypeId,
+                  hostId: selectedHost.id,
+                  assignedUserId: assignedUserId,
+                  startTime: occStart,
+                  endTime: occEnd,
+                  timezone,
+                  inviteeName: name,
+                  inviteeEmail: email,
+                  inviteePhone: phone,
+                  inviteeNotes: notes,
+                  responses: responses ?? undefined,
+                  status: bookingStatus,
+                  location,
+                  source: 'web',
+                  recurringGroupId,
+                  recurringIndex: recurring ? i : undefined,
+                  recurringCount: recurring ? occurrenceCount : undefined,
+                  recurringFrequency: recurring ? recurringFrequency : undefined,
+                  recurringInterval: recurring ? recurringInterval : undefined,
+                },
+              });
 
-    // ========================================================================
-    // CALENDAR EVENTS — create on ALL connected calendars
-    // ========================================================================
-    const hostTimezone = selectedHost.timezone || 'UTC';
-
-    // For team events with a designated meeting organizer, use their account for calendar/meeting links
-    const meetingAccountUserId = eventType.meetingOrganizerUserId || selectedHost.id;
-
-    // Fetch ALL enabled calendars for the meeting account
-    const allCalendars = await prisma.calendar.findMany({
-      where: { userId: meetingAccountUserId, isEnabled: true },
-    });
-
-    // Determine which calendar generates the meeting link (conferenceData)
-    // Google Meet → Google calendar, Teams → Outlook calendar, others → no conferenceData
-    let meetingLinkCalendarId: string | null = null;
-    if (eventType.locationType === 'GOOGLE_MEET') {
-      const googleCal = allCalendars.find(c => c.provider === 'GOOGLE');
-      if (googleCal) meetingLinkCalendarId = googleCal.id;
-    } else if (eventType.locationType === 'TEAMS') {
-      const outlookCal = allCalendars.find(c => c.provider === 'OUTLOOK');
-      if (outlookCal) meetingLinkCalendarId = outlookCal.id;
-    }
-
-    // Build attendees list based on scheduling type
-    const calendarAttendees: Array<{ email: string; name?: string }> = [
-      { email, name },
-    ];
-    if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
-      // Add all assigned team members for collective events
-      for (const assignment of eventType.teamMemberAssignments) {
-        const memberEmail = assignment.teamMember.user.email;
-        if (memberEmail) {
-          calendarAttendees.push({ email: memberEmail, name: assignment.teamMember.user.name ?? undefined });
-        }
-      }
-    } else {
-      calendarAttendees.push({ email: selectedHost.email!, name: selectedHost.name ?? undefined });
-    }
-
-    // Create calendar events for each booking on ALL connected calendars
-    // Sort so the meeting-link calendar is processed first (to capture meetLink for others)
-    const sortedCalendars = [...allCalendars].sort((a, b) => {
-      const aIsMeetingLink = a.id === meetingLinkCalendarId ? 0 : 1;
-      const bIsMeetingLink = b.id === meetingLinkCalendarId ? 0 : 1;
-      return aIsMeetingLink - bIsMeetingLink;
-    });
-
-    for (const booking of createdBookings) {
-      const calendarEventIds: CalendarEventIds = {};
-      let meetingUrl: string | null = null;
-
-      for (const cal of sortedCalendars) {
-        try {
-          const occSuffix = recurring ? ` (${createdBookings.indexOf(booking) + 1}/${occurrenceCount})` : '';
-          // Only request conferenceData from the calendar that generates the meeting link
-          // Skip conferenceData for PENDING bookings — link shared only after confirmation
-          const needsConference = cal.id === meetingLinkCalendarId && bookingStatus !== 'PENDING';
-          const eventParams: CreateCalendarEventParams = {
-            calendarId: cal.id,
-            summary: `${eventType.title} with ${name}${occSuffix}`,
-            description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}${recurring ? `\nRecurring: Week ${createdBookings.indexOf(booking) + 1} of ${occurrenceCount}` : ''}`,
-            startTime: booking.startTime,
-            endTime: booking.endTime,
-            attendees: calendarAttendees,
-            location: meetingUrl || location, // Use meeting URL as location for secondary calendars
-            conferenceData: needsConference,
-          };
-
-          let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
-
-          if (cal.provider === 'GOOGLE') {
-            result = await createGoogleCalendarEvent(eventParams);
-          } else if (cal.provider === 'OUTLOOK') {
-            result = await createOutlookCalendarEvent(eventParams);
-          }
-
-          if (result.eventId) {
-            calendarEventIds[cal.provider as 'GOOGLE' | 'OUTLOOK'] = result.eventId;
-          }
-          // Capture meeting link from the provider that generates it
-          if (result.meetLink && needsConference) {
-            meetingUrl = result.meetLink;
-          }
-        } catch (error) {
-          console.error(`Failed to create ${cal.provider} calendar event for booking ${booking.id}:`, error);
-        }
-      }
-
-      // Update booking with all calendar event IDs and meeting URL
-      if (Object.keys(calendarEventIds).length > 0 || meetingUrl) {
-        const updateData: Record<string, unknown> = {};
-        if (Object.keys(calendarEventIds).length > 0) {
-          const idsUpdate = buildCalendarEventIdsUpdate(calendarEventIds);
-          updateData.calendarEventId = idsUpdate.calendarEventId;
-          updateData.calendarEventIds = idsUpdate.calendarEventIds;
-        }
-        if (meetingUrl) {
-          updateData.meetingUrl = meetingUrl;
-        }
-        await prisma.booking.update({
-          where: { id: booking.id },
-          data: updateData,
-        });
-        booking.meetingUrl = meetingUrl || null;
-      }
-
-      // Create Zoom meeting if needed (skip for pending bookings — link shared after confirmation)
-      if (eventType.locationType === 'ZOOM' && bookingStatus !== 'PENDING') {
-        try {
-          const hasZoom = await hasZoomConnected(meetingAccountUserId);
-          if (hasZoom) {
-            const zoomMeeting = await createZoomMeeting({
-              userId: meetingAccountUserId,
-              topic: `${eventType.title} with ${name}`,
-              startTime: booking.startTime,
-              duration: eventType.length,
-              timezone: hostTimezone,
-              agenda: notes || `Booked via TimeTide with ${name} (${email})`,
-            });
-
-            await prisma.booking.update({
-              where: { id: booking.id },
-              data: { meetingUrl: zoomMeeting.joinUrl },
-            });
-            booking.meetingUrl = zoomMeeting.joinUrl;
-          }
-        } catch (error) {
-          console.error(`Failed to create Zoom meeting for booking ${booking.id}:`, error);
-        }
-      }
-    }
-
-    // ========================================================================
-    // CALENDAR EVENTS — create on collective members' calendars (Option A)
-    // ========================================================================
-    if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
-      const nonHostMembers = eventType.teamMemberAssignments.filter(
-        a => a.teamMember.user.id !== meetingAccountUserId
-      );
-
-      for (const member of nonHostMembers) {
-        const memberCalendars = await prisma.calendar.findMany({
-          where: { userId: member.teamMember.user.id, isEnabled: true },
-        });
-        if (memberCalendars.length === 0) continue;
-
-        for (const booking of createdBookings) {
-          const memberCalEventIds: CalendarEventIds = {};
-          const occSuffix = recurring ? ` (${createdBookings.indexOf(booking) + 1}/${occurrenceCount})` : '';
-
-          for (const cal of memberCalendars) {
-            try {
-              const eventParams: CreateCalendarEventParams = {
-                calendarId: cal.id,
-                summary: `${eventType.title} with ${name}${occSuffix}`,
-                description: `Booked via TimeTide\n\nInvitee: ${name} (${email})\n${notes ? `Notes: ${notes}` : ''}`,
+              txBookings.push({
+                id: booking.id,
+                uid: booking.uid,
+                status: booking.status,
                 startTime: booking.startTime,
                 endTime: booking.endTime,
-                attendees: calendarAttendees,
-                location: booking.meetingUrl || location,
-                conferenceData: false,
-              };
+                meetingUrl: null,
+              });
+            }
 
-              let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
-              if (cal.provider === 'GOOGLE') {
-                result = await createGoogleCalendarEvent(eventParams);
-              } else if (cal.provider === 'OUTLOOK') {
-                result = await createOutlookCalendarEvent(eventParams);
+            // Create BookingAttendee records for collective team members (non-host)
+            if (eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0) {
+              const nonHostMembers = eventType.teamMemberAssignments.filter(
+                a => a.teamMember.user.id !== selectedHost.id
+              );
+              for (const booking of txBookings) {
+                await tx.bookingAttendee.createMany({
+                  data: nonHostMembers.map(a => ({
+                    bookingId: booking.id,
+                    email: a.teamMember.user.email!,
+                    name: a.teamMember.user.name ?? undefined,
+                    userId: a.teamMember.user.id,
+                  })),
+                });
               }
-              if (result.eventId) {
-                memberCalEventIds[cal.provider as 'GOOGLE' | 'OUTLOOK'] = result.eventId;
+            }
+
+            // Update round-robin state with optimistic locking
+            if (shouldUpdateRoundRobinState && assignedUserId && eventType.teamId) {
+              const assignedMemberRecord = eventType.teamMemberAssignments.find(
+                a => a.teamMember.user.id === assignedUserId
+              );
+              if (assignedMemberRecord) {
+                const expectedLastMemberId = eventType.lastAssignedMemberId;
+                const updated = await tx.eventType.updateMany({
+                  where: {
+                    id: eventTypeId,
+                    lastAssignedMemberId: expectedLastMemberId ?? null,
+                  },
+                  data: { lastAssignedMemberId: assignedMemberRecord.teamMember.id },
+                });
+                if (updated.count === 0) {
+                  throw new Error('ROUND_ROBIN_CONFLICT');
+                }
               }
-            } catch (error) {
-              console.error(`Failed to create ${cal.provider} calendar event for member ${member.teamMember.user.id}:`, error);
+            }
+
+            return txBookings;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+        );
+
+        // Transaction succeeded
+        createdBookings.push(...txResult);
+        break;
+      } catch (txError) {
+        const isSerializationFailure =
+          txError instanceof Error &&
+          'code' in txError &&
+          (txError as { code: string }).code === 'P2034';
+        const isRoundRobinConflict =
+          txError instanceof Error &&
+          (txError.message === 'MEMBER_CONFLICT' || txError.message === 'ROUND_ROBIN_CONFLICT');
+
+        if ((isSerializationFailure || isRoundRobinConflict) && attempt < MAX_SERIALIZATION_RETRIES - 1) {
+          // On round-robin conflicts, re-select the next available member
+          if (isRoundRobinConflict && shouldUpdateRoundRobinState && eventType.schedulingType === 'ROUND_ROBIN') {
+            if (assignedUserId) {
+              conflictedMemberIds.add(assignedUserId);
+            }
+
+            // Re-read current round-robin state from DB
+            const freshEventType = await prisma.eventType.findUnique({
+              where: { id: eventTypeId },
+              select: { lastAssignedMemberId: true },
+            });
+            if (freshEventType) {
+              eventType.lastAssignedMemberId = freshEventType.lastAssignedMemberId;
+            }
+
+            // Re-run member selection, skipping conflicted members
+            const assignedMembers = eventType.teamMemberAssignments.map(a => a.teamMember);
+            const freshLastIndex = eventType.lastAssignedMemberId
+              ? assignedMembers.findIndex(m => m.id === eventType.lastAssignedMemberId)
+              : -1;
+
+            let newMemberIndex = freshLastIndex;
+            let foundMember = false;
+
+            for (let j = 0; j < assignedMembers.length; j++) {
+              newMemberIndex = (newMemberIndex + 1) % assignedMembers.length;
+              const candidate = assignedMembers[newMemberIndex];
+
+              if (conflictedMemberIds.has(candidate.user.id)) continue;
+
+              const candidateBookings = await prisma.booking.findMany({
+                where: {
+                  OR: [
+                    { hostId: candidate.user.id },
+                    { assignedUserId: candidate.user.id },
+                    { attendees: { some: { userId: candidate.user.id } } },
+                  ],
+                  status: { in: ['PENDING', 'CONFIRMED'] },
+                  startTime: { lt: endDate },
+                  endTime: { gt: startDate },
+                },
+              });
+
+              const candidateBusy = candidateBookings.map(b => ({ start: b.startTime, end: b.endTime }));
+              const candidateAvailable = isSlotAvailable(
+                { start: startDate, end: endDate },
+                candidateBusy,
+                eventType.bufferTimeBefore,
+                eventType.bufferTimeAfter
+              );
+
+              if (candidateAvailable) {
+                selectedHost = {
+                  id: candidate.user.id,
+                  name: candidate.user.name,
+                  email: candidate.user.email,
+                  username: candidate.user.username,
+                  timezone: candidate.user.timezone,
+                };
+                assignedUserId = candidate.user.id;
+                foundMember = true;
+                break;
+              } else {
+                conflictedMemberIds.add(candidate.user.id);
+              }
+            }
+
+            if (!foundMember) {
+              throw new Error('MEMBER_CONFLICT');
             }
           }
 
-          // Store member's calendar event IDs in their BookingAttendee record
-          if (Object.keys(memberCalEventIds).length > 0) {
-            await prisma.bookingAttendee.updateMany({
-              where: {
-                bookingId: booking.id,
-                userId: member.teamMember.user.id,
-              },
-              data: {
-                calendarEventIds: memberCalEventIds,
-              },
-            });
-          }
+          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
+          continue;
         }
+        // Not retryable or final retry exhausted
+        throw txError;
       }
     }
 
-    // Use first booking as the "primary" for emails/notifications
-    const primaryBooking = createdBookings[0];
-    meetingUrl = primaryBooking.meetingUrl || undefined;
-
     // ========================================================================
-    // EMAILS & NOTIFICATIONS
+    // CALENDAR EVENTS (with compensation on catastrophic failure)
     // ========================================================================
-    // Build team members list for collective events
-    const teamMembersForEmail = eventType.schedulingType === 'COLLECTIVE' && eventType.teamMemberAssignments.length > 0
-      ? eventType.teamMemberAssignments
-          .map(a => ({
-            name: a.teamMember.user.name ?? 'Team Member',
-            email: a.teamMember.user.email!,
-          }))
-          .filter(m => m.email)
-      : undefined;
+    try {
+      await createCalendarEvents({
+        createdBookings,
+        selectedHost,
+        meetingOrganizerUserId: eventType.meetingOrganizerUserId,
+        eventTitle: eventType.title,
+        eventLength: eventType.length,
+        locationType: eventType.locationType,
+        bookingStatus,
+        inviteeName: name,
+        inviteeEmail: email,
+        notes,
+        location,
+        isRecurring: !!recurring,
+        occurrenceCount,
+        schedulingType: eventType.schedulingType,
+        teamMemberAssignments: eventType.teamMemberAssignments,
+      });
 
-    const emailData: BookingEmailData = {
-      hostName: selectedHost.name ?? 'Host',
-      hostEmail: selectedHost.email!,
-      hostUsername: selectedHost.username ?? undefined,
-      inviteeName: name,
-      inviteeEmail: email,
-      eventTitle: eventType.title,
-      eventSlug: eventType.slug,
-      eventDescription: eventType.description ?? undefined,
-      startTime: formatInTimeZone(startDate, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-      endTime: formatInTimeZone(createdBookings[0].endTime, timezone, 'h:mm a'),
-      timezone,
-      hostStartTime: formatInTimeZone(startDate, hostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
-      hostEndTime: formatInTimeZone(createdBookings[0].endTime, hostTimezone, 'h:mm a'),
-      hostTimezone,
-      location,
-      meetingUrl: meetingUrl ?? undefined,
-      bookingUid: primaryBooking.uid,
-      notes,
-      teamMembers: teamMembersForEmail,
-    };
+      // ========================================================================
+      // EMAILS, WEBHOOKS & NOTIFICATIONS (fire-and-forget, inside try block
+      // so they only fire after successful calendar creation)
+      // ========================================================================
+      const primaryBooking = createdBookings[0];
+      meetingUrl = primaryBooking.meetingUrl || undefined;
 
-    if (eventType.requiresConfirmation) {
-      queueBookingPendingEmails(emailData).catch(console.error);
-    } else if (recurring && occurrenceCount > 1) {
-      // Send recurring-specific confirmation email with all dates
-      const recurringEmailData: RecurringBookingEmailData = {
-        ...emailData,
-        totalOccurrences: occurrenceCount,
-        frequencyLabel: FREQUENCY_LABELS[recurringFrequency]?.toLowerCase() || 'recurring',
-        recurringDates: createdBookings.map(b => ({
-          startTime: formatInTimeZone(b.startTime, timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-          endTime: formatInTimeZone(b.endTime, timezone, 'h:mm a'),
-        })),
-        hostRecurringDates: createdBookings.map(b => ({
-          startTime: formatInTimeZone(b.startTime, hostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
-          endTime: formatInTimeZone(b.endTime, hostTimezone, 'h:mm a'),
-        })),
-      };
-      queueRecurringBookingConfirmationEmails(recurringEmailData).catch(console.error);
-
-      // Schedule reminders for each booking
-      for (const booking of createdBookings) {
-        scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
-      }
-    } else {
-      queueBookingConfirmationEmails(emailData).catch(console.error);
-
-      // Schedule reminders for each booking
-      for (const booking of createdBookings) {
-        scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
-      }
-    }
-
-    // Update analytics (count all occurrences)
-    prisma.bookingAnalytics.upsert({
-      where: {
-        eventTypeId_date: {
-          eventTypeId,
-          date: startOfDay(new Date()),
-        },
-      },
-      create: {
+      sendBookingNotifications({
+        selectedHost,
+        createdBookings,
         eventTypeId,
-        date: startOfDay(new Date()),
-        bookings: occurrenceCount,
-      },
-      update: {
-        bookings: { increment: occurrenceCount },
-      },
-    }).catch((err) => { console.warn('Analytics update failed:', err); });
+        eventTitle: eventType.title,
+        eventSlug: eventType.slug,
+        eventDescription: eventType.description,
+        eventLength: eventType.length,
+        requiresConfirmation: eventType.requiresConfirmation,
+        inviteeName: name,
+        inviteeEmail: email,
+        inviteePhone: phone,
+        inviteeNotes: notes,
+        responses,
+        timezone,
+        location,
+        meetingUrl,
+        isRecurring: !!recurring,
+        occurrenceCount,
+        recurringFrequency,
+        schedulingType: eventType.schedulingType,
+        teamMemberAssignments: eventType.teamMemberAssignments,
+      });
 
-    // Trigger webhook once
-    triggerBookingCreatedWebhook(selectedHost.id, {
-      id: primaryBooking.id,
-      uid: primaryBooking.uid,
-      status: primaryBooking.status,
-      startTime: startDate,
-      endTime: endDate,
-      timezone,
-      location,
-      meetingUrl,
-      inviteeName: name,
-      inviteeEmail: email,
-      inviteePhone: phone,
-      inviteeNotes: notes,
-      responses: responses ?? null,
-      eventType: {
-        id: eventType.id,
-        title: eventType.title,
-        slug: eventType.slug,
-        length: eventType.length,
-      },
-      host: {
-        id: selectedHost.id,
-        name: selectedHost.name,
-        email: selectedHost.email!,
-      },
-    }).catch(console.error);
-
-    // Create in-app notification for host
-    const notifData = buildBookingNotification('BOOKING_CREATED', {
-      inviteeName: name,
-      eventTitle: eventType.title,
-      startTime: recurring
-        ? `${occurrenceCount} ${FREQUENCY_LABELS[recurringFrequency] || 'recurring'} sessions starting ${formatInTimeZone(startDate, selectedHost.timezone || 'UTC', 'MMM d, h:mm a')}`
-        : formatInTimeZone(startDate, selectedHost.timezone || 'UTC', 'MMM d, h:mm a'),
-    });
-    createNotification({
-      userId: selectedHost.id,
-      type: 'BOOKING_CREATED',
-      ...notifData,
-      bookingId: primaryBooking.id,
-    }).catch(console.error);
-
-    return NextResponse.json({
-      success: true,
-      booking: {
-        uid: primaryBooking.uid,
-        status: primaryBooking.status,
-        startTime: primaryBooking.startTime,
-        endTime: primaryBooking.endTime,
-        meetingUrl: primaryBooking.meetingUrl,
-      },
-      isRecurring: !!recurring,
-      recurringBookings: recurring ? createdBookings.map(b => ({
-        uid: b.uid,
-        startTime: b.startTime,
-        endTime: b.endTime,
-      })) : undefined,
-    }, { status: 201 });
+      // ========================================================================
+      // RESPONSE
+      // ========================================================================
+      return NextResponse.json({
+        success: true,
+        booking: {
+          uid: primaryBooking.uid,
+          status: primaryBooking.status,
+          startTime: primaryBooking.startTime,
+          endTime: primaryBooking.endTime,
+          meetingUrl: primaryBooking.meetingUrl,
+        },
+        isRecurring: !!recurring,
+        recurringBookings: recurring ? createdBookings.map(b => ({
+          uid: b.uid,
+          startTime: b.startTime,
+          endTime: b.endTime,
+        })) : undefined,
+      }, { status: 201 });
+    } catch (calendarError) {
+      // Calendar creation failed catastrophically — compensate by deleting bookings
+      console.error('Calendar event creation failed, rolling back bookings:', calendarError);
+      try {
+        await prisma.booking.deleteMany({
+          where: { id: { in: createdBookings.map(b => b.id) } },
+        });
+      } catch (rollbackError) {
+        console.error('Failed to rollback bookings after calendar failure:', rollbackError);
+      }
+      return NextResponse.json(
+        { error: 'Failed to create calendar events. Please try again.' },
+        { status: 500 }
+      );
+    }
   } catch (error) {
+    // Map domain errors to HTTP responses
+    if (error instanceof TeamSelectionError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof MinimumNoticeError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof SlotUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof RecurringSlotError) {
+      return NextResponse.json(
+        { error: error.message, conflictWeek: error.conflictWeek },
+        { status: 409 }
+      );
+    }
     // Handle group booking seat capacity exceeded (from transaction re-check)
     if (error instanceof Error && error.message === 'SEATS_FULL') {
       return NextResponse.json(
         { error: 'All seats for this time slot are taken. Please select another time.' },
+        { status: 409 }
+      );
+    }
+    // Handle round-robin or member conflicts (concurrent booking assigned same member)
+    if (error instanceof Error && (error.message === 'MEMBER_CONFLICT' || error.message === 'ROUND_ROBIN_CONFLICT')) {
+      return NextResponse.json(
+        { error: 'This time slot was just booked. Please select another time.' },
+        { status: 409 }
+      );
+    }
+    // Handle Prisma serialization failure (concurrent booking conflict under Serializable isolation)
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      (error as { code: string }).code === 'P2034'
+    ) {
+      return NextResponse.json(
+        { error: 'This time slot was just booked by someone else. Please select another time.' },
         { status: 409 }
       );
     }

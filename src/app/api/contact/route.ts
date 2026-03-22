@@ -1,7 +1,17 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sendEmail } from '@/lib/integrations/email/client'
 import { verifyCode } from '@/lib/email-verification'
+import { checkContactRateLimit } from '@/lib/infrastructure/queue'
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 const contactSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -10,8 +20,18 @@ const contactSchema = z.object({
   message: z.string().min(10, 'Message must be at least 10 characters').max(5000),
 })
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for') ?? 'unknown';
+    const rateLimitResult = await checkContactRateLimit(ip);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Too many submissions. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json()
     const data = contactSchema.parse(body)
 
@@ -37,20 +57,20 @@ export async function POST(request: Request) {
         <table style="width: 100%; border-collapse: collapse;">
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #374151;">Name:</td>
-            <td style="padding: 8px 0; color: #4b5563;">${data.name}</td>
+            <td style="padding: 8px 0; color: #4b5563;">${escapeHtml(data.name)}</td>
           </tr>
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #374151;">Email:</td>
-            <td style="padding: 8px 0; color: #4b5563;">${data.email}</td>
+            <td style="padding: 8px 0; color: #4b5563;">${escapeHtml(data.email)}</td>
           </tr>
           <tr>
             <td style="padding: 8px 0; font-weight: bold; color: #374151;">Subject:</td>
-            <td style="padding: 8px 0; color: #4b5563;">${data.subject}</td>
+            <td style="padding: 8px 0; color: #4b5563;">${escapeHtml(data.subject)}</td>
           </tr>
         </table>
         <div style="margin-top: 16px; padding: 16px; background: #f3f4f6; border-radius: 8px;">
           <p style="font-weight: bold; color: #374151; margin: 0 0 8px 0;">Message:</p>
-          <p style="color: #4b5563; margin: 0; white-space: pre-wrap;">${data.message}</p>
+          <p style="color: #4b5563; margin: 0; white-space: pre-wrap;">${escapeHtml(data.message)}</p>
         </div>
       </div>
     `

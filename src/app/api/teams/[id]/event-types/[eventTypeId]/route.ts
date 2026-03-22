@@ -8,7 +8,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { checkFeatureAccess, checkEventTypeFeatures, getTeamOwnerPlan, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
 import {

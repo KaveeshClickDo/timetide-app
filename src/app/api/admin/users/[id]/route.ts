@@ -170,7 +170,14 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await req.json()
-    const validated = adminUpdateUserSchema.parse(body)
+    const parsed = adminUpdateUserSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const validated = parsed.data
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
@@ -249,8 +256,8 @@ export async function PATCH(
             currentPlan: err.currentPlan,
           }, { status: 400 })
         }
-        const message = err instanceof Error ? err.message : 'Failed to update subscription'
-        return NextResponse.json({ error: message }, { status: 400 })
+        console.error('Subscription update error:', err)
+        return NextResponse.json({ error: 'Failed to update subscription' }, { status: 400 })
       }
     }
 
@@ -305,8 +312,8 @@ export async function PATCH(
             currentPlan: err.currentPlan,
           }, { status: 400 })
         }
-        const message = err instanceof Error ? err.message : 'Failed to update plan'
-        return NextResponse.json({ error: message }, { status: 400 })
+        console.error('Plan update error:', err)
+        return NextResponse.json({ error: 'Failed to update plan' }, { status: 400 })
       }
     }
 

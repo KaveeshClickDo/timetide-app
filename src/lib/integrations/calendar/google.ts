@@ -8,6 +8,7 @@ import prisma from '../../prisma';
 import type { BusyTime } from '@/types/slots';
 import type { CreateCalendarEventParams, CreateCalendarEventResult } from '@/types/calendar';
 import { getOutlookBusyTimes } from './outlook';
+import { withRefreshLock } from './token-refresh-lock';
 
 export type { CreateCalendarEventParams, CreateCalendarEventResult } from '@/types/calendar';
 
@@ -139,7 +140,11 @@ export async function connectGoogleCalendar(userId: string, code: string) {
   return calendar;
 }
 
-export async function refreshAccessToken(calendarId: string): Promise<string | null> {
+export function refreshAccessToken(calendarId: string): Promise<string | null> {
+  return withRefreshLock(calendarId, () => refreshAccessTokenUnsafe(calendarId));
+}
+
+async function refreshAccessTokenUnsafe(calendarId: string): Promise<string | null> {
   const calendar = await prisma.calendar.findUnique({
     where: { id: calendarId },
     include: { credentials: true },

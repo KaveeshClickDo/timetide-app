@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { addTeamMemberSchema } from '@/lib/validation/schemas'
 import { createNotification, buildTeamNotification } from '@/lib/notifications'
 import { queueTeamMemberAddedEmail } from '@/lib/infrastructure/queue/email-queue'
@@ -15,10 +14,8 @@ interface RouteParams {
 // GET /api/teams/[id]/members - List team members
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Check if user is a member of the team
     const membership = await prisma.teamMember.findUnique({
@@ -71,10 +68,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 // POST /api/teams/[id]/members - Add team member
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Check if user is admin/owner
     const membership = await prisma.teamMember.findUnique({

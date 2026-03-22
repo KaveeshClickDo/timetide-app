@@ -100,7 +100,7 @@ describe('timeStringSchema', () => {
 describe('signUpSchema', () => {
   const validData = {
     email: 'user@example.com',
-    password: 'Password1',
+    password: 'Password1!',
     name: 'John Doe',
   };
 
@@ -232,9 +232,15 @@ describe('availabilitySlotSchema', () => {
     ).toBe(true);
   });
 
-  it('rejects start time after end time', () => {
+  it('accepts midnight-crossing windows (e.g., 22:00-02:00)', () => {
     expect(
-      availabilitySlotSchema.safeParse({ dayOfWeek: 1, startTime: '17:00', endTime: '09:00' }).success
+      availabilitySlotSchema.safeParse({ dayOfWeek: 1, startTime: '22:00', endTime: '02:00' }).success
+    ).toBe(true);
+  });
+
+  it('rejects same start and end time', () => {
+    expect(
+      availabilitySlotSchema.safeParse({ dayOfWeek: 1, startTime: '09:00', endTime: '09:00' }).success
     ).toBe(false);
   });
 

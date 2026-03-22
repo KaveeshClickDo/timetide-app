@@ -4,54 +4,24 @@ import { useSession } from 'next-auth/react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Suspense, useState, useEffect, useRef } from 'react'
-import { LinkIcon, Webhook, Clock, AlertTriangle, Lock, CheckCircle2, CreditCard, RefreshCw, type LucideIcon } from 'lucide-react'
+import { LinkIcon, Webhook } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { PricingCard } from '@/components/pricing-card'
-import { cn } from '@/lib/utils'
 import {
   PRICING_TIERS,
   getPlanByTier,
-  getPlanBadgeStyles,
   getPlanLimits,
   type PlanTier,
   type PlanConfig,
   type PricingTier,
   planConfigToTier,
 } from '@/lib/pricing'
-
-function UsageBar({ used, limit, label, icon: Icon }: { used: number; limit: number; label: string; icon: LucideIcon }) {
-  const isUnlimited = limit === Infinity || limit >= 999999
-  const percentage = isUnlimited ? 0 : Math.min((used / limit) * 100, 100)
-  const isAtLimit = !isUnlimited && used >= limit
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <div className="flex items-center gap-2 text-gray-700">
-          <Icon className="h-4 w-4" />
-          {label}
-        </div>
-        <span className={cn('font-medium', isAtLimit ? 'text-amber-600' : 'text-gray-900')}>
-          {used} / {isUnlimited ? 'Unlimited' : limit}
-        </span>
-      </div>
-      {!isUnlimited && (
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className={cn(
-              'h-full rounded-full transition-all',
-              isAtLimit ? 'bg-amber-500' : 'bg-ocean-500'
-            )}
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-      )}
-    </div>
-  )
-}
+import UsageBar from '@/components/billing/usage-bar'
+import CurrentPlanCard from '@/components/billing/current-plan-card'
+import SubscriptionStatusCard from '@/components/billing/subscription-status-card'
+import BillingDialogs from '@/components/billing/billing-dialogs'
+import { cn } from '@/lib/utils'
+import { CheckCircle2 } from 'lucide-react'
 
 function BillingContent() {
   const { data: session, update: updateSession } = useSession()
@@ -81,11 +51,9 @@ function BillingContent() {
   const [updateCardLoading, setUpdateCardLoading] = useState(false)
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'info'; text: string } | null>(null)
 
-  // Prevent double-fire of checkout callback and recovery
   const callbackProcessed = useRef(false)
   const recoveryProcessed = useRef(false)
 
-  // Fetch plans from API (DB-backed)
   const { data: plansData } = useQuery<PlanConfig[]>({
     queryKey: ['plans'],
     queryFn: async () => {
@@ -95,26 +63,22 @@ function BillingContent() {
     },
   })
 
-  // Convert DB plans to PricingTier format for display, or fall back to hardcoded
   const displayTiers: PricingTier[] = plansData && plansData.length > 0
     ? plansData.map(planConfigToTier)
     : PRICING_TIERS
 
-  // Helper to get dynamic tier info (from DB if available, fallback to hardcoded)
   function getTierDisplay(tier: PlanTier): PricingTier {
     const dynamic = displayTiers.find((t) => t.id === tier)
     return dynamic || getPlanByTier(tier)
   }
 
-  // Current tier display (dynamic)
   const currentTierDisplay = getTierDisplay(currentPlan)
 
-  // Clean URL params after processing (prevents re-fire on re-render)
   function cleanUrlParams() {
     router.replace('/dashboard/billing', { scroll: false })
   }
 
-  // Handle checkout success — verify payment and activate plan
+  // Handle checkout success
   useEffect(() => {
     if (success !== 'true' || !sessionId || callbackProcessed.current) return
     callbackProcessed.current = true
@@ -181,7 +145,7 @@ function BillingContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canceled])
 
-  // Auto-recover unprocessed checkout sessions (handles redirect failures)
+  // Auto-recover unprocessed checkout sessions
   useEffect(() => {
     if (currentPlan !== 'FREE' || success === 'true' || recoveryProcessed.current) return
     recoveryProcessed.current = true
@@ -197,7 +161,7 @@ function BillingContent() {
           setTimeout(() => setStatusMessage(null), 10000)
         }
       })
-      .catch(() => {}) // Silent — this is a best-effort recovery
+      .catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPlan, success])
@@ -227,7 +191,6 @@ function BillingContent() {
   async function handlePlanSelect(plan: PlanTier) {
     if (plan === 'FREE') return
 
-    // DOWNGRADING: user already has a scheduled plan switch
     if (subscriptionStatus === 'DOWNGRADING') {
       if (plan === currentPlan) {
         await handleCancelDowngrade()
@@ -237,7 +200,6 @@ function BillingContent() {
       return
     }
 
-    // Cancelled user clicking same plan → reactivate (no charge, already paid until expiry)
     if (subscriptionStatus === 'UNSUBSCRIBED' && plan === currentPlan) {
       await handleReactivateSubscription()
       return
@@ -246,14 +208,12 @@ function BillingContent() {
     const isDowngrade = TIER_ORDER.indexOf(plan) < TIER_ORDER.indexOf(currentPlan)
     const canScheduleDowngrade = isDowngrade && subscriptionStatus === 'UNSUBSCRIBED'
 
-    // Cancelled user switching to lower plan → show confirmation for schedule downgrade
     if (canScheduleDowngrade) {
       setConfirmPlan(plan)
       setConfirmAction('downgrade')
       return
     }
 
-    // If already on a paid plan (upgrade), show confirmation with proration
     const isUpgrade = subscriptionStatus === 'ACTIVE' && currentPlan !== 'FREE' && TIER_ORDER.indexOf(plan) > TIER_ORDER.indexOf(currentPlan)
     if (isUpgrade) {
       setConfirmPlan(plan)
@@ -261,7 +221,6 @@ function BillingContent() {
       return
     }
 
-    // Normal subscribe or re-subscribe → show confirmation
     setConfirmPlan(plan)
     setConfirmAction('subscribe')
   }
@@ -419,7 +378,6 @@ function BillingContent() {
     }
   }
 
-  // Get confirm dialog details based on action type
   function getConfirmDialogContent() {
     if (!confirmPlan || !confirmAction) return null
     const targetTier = getTierDisplay(confirmPlan)
@@ -483,144 +441,26 @@ function BillingContent() {
         </div>
       )}
 
-      {/* Current Plan Summary */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-gray-500 mb-1">Current Plan</p>
-              <p className="text-2xl font-heading font-bold text-gray-900">
-                {currentTierDisplay.name}
-              </p>
-              <p className="text-sm text-gray-500 mt-1">
-                {currentTierDisplay.priceLabel}{currentTierDisplay.priceSuffix}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              {currentPlan !== 'FREE' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={updateCardLoading}
-                  onClick={handleUpdatePaymentMethod}
-                  className="text-xs sm:text-sm"
-                >
-                  <CreditCard className="h-3.5 w-3.5 mr-1.5 sm:mr-2" />
-                  {updateCardLoading ? 'Redirecting...' : 'Update Card'}
-                </Button>
-              )}
-              {subscriptionStatus === 'UNSUBSCRIBED' && currentPlan !== 'FREE' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={reactivateLoading}
-                  onClick={handleReactivateSubscription}
-                  className="text-xs sm:text-sm text-green-600 border-green-200 hover:bg-green-50"
-                >
-                  <RefreshCw className={cn('h-3.5 w-3.5 mr-1.5 sm:mr-2', reactivateLoading && 'animate-spin')} />
-                  {reactivateLoading ? 'Reactivating...' : 'Reactivate'}
-                </Button>
-              )}
-              {subscriptionStatus === 'ACTIVE' && currentPlan !== 'FREE' && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={cancelLoading}
-                  onClick={() => setConfirmCancel(true)}
-                  className="text-xs sm:text-sm text-red-600 border-red-200 hover:bg-red-50"
-                >
-                  {cancelLoading ? 'Cancelling...' : 'Cancel Subscription'}
-                </Button>
-              )}
-              <Badge className={getPlanBadgeStyles(currentPlan)}>
-                {currentPlan}
-              </Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <CurrentPlanCard
+        currentPlan={currentPlan}
+        currentTierDisplay={currentTierDisplay}
+        subscriptionStatus={subscriptionStatus}
+        updateCardLoading={updateCardLoading}
+        reactivateLoading={reactivateLoading}
+        cancelLoading={cancelLoading}
+        onUpdatePaymentMethod={handleUpdatePaymentMethod}
+        onReactivate={handleReactivateSubscription}
+        onCancelClick={() => setConfirmCancel(true)}
+      />
 
-      {/* Subscription Status */}
-      {subscriptionStatus && subscriptionStatus !== 'NONE' && (
-        <Card className={cn(
-          'mb-6',
-          subscriptionStatus === 'ACTIVE' && 'border-green-200',
-          subscriptionStatus === 'UNSUBSCRIBED' && 'border-amber-200',
-          (subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && 'border-orange-200',
-          subscriptionStatus === 'LOCKED' && 'border-red-200',
-        )}>
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3 sm:gap-4">
-              <div className={cn(
-                'w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                subscriptionStatus === 'ACTIVE' && 'bg-green-100',
-                subscriptionStatus === 'UNSUBSCRIBED' && 'bg-amber-100',
-                (subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && 'bg-orange-100',
-                subscriptionStatus === 'LOCKED' && 'bg-red-100',
-              )}>
-                {subscriptionStatus === 'ACTIVE' && <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />}
-                {subscriptionStatus === 'UNSUBSCRIBED' && <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600" />}
-                {(subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />}
-                {subscriptionStatus === 'LOCKED' && <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-gray-900 text-sm sm:text-base">Subscription Status</h3>
-                  <Badge variant="outline" className={cn(
-                    'text-xs',
-                    subscriptionStatus === 'ACTIVE' && 'border-green-300 text-green-700',
-                    subscriptionStatus === 'UNSUBSCRIBED' && 'border-amber-300 text-amber-700',
-                    (subscriptionStatus === 'GRACE_PERIOD' || subscriptionStatus === 'DOWNGRADING') && 'border-orange-300 text-orange-700',
-                    subscriptionStatus === 'LOCKED' && 'border-red-300 text-red-700',
-                  )}>
-                    {subscriptionStatus === 'ACTIVE' && 'Active'}
-                    {subscriptionStatus === 'UNSUBSCRIBED' && 'Cancelled'}
-                    {subscriptionStatus === 'GRACE_PERIOD' && 'Grace Period'}
-                    {subscriptionStatus === 'DOWNGRADING' && 'Downgrading'}
-                    {subscriptionStatus === 'LOCKED' && 'Locked'}
-                  </Badge>
-                </div>
-                {subscriptionStatus === 'ACTIVE' && planExpiresAt && (
-                  <p className="text-sm text-gray-600">
-                    Your plan renews on <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
-                  </p>
-                )}
-                {subscriptionStatus === 'UNSUBSCRIBED' && planExpiresAt && (
-                  <p className="text-sm text-amber-700">
-                    Cancelled. {currentPlan} features remain active until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>.
-                  </p>
-                )}
-                {subscriptionStatus === 'GRACE_PERIOD' && gracePeriodEndsAt && (
-                  <p className="text-sm text-orange-700">
-                    Renew before <strong>{new Date(gracePeriodEndsAt).toLocaleDateString()}</strong> to keep your features.
-                  </p>
-                )}
-                {subscriptionStatus === 'DOWNGRADING' && gracePeriodEndsAt && (
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:justify-between">
-                    <p className="text-sm text-orange-700">
-                      Your plan will switch on <strong>{new Date(gracePeriodEndsAt).toLocaleDateString()}</strong>. Current features remain active until then.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={loadingPlan !== null}
-                      onClick={handleCancelDowngrade}
-                      className="flex-shrink-0 w-full sm:w-auto"
-                    >
-                      {loadingPlan !== null ? 'Cancelling...' : 'Cancel Switch'}
-                    </Button>
-                  </div>
-                )}
-                {subscriptionStatus === 'LOCKED' && (
-                  <p className="text-sm text-red-700">
-                    Features locked. Upgrade to reactivate your event types and webhooks.
-                  </p>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <SubscriptionStatusCard
+        subscriptionStatus={subscriptionStatus ?? ''}
+        currentPlan={currentPlan}
+        planExpiresAt={planExpiresAt}
+        gracePeriodEndsAt={gracePeriodEndsAt}
+        loadingPlan={loadingPlan}
+        onCancelDowngrade={handleCancelDowngrade}
+      />
 
       {/* Usage Indicators */}
       <Card className="mb-6 sm:mb-8">
@@ -666,48 +506,16 @@ function BillingContent() {
         Need help? <a href="/dashboard/support" className="text-ocean-600 hover:underline">Contact support</a>.
       </p>
 
-      {/* Unified Confirmation Dialog (upgrade / subscribe / downgrade) */}
-      <Dialog open={confirmDialog !== null} onOpenChange={(open) => { if (!open) { setConfirmPlan(null); setConfirmAction(null) } }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{confirmDialog?.title}</DialogTitle>
-            <DialogDescription>
-              {confirmDialog?.description}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => { setConfirmPlan(null); setConfirmAction(null) }}>
-              Cancel
-            </Button>
-            <Button onClick={confirmDialog?.onConfirm}>
-              {confirmDialog?.confirmLabel}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Cancel Subscription Confirmation Dialog */}
-      <Dialog open={confirmCancel} onOpenChange={setConfirmCancel}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel Subscription</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to cancel your <strong>{currentTierDisplay.name}</strong> subscription?
-              {planExpiresAt && (
-                <> You&apos;ll keep access to all {currentPlan} features until <strong>{new Date(planExpiresAt).toLocaleDateString()}</strong>. After that, your account will revert to the Free plan.</>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setConfirmCancel(false)}>
-              Keep Subscription
-            </Button>
-            <Button variant="destructive" onClick={handleCancelSubscription}>
-              Cancel Subscription
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BillingDialogs
+        confirmDialog={confirmDialog}
+        onCloseConfirm={() => { setConfirmPlan(null); setConfirmAction(null) }}
+        confirmCancel={confirmCancel}
+        onCloseCancel={setConfirmCancel}
+        currentTierDisplay={currentTierDisplay}
+        planExpiresAt={planExpiresAt}
+        currentPlan={currentPlan}
+        onCancelSubscription={handleCancelSubscription}
+      />
     </div>
   )
 }

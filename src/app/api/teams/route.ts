@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { createTeamSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
 import { checkFeatureAccess, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
@@ -10,10 +9,8 @@ import type { PlanTier } from '@/lib/pricing'
 // GET /api/teams - List user's teams
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const teams = await prisma.team.findMany({
       where: {
@@ -69,10 +66,8 @@ export async function GET() {
 // POST /api/teams - Create new team
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
     const dbUser = await prisma.user.findUnique({

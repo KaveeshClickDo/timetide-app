@@ -479,6 +479,8 @@ model Booking {
   @@index([startTime])
   @@index([status])
   @@index([recurringGroupId])
+  @@index([hostId, startTime, status])
+  @@index([eventTypeId, startTime, status])
 }
 
 model BookingAttendee {

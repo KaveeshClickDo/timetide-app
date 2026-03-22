@@ -52,7 +52,14 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await req.json()
-    const validated = updateTicketSchema.parse(body)
+    const parsed = updateTicketSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const validated = parsed.data
 
     const ticket = await prisma.supportTicket.update({
       where: { id },

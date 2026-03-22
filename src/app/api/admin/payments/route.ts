@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAdmin } from '@/lib/admin-auth'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/lib/api-constants'
 
 /** GET - Paginated payment history with filters */
 export async function GET(req: NextRequest) {
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')))
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE))))
   const status = searchParams.get('status') // succeeded, failed, refunded, partial_refund
   const type = searchParams.get('type') // initial, renewal, upgrade_proration
   const userId = searchParams.get('userId')

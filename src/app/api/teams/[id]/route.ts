@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
 import { logTeamAction } from '@/lib/team-audit'
 import { PLAN_LIMITS } from '@/lib/pricing'
 
@@ -32,10 +31,8 @@ async function checkTeamAccess(teamId: string, userId: string, requireAdmin = fa
 // GET /api/teams/[id] - Get team details
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const membership = await checkTeamAccess(params.id, session.user.id)
     if (!membership) {
@@ -103,10 +100,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PATCH /api/teams/[id] - Update team
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const membership = await checkTeamAccess(params.id, session.user.id, true)
     if (!membership) {
@@ -163,10 +158,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 // DELETE /api/teams/[id] - Delete team
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Only owner can delete team
     const membership = await prisma.teamMember.findUnique({

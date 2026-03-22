@@ -5,7 +5,14 @@
 
 import crypto from 'crypto';
 
-const SECRET = process.env.NEXTAUTH_SECRET || process.env.EMAIL_VERIFICATION_SECRET || 'fallback-secret-change-me';
+function getSecret(): string {
+  const secret = process.env.NEXTAUTH_SECRET || process.env.EMAIL_VERIFICATION_SECRET;
+  if (!secret) {
+    throw new Error('Missing NEXTAUTH_SECRET or EMAIL_VERIFICATION_SECRET environment variable');
+  }
+  return secret;
+}
+const SECRET = getSecret();
 const CODE_LENGTH = 6;
 const CODE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 

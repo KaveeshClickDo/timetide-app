@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
+import { DEFAULT_PAGE_SIZE, MAX_LIST_LIMIT } from '@/lib/api-constants'
 
 interface RouteParams {
   params: { id: string }
@@ -10,10 +10,8 @@ interface RouteParams {
 // GET /api/teams/[id]/audit-log - Get team audit log
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     // Check if user is admin/owner
     const membership = await prisma.teamMember.findUnique({
@@ -31,7 +29,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const { searchParams } = new URL(request.url)
     const cursor = searchParams.get('cursor')
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 50)
+    const limit = Math.min(parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE)), MAX_LIST_LIMIT)
 
     const logs = await prisma.teamAuditLog.findMany({
       where: { teamId: params.id },

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/admin-auth'
 import { stripe, getOrCreateStripeCustomer } from '@/lib/stripe'
 import { type PlanTier } from '@/lib/pricing'
 import { getPlanConfig } from '@/lib/pricing-server'
@@ -9,10 +8,8 @@ import prisma from '@/lib/prisma'
 const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error, session } = await requireAuth()
+  if (error) return error
 
   try {
     const { plan } = (await req.json()) as { plan?: string }

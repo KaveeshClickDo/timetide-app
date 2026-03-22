@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import prisma from '@/lib/prisma';
 import { authOptions } from '@/lib/auth';
+import { DEFAULT_PAGE_SIZE, MAX_LIST_LIMIT } from '@/lib/api-constants';
 
 // GET /api/notifications - List user's notifications (paginated)
 export async function GET(request: NextRequest) {
@@ -13,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const cursor = searchParams.get('cursor');
-    const limit = Math.min(parseInt(searchParams.get('limit') ?? '20'), 50);
+    const limit = Math.min(parseInt(searchParams.get('limit') ?? String(DEFAULT_PAGE_SIZE)), MAX_LIST_LIMIT);
 
     const notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },

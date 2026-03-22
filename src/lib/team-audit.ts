@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { Prisma } from '@/generated/prisma/client';
 import type { LogTeamActionParams } from '@/types/team';
 

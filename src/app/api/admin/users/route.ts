@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { requireAdmin } from '@/lib/admin-auth'
+import { DEFAULT_PAGE_SIZE } from '@/lib/api-constants'
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin()
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '20')
+    const pageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE))
     const search = searchParams.get('search') || ''
     const plan = searchParams.get('plan') || ''
     const role = searchParams.get('role') || ''

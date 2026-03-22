@@ -1,13 +1,23 @@
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { prisma } from '@/lib/prisma'
+import prisma from '@/lib/prisma'
 import { signUpSchema } from '@/lib/validation/schemas'
 import { nanoid } from 'nanoid'
 import { randomBytes } from 'crypto'
 import { sendEmailVerificationEmail } from '@/lib/integrations/email/client'
+import { checkAuthRateLimit } from '@/lib/infrastructure/queue/rate-limiter'
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const { allowed, resetAt } = await checkAuthRateLimit(`signup:${ip}`)
+    if (!allowed) {
+      return NextResponse.json(
+        { error: 'Too many attempts. Please try again later.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((resetAt - Date.now()) / 1000)) } }
+      )
+    }
+
     const body = await request.json()
 
     // Validate input
@@ -28,13 +38,12 @@ export async function POST(request: Request) {
     })
 
     if (existingUser) {
-      // Always reject — don't allow setting a password on an OAuth account
-      // from the public signup page (no way to verify email ownership here).
-      // Users can add a password from Settings after signing in via OAuth.
-      return NextResponse.json(
-        { error: 'An account with this email already exists' },
-        { status: 400 }
-      )
+      // Return same shape as success to prevent email enumeration.
+      // Don't reveal whether the account exists or what provider it uses.
+      return NextResponse.json({
+        success: true,
+        message: 'Account created! Please check your email to verify your account.',
+      })
     }
 
     // Hash password

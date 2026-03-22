@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { sendEmailVerificationEmail } from '@/lib/integrations/email/client';
 import { randomBytes } from 'crypto';
 import { z } from 'zod';

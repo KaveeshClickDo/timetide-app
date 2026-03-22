@@ -16,7 +16,14 @@ export async function POST(
   try {
     const { id } = await params
     const body = await req.json()
-    const validated = ticketReplySchema.parse(body)
+    const parsed = ticketReplySchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const validated = parsed.data
 
     // Verify ticket belongs to user
     const ticket = await prisma.supportTicket.findFirst({

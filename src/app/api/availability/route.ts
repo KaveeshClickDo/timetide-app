@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
+import { requireAuth } from '@/lib/admin-auth'
+import prisma from '@/lib/prisma'
+import { availabilitySlotSchema } from '@/lib/validation/schemas'
+import { z } from 'zod'
+
+// Route-specific schema: timezone is derived server-side from user record, not from body
+const createScheduleBodySchema = z.object({
+  name: z.string().min(1).max(100),
+  isDefault: z.boolean().default(false),
+  slots: z.array(availabilitySlotSchema).optional(),
+})
 
 // GET /api/availability - List all availability schedules
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const schedules = await prisma.availabilitySchedule.findMany({
       where: { userId: session.user.id },
@@ -37,17 +43,18 @@ export async function GET() {
 // POST /api/availability - Create new schedule
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
     const body = await request.json()
-    const { name, slots, isDefault } = body
-
-    if (!name || typeof name !== 'string') {
-      return NextResponse.json({ error: 'Name is required' }, { status: 400 })
+    const parsed = createScheduleBodySchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
     }
+    const { name, slots, isDefault } = parsed.data
 
     // Get user's timezone to set on the schedule
     const user = await prisma.user.findUnique({
@@ -71,7 +78,7 @@ export async function POST(request: Request) {
         timezone: user?.timezone || 'UTC',
         slots: slots
           ? {
-              create: slots.map((slot: any) => ({
+              create: slots.map((slot) => ({
                 dayOfWeek: slot.dayOfWeek,
                 startTime: slot.startTime,
                 endTime: slot.endTime,

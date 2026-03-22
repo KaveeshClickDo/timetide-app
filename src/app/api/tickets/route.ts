@@ -35,7 +35,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const validated = createTicketSchema.parse(body)
+    const parsed = createTicketSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid input', details: parsed.error.flatten().fieldErrors },
+        { status: 400 }
+      )
+    }
+    const validated = parsed.data
 
     const ticket = await prisma.supportTicket.create({
       data: {

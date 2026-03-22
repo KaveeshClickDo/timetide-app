@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
+import { requireAuth } from '@/lib/admin-auth'
 import { stripe } from '@/lib/stripe'
 import prisma from '@/lib/prisma'
 
 /** POST - Handle Stripe setup session completion — set new card as default */
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error, session } = await requireAuth()
+  if (error) return error
 
   try {
     const { sessionId } = await req.json()

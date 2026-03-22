@@ -36,15 +36,17 @@ export const phoneSchema = z
 // USER SCHEMAS
 // ============================================================================
 
+export const passwordSchema = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+  .regex(/[0-9]/, 'Password must contain at least one number')
+  .regex(/[^a-zA-Z0-9]/, 'Password must contain at least one special character');
+
 export const signUpSchema = z.object({
   email: emailSchema,
-  password: z
-    .string()
-    .min(8, 'Password must be at least 8 characters')
-    .regex(
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      'Password must contain uppercase, lowercase, and a number'
-    ),
+  password: passwordSchema,
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
 });
 
@@ -142,7 +144,10 @@ export const createEventTypeSchema = z.object({
   recurringMaxWeeks: z.number().int().min(2).max(24).optional(),
   recurringFrequency: z.enum(['weekly', 'biweekly', 'monthly', 'custom']).optional(),
   recurringInterval: z.number().int().min(1).max(90).optional(),
-  successRedirectUrl: z.string().url().optional(),
+  successRedirectUrl: z.string().url().refine(
+    (url) => url.startsWith('https://') || url.startsWith('http://'),
+    { message: 'Redirect URL must use http or https protocol' }
+  ).optional(),
   
   // Team settings
   teamId: z.string().cuid().optional(),
@@ -163,8 +168,8 @@ export const availabilitySlotSchema = z.object({
   startTime: timeStringSchema,
   endTime: timeStringSchema,
 }).refine(
-  (data) => data.startTime < data.endTime,
-  { message: 'Start time must be before end time' }
+  (data) => data.startTime !== data.endTime,
+  { message: 'Start time and end time cannot be the same' }
 );
 
 export const dateOverrideSchema = z.object({
@@ -176,8 +181,8 @@ export const dateOverrideSchema = z.object({
   (data) => !data.isWorking || (data.startTime && data.endTime),
   { message: 'Working days must have start and end times' }
 ).refine(
-  (data) => !data.startTime || !data.endTime || data.startTime < data.endTime,
-  { message: 'Start time must be before end time' }
+  (data) => !data.startTime || !data.endTime || data.startTime !== data.endTime,
+  { message: 'Start time and end time cannot be the same' }
 );
 
 export const createAvailabilityScheduleSchema = z.object({

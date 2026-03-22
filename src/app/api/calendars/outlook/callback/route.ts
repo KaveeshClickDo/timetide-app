@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     console.error('Failed to connect Outlook Calendar:', error)
     return NextResponse.redirect(
       buildRedirectUrl(returnTo, {
-        calendar_error: error instanceof Error ? error.message : 'connection_failed',
+        calendar_error: 'connection_failed',
       })
     )
   }

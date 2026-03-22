@@ -64,9 +64,12 @@ export default function SignInPage() {
       })
 
       if (result?.error) {
+        const isRateLimited = result.status === 429
         toast({
-          title: 'Error',
-          description: 'Invalid email or password',
+          title: isRateLimited ? 'Too many attempts' : 'Error',
+          description: isRateLimited
+            ? 'Too many login attempts. Please try again later.'
+            : 'Invalid email or password',
           variant: 'destructive',
         })
       } else {

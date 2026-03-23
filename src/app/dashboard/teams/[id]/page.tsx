@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants';
 import { useCallback, useRef } from 'react';
 import {
   Users,
@@ -147,7 +148,7 @@ export default function TeamDetailPage() {
   }>({
     queryKey: ['team-audit', teamId, auditCursor],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: '20' });
+      const params = new URLSearchParams({ limit: String(DEFAULT_PAGE_SIZE) });
       if (auditCursor) params.set('cursor', auditCursor);
       const res = await fetch(`/api/teams/${teamId}/audit-log?${params}`);
       if (!res.ok) throw new Error('Failed to fetch audit log');

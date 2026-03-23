@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DataTable, type Column } from '@/components/admin/data-table'
 import { PageHeader } from '@/components/admin/page-header'
 import { cn, getInitials } from '@/lib/utils'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 import type { AdminUserListItem } from '@/types'
 
 const planColors: Record<string, string> = {
@@ -50,7 +51,7 @@ export default function AdminUsersPage() {
   const [subscriptionFilter, setSubscriptionFilter] = useState('')
   const [sortBy, setSortBy] = useState('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const pageSize = 20
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const { data, isLoading } = useQuery<{ users: AdminUserListItem[]; total: number }>({
     queryKey: ['admin-users', page, search, planFilter, roleFilter, statusFilter, subscriptionFilter, sortBy, sortOrder],

@@ -123,8 +123,8 @@ export default function DashboardLayout({
             updateSession({ ...session, user: data.user })
           }
         })
-        .catch(() => {
-          // Silently fail - not critical
+        .catch((err) => {
+          console.error('Failed to auto-detect timezone:', err)
         })
     }
   }, [user?.timezone, user?.timezoneAutoDetect])

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/server/auth/admin-auth'
-import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/server/api-constants'
 import {
   listTeamAuditLog,
   AuditLogNotAuthorizedError,
@@ -18,7 +18,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const { searchParams } = new URL(request.url)
     const cursor = searchParams.get('cursor')
-    const limit = parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE))
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE))))
 
     const result = await listTeamAuditLog({
       teamId: params.id,

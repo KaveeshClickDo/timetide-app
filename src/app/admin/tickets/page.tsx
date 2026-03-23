@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DataTable, type Column } from '@/components/admin/data-table'
 import { PageHeader } from '@/components/admin/page-header'
 import { cn } from '@/lib/utils'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 import type { AdminTicketListItem } from '@/types'
 
 const statusColors: Record<string, string> = {
@@ -29,7 +30,7 @@ export default function AdminTicketsPage() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
-  const pageSize = 20
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const { data, isLoading } = useQuery<{ tickets: AdminTicketListItem[]; total: number }>({
     queryKey: ['admin-tickets', page, statusFilter, priorityFilter],

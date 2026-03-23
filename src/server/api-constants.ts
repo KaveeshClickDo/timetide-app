@@ -17,6 +17,16 @@ export const MAX_PAGE_SIZE = 100
 export const MAX_LIST_LIMIT = 50
 
 // ============================================================================
+// ANALYTICS
+// ============================================================================
+
+/** Maximum number of days admin analytics can query */
+export const MAX_ANALYTICS_DAYS = 365
+
+/** Number of recent days used for date-math charts (hour, dayOfWeek, leadTime) */
+export const ANALYTICS_CHART_DAYS = 90
+
+// ============================================================================
 // SCHEDULING
 // ============================================================================
 

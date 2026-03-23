@@ -10,6 +10,7 @@ import prisma from '@/server/db/prisma';
 import { createWebhookSchema } from '@/server/validation/schemas';
 import crypto from 'crypto';
 import { checkNumericLimit, checkSubscriptionNotLocked } from '@/server/billing/plan-enforcement';
+import { MAX_LIST_LIMIT } from '@/server/api-constants';
 import type { PlanTier } from '@/lib/pricing';
 
 /**
@@ -43,38 +44,37 @@ export async function GET(request: NextRequest) {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: MAX_LIST_LIMIT,
     });
 
-    // Get recent delivery stats for each webhook
-    const webhooksWithStats = await Promise.all(
-      webhooks.map(async (webhook) => {
-        const [successCount, failedCount] = await Promise.all([
-          prisma.webhookDelivery.count({
-            where: {
-              webhookId: webhook.id,
-              status: 'SUCCESS',
-              createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-            },
-          }),
-          prisma.webhookDelivery.count({
-            where: {
-              webhookId: webhook.id,
-              status: 'FAILED',
-              createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-            },
-          }),
-        ]);
+    // Get recent delivery stats for all webhooks in 2 queries (instead of 2N)
+    const webhookIds = webhooks.map((w) => w.id);
+    const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-        return {
-          ...webhook,
-          totalDeliveries: webhook._count.deliveries,
-          recentStats: {
-            success: successCount,
-            failed: failedCount,
-          },
-        };
-      })
-    );
+    const [successGroups, failedGroups] = await Promise.all([
+      prisma.webhookDelivery.groupBy({
+        by: ['webhookId'],
+        where: { webhookId: { in: webhookIds }, status: 'SUCCESS', createdAt: { gte: last24h } },
+        _count: { webhookId: true },
+      }),
+      prisma.webhookDelivery.groupBy({
+        by: ['webhookId'],
+        where: { webhookId: { in: webhookIds }, status: 'FAILED', createdAt: { gte: last24h } },
+        _count: { webhookId: true },
+      }),
+    ]);
+
+    const successMap = new Map(successGroups.map((g) => [g.webhookId, g._count.webhookId]));
+    const failedMap = new Map(failedGroups.map((g) => [g.webhookId, g._count.webhookId]));
+
+    const webhooksWithStats = webhooks.map((webhook) => ({
+      ...webhook,
+      totalDeliveries: webhook._count.deliveries,
+      recentStats: {
+        success: successMap.get(webhook.id) || 0,
+        failed: failedMap.get(webhook.id) || 0,
+      },
+    }));
 
     return NextResponse.json({ webhooks: webhooksWithStats });
   } catch (error) {

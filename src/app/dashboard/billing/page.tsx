@@ -160,7 +160,7 @@ function BillingContent() {
           setTimeout(() => setStatusMessage(null), 10000)
         }
       })
-      .catch(() => {})
+      .catch((err) => console.error('Failed to recover checkout session:', err))
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPlan, success])

@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       targetType: 'TeamInvitation',
       targetId: invitation.id,
       changes: { email: invitation.email, role: invitation.role },
-    }).catch(() => {})
+    }).catch((err) => console.error('Failed to log team action:', err))
 
     return NextResponse.json({
       success: true,

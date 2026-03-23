@@ -5,13 +5,14 @@ import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { DataTable, type Column } from '@/components/admin/data-table'
 import { PageHeader } from '@/components/admin/page-header'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 import type { AdminTeamListItem } from '@/types'
 
 export default function AdminTeamsPage() {
   const router = useRouter()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const pageSize = 20
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const { data, isLoading } = useQuery<{ teams: AdminTeamListItem[]; total: number }>({
     queryKey: ['admin-teams', page, search],

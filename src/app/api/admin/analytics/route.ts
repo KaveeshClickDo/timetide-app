@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/server/db/prisma'
 import { requireAdmin } from '@/server/auth/admin-auth'
+import { MAX_ANALYTICS_DAYS } from '@/server/api-constants'
 
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin()
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = req.nextUrl
-    const days = parseInt(searchParams.get('days') || '30')
+    const days = Math.min(Math.max(1, parseInt(searchParams.get('days') || '30')), MAX_ANALYTICS_DAYS)
     const since = new Date()
     since.setDate(since.getDate() - days)
 

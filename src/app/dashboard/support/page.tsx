@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
+import { Pagination } from '@/components/dashboard/pagination'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 
 const statusColors: Record<string, string> = {
   OPEN: 'bg-blue-100 text-blue-700',
@@ -46,11 +48,18 @@ export default function SupportPage() {
   const [message, setMessage] = useState('')
   const [category, setCategory] = useState('')
   const [priority, setPriority] = useState('MEDIUM')
+  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState('')
 
-  const { data, isLoading } = useQuery<{ tickets: TicketListItem[] }>({
-    queryKey: ['my-tickets'],
+  const { data, isLoading } = useQuery<{ tickets: TicketListItem[]; total: number }>({
+    queryKey: ['my-tickets', page, statusFilter],
     queryFn: async () => {
-      const res = await fetch('/api/tickets')
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(DEFAULT_PAGE_SIZE),
+      })
+      if (statusFilter) params.set('status', statusFilter)
+      const res = await fetch(`/api/tickets?${params}`)
       if (!res.ok) throw new Error('Failed to fetch tickets')
       return res.json()
     },
@@ -67,6 +76,7 @@ export default function SupportPage() {
       return res.json()
     },
     onSuccess: () => {
+      setPage(1)
       queryClient.invalidateQueries({ queryKey: ['my-tickets'] })
       setShowForm(false)
       setSubject('')
@@ -173,8 +183,23 @@ export default function SupportPage() {
 
       {/* Tickets List */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Your Tickets</CardTitle>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => { setStatusFilter(v === 'ALL' ? '' : v); setPage(1) }}
+          >
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All statuses</SelectItem>
+              <SelectItem value="OPEN">Open</SelectItem>
+              <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+              <SelectItem value="RESOLVED">Resolved</SelectItem>
+              <SelectItem value="CLOSED">Closed</SelectItem>
+            </SelectContent>
+          </Select>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
@@ -213,6 +238,16 @@ export default function SupportPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {!isLoading && data?.tickets?.length ? (
+        <Pagination
+          page={page}
+          pageSize={DEFAULT_PAGE_SIZE}
+          total={data.total}
+          onPageChange={setPage}
+        />
+      ) : null}
     </div>
   )
 }

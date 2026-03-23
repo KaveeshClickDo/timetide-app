@@ -7,6 +7,7 @@
  */
 
 import prisma from '@/server/db/prisma'
+import { MAX_PAGE_SIZE } from '@/server/api-constants'
 import { checkTeamAccess } from '@/server/teams/team-access'
 import { logTeamAction } from '@/server/teams/team-audit'
 import {
@@ -105,6 +106,7 @@ export async function listTeamMembers(teamId: string, sessionUserId: string) {
       _count: { select: { assignments: true } },
     },
     orderBy: [{ role: 'asc' }, { priority: 'asc' }, { createdAt: 'asc' }],
+    take: MAX_PAGE_SIZE,
   })
 }
 
@@ -158,7 +160,7 @@ export async function addTeamMember(input: AddTeamMemberInput) {
     targetType: 'TeamMember',
     targetId: newMember.id,
     changes: { email: userToAdd.email, role: role || 'MEMBER' },
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 
   // Send notification and email (fire-and-forget)
   try {
@@ -289,7 +291,7 @@ export async function updateTeamMember(input: UpdateTeamMemberInput) {
       ...(isActive !== undefined && { isActive: { from: targetMember.isActive, to: isActive } }),
       ...(priority !== undefined && { priority: { from: targetMember.priority, to: priority } }),
     },
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 
   return updatedMember
 }
@@ -331,7 +333,7 @@ export async function removeTeamMember(
     targetType: 'TeamMember',
     targetId: memberId,
     changes: { role: targetMember.role, userId: targetMember.userId },
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 }
 
 // ── Bulk member actions ───────────────────────────────────────────────────────
@@ -399,7 +401,7 @@ export async function bulkMemberAction(input: BulkMemberActionInput) {
         userId: sessionUserId,
         action: 'bulk.role_changed',
         changes: { memberIds: validIds, newRole: role, count: affected },
-      }).catch(() => {})
+      }).catch((err) => console.error('Failed to log team action:', err))
       break
     }
     case 'remove': {
@@ -412,7 +414,7 @@ export async function bulkMemberAction(input: BulkMemberActionInput) {
         userId: sessionUserId,
         action: 'bulk.removed',
         changes: { memberIds: validIds, count: affected },
-      }).catch(() => {})
+      }).catch((err) => console.error('Failed to log team action:', err))
       break
     }
     case 'activate': {
@@ -426,7 +428,7 @@ export async function bulkMemberAction(input: BulkMemberActionInput) {
         userId: sessionUserId,
         action: 'bulk.activated',
         changes: { memberIds: validIds, count: affected },
-      }).catch(() => {})
+      }).catch((err) => console.error('Failed to log team action:', err))
       break
     }
     case 'deactivate': {
@@ -440,7 +442,7 @@ export async function bulkMemberAction(input: BulkMemberActionInput) {
         userId: sessionUserId,
         action: 'bulk.deactivated',
         changes: { memberIds: validIds, count: affected },
-      }).catch(() => {})
+      }).catch((err) => console.error('Failed to log team action:', err))
       break
     }
   }

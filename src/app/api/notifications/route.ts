@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const cursor = searchParams.get('cursor');
-    const limit = Math.min(parseInt(searchParams.get('limit') ?? String(DEFAULT_PAGE_SIZE)), MAX_LIST_LIMIT);
+    const limit = Math.min(MAX_LIST_LIMIT, Math.max(1, parseInt(searchParams.get('limit') ?? String(DEFAULT_PAGE_SIZE))));
 
     const notifications = await prisma.notification.findMany({
       where: { userId: session.user.id },

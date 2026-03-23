@@ -1,6 +1,6 @@
 // ── Service functions (public API for route handlers) ─────────────────────────
 
-export { listBookings, type ListBookingsParams } from './list-bookings'
+export { listBookings, getBookingStats, type ListBookingsParams, type BookingStats } from './list-bookings'
 export {
   getBookingDetails,
   BookingNotFoundError,

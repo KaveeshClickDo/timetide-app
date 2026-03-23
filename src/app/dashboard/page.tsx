@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { format, formatDistanceToNow, isPast, isToday, isTomorrow } from 'date-fns'
+import { format, isToday, isTomorrow } from 'date-fns'
 import { formatInTimeZone } from 'date-fns-tz'
 import {
   Calendar,
@@ -27,7 +27,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn, getInitials, formatTime, formatDuration } from '@/lib/utils'
 import { UpgradeBanner } from '@/components/billing/upgrade-banner'
+import { Pagination } from '@/components/dashboard/pagination'
 import type { BookingListItem } from '@/types/booking'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
+import type { BookingStats } from '@/server/services/booking'
 
 const statusConfig = {
   PENDING: {
@@ -81,26 +84,30 @@ function getDateLabel(dateStr: string): string {
 export default function DashboardPage() {
   const { data: session } = useSession()
   const [filter, setFilter] = useState<'upcoming' | 'past' | 'cancelled' | 'declined'>('upcoming')
+  const [page, setPage] = useState(1)
 
   // Get host's timezone from session (defaults to UTC)
   const hostTimezone = session?.user?.timezone || 'UTC'
 
-  // Fetch ALL bookings for stats cards (no filter)
-  const { data: allBookings } = useQuery<BookingListItem[]>({
-    queryKey: ['bookings', 'all'],
+  // Fetch lightweight stats from server (no full booking data)
+  const { data: stats } = useQuery<BookingStats>({
+    queryKey: ['booking-stats'],
     queryFn: async () => {
-      const res = await fetch('/api/bookings')
-      if (!res.ok) throw new Error('Failed to fetch bookings')
+      const res = await fetch('/api/bookings?stats=true')
+      if (!res.ok) throw new Error('Failed to fetch stats')
       const data = await res.json()
-      return data.bookings
+      return data.stats
     },
   })
 
-  // Fetch filtered bookings for the current tab
-  const { data: bookings, isLoading } = useQuery<BookingListItem[]>({
-    queryKey: ['bookings', filter],
+  // Fetch paginated filtered bookings for the current tab
+  const { data: bookingsData, isLoading } = useQuery<{ bookings: BookingListItem[]; total: number }>({
+    queryKey: ['bookings', filter, page],
     queryFn: async () => {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(DEFAULT_PAGE_SIZE),
+      })
       if (filter === 'upcoming') {
         params.set('upcoming', 'true')
       } else if (filter === 'past') {
@@ -113,10 +120,18 @@ export default function DashboardPage() {
 
       const res = await fetch(`/api/bookings?${params}`)
       if (!res.ok) throw new Error('Failed to fetch bookings')
-      const data = await res.json()
-      return data.bookings
+      return res.json()
     },
   })
+
+  const bookings = bookingsData?.bookings
+  const total = bookingsData?.total ?? 0
+
+  // Reset page when filter changes
+  const handleFilterChange = (newFilter: typeof filter) => {
+    setFilter(newFilter)
+    setPage(1)
+  }
 
   // Group bookings by date
   const groupedBookings = bookings?.reduce((groups, booking) => {
@@ -128,19 +143,10 @@ export default function DashboardPage() {
     return groups
   }, {} as Record<string, BookingListItem[]>)
 
-  // Calculate stats from ALL bookings
-  const upcomingCount = allBookings?.filter(
-    (b) => (b.status === 'PENDING' || b.status === 'CONFIRMED') && !isPast(new Date(b.endTime))
-  ).length || 0
-
-  // Completed = explicitly COMPLETED OR confirmed/pending bookings whose end time has passed
-  const completedCount = allBookings?.filter(
-    (b) => b.status === 'COMPLETED' ||
-      ((b.status === 'PENDING' || b.status === 'CONFIRMED') && isPast(new Date(b.endTime)))
-  ).length || 0
-
-  const cancelledCount = allBookings?.filter((b) => b.status === 'CANCELLED').length || 0
-  const declinedCount = allBookings?.filter((b) => b.status === 'REJECTED').length || 0
+  const upcomingCount = stats?.upcoming ?? 0
+  const completedCount = stats?.completed ?? 0
+  const cancelledCount = stats?.cancelled ?? 0
+  const declinedCount = stats?.declined ?? 0
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -209,7 +215,7 @@ export default function DashboardPage() {
           {(['upcoming', 'past', 'cancelled', 'declined'] as const).map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => handleFilterChange(f)}
               className={cn(
                 'flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize',
                 filter === f
@@ -226,25 +232,25 @@ export default function DashboardPage() {
         <div className="hidden sm:flex gap-2">
           <Button
             variant={filter === 'upcoming' ? 'default' : 'ghost'}
-            onClick={() => setFilter('upcoming')}
+            onClick={() => handleFilterChange('upcoming')}
           >
             Upcoming
           </Button>
           <Button
             variant={filter === 'past' ? 'default' : 'ghost'}
-            onClick={() => setFilter('past')}
+            onClick={() => handleFilterChange('past')}
           >
             Past
           </Button>
           <Button
             variant={filter === 'cancelled' ? 'default' : 'ghost'}
-            onClick={() => setFilter('cancelled')}
+            onClick={() => handleFilterChange('cancelled')}
           >
             Cancelled
           </Button>
           <Button
             variant={filter === 'declined' ? 'default' : 'ghost'}
-            onClick={() => setFilter('declined')}
+            onClick={() => handleFilterChange('declined')}
           >
             Declined
           </Button>
@@ -393,6 +399,16 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+
+      {/* Pagination */}
+      {!isLoading && bookings?.length ? (
+        <Pagination
+          page={page}
+          pageSize={DEFAULT_PAGE_SIZE}
+          total={total}
+          onPageChange={setPage}
+        />
+      ) : null}
     </div>
   )
 }

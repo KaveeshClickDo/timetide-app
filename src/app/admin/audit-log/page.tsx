@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { DataTable, type Column } from '@/components/admin/data-table'
 import { PageHeader } from '@/components/admin/page-header'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 import type { AdminAuditLogEntry } from '@/types'
 
 const actionColors: Record<string, string> = {
@@ -19,7 +20,7 @@ const actionColors: Record<string, string> = {
 export default function AdminAuditLogPage() {
   const [page, setPage] = useState(1)
   const [actionFilter, setActionFilter] = useState('')
-  const pageSize = 30
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const { data, isLoading } = useQuery<{ logs: AdminAuditLogEntry[]; total: number }>({
     queryKey: ['admin-audit-log', page, actionFilter],

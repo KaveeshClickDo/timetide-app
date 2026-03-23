@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { DataTable, type Column } from '@/components/admin/data-table'
 import { PageHeader } from '@/components/admin/page-header'
 import { cn } from '@/lib/utils'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 import type { AdminBookingListItem } from '@/types'
 
 const statusColors: Record<string, string> = {
@@ -25,7 +26,7 @@ export default function AdminBookingsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const pageSize = 20
+  const pageSize = DEFAULT_PAGE_SIZE
 
   const { data, isLoading } = useQuery<{ bookings: AdminBookingListItem[]; total: number }>({
     queryKey: ['admin-bookings', page, search, statusFilter, dateFrom, dateTo],

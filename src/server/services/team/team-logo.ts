@@ -80,7 +80,7 @@ export async function uploadTeamLogo(
     action: 'team.logo_updated',
     targetType: 'Team',
     targetId: teamId,
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 
   return team
 }
@@ -107,7 +107,7 @@ export async function deleteTeamLogo(teamId: string, sessionUserId: string) {
     action: 'team.logo_removed',
     targetType: 'Team',
     targetId: teamId,
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 
   return team
 }

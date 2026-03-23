@@ -6,6 +6,7 @@
  */
 
 import prisma from '@/server/db/prisma'
+import { MAX_LIST_LIMIT } from '@/server/api-constants'
 import { checkTeamAccess } from '@/server/teams/team-access'
 import { logTeamAction } from '@/server/teams/team-audit'
 import {
@@ -90,6 +91,7 @@ export async function listTeamInvitations(teamId: string, sessionUserId: string)
   const invitations = await prisma.teamInvitation.findMany({
     where: { teamId, status: 'PENDING' },
     orderBy: { createdAt: 'desc' },
+    take: MAX_LIST_LIMIT,
   })
 
   // Resolve inviter names
@@ -211,7 +213,7 @@ export async function createTeamInvitation(input: CreateInvitationInput) {
     targetType: 'TeamInvitation',
     targetId: invitation.id,
     changes: { email: normalizedEmail, role },
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 
   return invitation
 }
@@ -245,5 +247,5 @@ export async function cancelTeamInvitation(
     targetType: 'TeamInvitation',
     targetId: invitationId,
     changes: { email: invitation.email },
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 }

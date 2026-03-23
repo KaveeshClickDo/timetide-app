@@ -8,6 +8,7 @@
 
 import prisma from '@/server/db/prisma'
 import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
+import { MAX_PAGE_SIZE } from '@/server/api-constants'
 import type { QuestionType, LocationType } from '@/generated/prisma/client'
 
 // ── Domain errors ─────────────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ export async function listEventTypes(userId: string) {
     where: { userId, teamId: null },
     include: { _count: { select: { bookings: true } } },
     orderBy: { createdAt: 'desc' },
+    take: MAX_PAGE_SIZE,
   })
 }
 

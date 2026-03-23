@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select'
 import { getInitials } from '@/lib/utils'
 import { RotateCcw } from 'lucide-react'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
 
 interface PaymentUser {
   id: string
@@ -89,7 +90,7 @@ export default function AdminPaymentsPage() {
   const { data, isLoading } = useQuery<PaymentsResponse>({
     queryKey: ['admin-payments', page, search, statusFilter, typeFilter],
     queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page), limit: '20' })
+      const params = new URLSearchParams({ page: String(page), limit: String(DEFAULT_PAGE_SIZE) })
       if (search) params.set('search', search)
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (typeFilter !== 'all') params.set('type', typeFilter)
@@ -243,7 +244,7 @@ export default function AdminPaymentsPage() {
         data={data?.payments || []}
         total={data?.pagination.total || 0}
         page={page}
-        pageSize={20}
+        pageSize={DEFAULT_PAGE_SIZE}
         onPageChange={setPage}
         isLoading={isLoading}
         searchValue={search}

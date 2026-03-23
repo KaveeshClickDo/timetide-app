@@ -8,8 +8,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/server/auth/admin-auth'
 import { createBookingSchema } from '@/server/validation/schemas'
 import { checkBookingRateLimit } from '@/server/infrastructure/queue'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/server/api-constants'
 import {
   listBookings,
+  getBookingStats,
   createBooking,
   TeamSelectionError,
   SlotUnavailableError,
@@ -34,14 +36,25 @@ export async function GET(request: NextRequest) {
     if (error) return error
 
     const searchParams = request.nextUrl.searchParams
-    const bookings = await listBookings({
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE))))
+
+    // If stats=true, return lightweight counts instead of full list
+    if (searchParams.get('stats') === 'true') {
+      const stats = await getBookingStats(session.user.id)
+      return NextResponse.json({ stats })
+    }
+
+    const result = await listBookings({
       userId: session.user.id,
       status: searchParams.get('status'),
       upcoming: searchParams.get('upcoming') === 'true',
       past: searchParams.get('past') === 'true',
+      page,
+      pageSize,
     })
 
-    return NextResponse.json({ bookings })
+    return NextResponse.json(result)
   } catch (error) {
     console.error('GET bookings error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

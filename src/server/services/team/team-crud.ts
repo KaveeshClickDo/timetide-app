@@ -7,6 +7,7 @@
  */
 
 import prisma from '@/server/db/prisma'
+import { MAX_LIST_LIMIT } from '@/server/api-constants'
 import { checkTeamAccess } from '@/server/teams/team-access'
 import { logTeamAction } from '@/server/teams/team-audit'
 import { checkFeatureAccess, checkSubscriptionNotLocked } from '@/server/billing/plan-enforcement'
@@ -68,6 +69,7 @@ export async function listTeams(userId: string) {
       _count: { select: { eventTypes: true } },
     },
     orderBy: { createdAt: 'desc' },
+    take: MAX_LIST_LIMIT,
   })
 
   return teams.map((team) => {
@@ -210,7 +212,7 @@ export async function updateTeam(input: UpdateTeamInput) {
     targetType: 'Team',
     targetId: teamId,
     changes: { name, slug, logo },
-  }).catch(() => {})
+  }).catch((err) => console.error('Failed to log team action:', err))
 
   return team
 }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { requireAdmin } from '@/lib/admin-auth'
-import { logAdminAction } from '@/lib/admin-audit'
-import { invalidateServerPlanCache } from '@/lib/pricing-server'
+import prisma from '@/server/db/prisma'
+import { requireAdmin } from '@/server/auth/admin-auth'
+import { logAdminAction } from '@/server/admin/admin-audit'
+import { invalidateServerPlanCache } from '@/server/billing/pricing-server'
 
 /** GET - Get a single plan */
 export async function GET(

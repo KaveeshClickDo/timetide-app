@@ -54,8 +54,8 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { useFeatureGate } from '@/hooks/use-feature-gate';
-import { FeatureGatePage } from '@/components/feature-gate-page';
-import { UpgradeModal } from '@/components/upgrade-modal';
+import { FeatureGatePage } from '@/components/billing/feature-gate-page';
+import { UpgradeModal } from '@/components/billing/upgrade-modal';
 import type { WebhookDelivery, WebhookData } from '@/types/webhook';
 
 const EVENT_OPTIONS = [

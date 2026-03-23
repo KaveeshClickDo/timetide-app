@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { requireAdmin } from '@/lib/admin-auth'
+import prisma from '@/server/db/prisma'
+import { requireAdmin } from '@/server/auth/admin-auth'
 
 export async function GET(
   req: NextRequest,

@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth'
 import { NextResponse } from 'next/server'
-import { authOptions } from '@/lib/auth'
-import { checkAuthRateLimit } from '@/lib/infrastructure/queue/rate-limiter'
+import { authOptions } from '@/server/auth/auth'
+import { checkAuthRateLimit } from '@/server/infrastructure/queue/rate-limiter'
 
 const handler = NextAuth(authOptions)
 

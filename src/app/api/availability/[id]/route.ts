@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { updateAvailabilityScheduleSchema } from '@/lib/validation/schemas'
+import { requireAuth } from '@/server/auth/admin-auth'
+import prisma from '@/server/db/prisma'
+import { updateAvailabilityScheduleSchema } from '@/server/validation/schemas'
 
 interface RouteParams {
   params: { id: string }

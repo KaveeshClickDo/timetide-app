@@ -44,7 +44,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn, getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { useFeatureGate } from '@/hooks/use-feature-gate';
-import { FeatureGatePage } from '@/components/feature-gate-page';
+import { FeatureGatePage } from '@/components/billing/feature-gate-page';
 import type { TeamListItem } from '@/types/team';
 
 export default function TeamsPage() {

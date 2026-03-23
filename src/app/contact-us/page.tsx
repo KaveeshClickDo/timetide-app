@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import PublicNavbar from '@/components/public-navbar'
-import PublicFooter from '@/components/public-footer'
+import PublicNavbar from '@/components/layout/public-navbar'
+import PublicFooter from '@/components/layout/public-footer'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,7 @@ import {
   CheckCircle2,
   Send,
 } from 'lucide-react'
-import EmailVerification, { type VerificationProof } from '@/components/email-verification'
+import EmailVerification, { type VerificationProof } from '@/components/booking/email-verification'
 
 export default function ContactPage() {
   const [form, setForm] = useState({

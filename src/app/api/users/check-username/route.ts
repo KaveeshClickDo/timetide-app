@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
+import prisma from '@/server/db/prisma'
 
 // GET /api/users/check-username?username=xxx - Check username availability
 export async function GET(request: Request) {

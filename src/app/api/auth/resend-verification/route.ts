@@ -1,83 +1,30 @@
-/**
- * /api/auth/resend-verification
- * POST: Resend email verification
- */
-
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { sendEmailVerificationEmail } from '@/lib/integrations/email/client';
-import { randomBytes } from 'crypto';
-import { z } from 'zod';
+import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { checkAuthRateLimit } from '@/server/infrastructure/queue/rate-limiter'
+import { resendVerification } from '@/server/services/auth'
 
 const resendSchema = z.object({
   email: z.string().email('Invalid email address'),
-});
+})
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const result = resendSchema.safeParse(body);
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const rateLimitResult = await checkAuthRateLimit(ip)
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 })
+    }
 
+    const body = await request.json()
+    const result = resendSchema.safeParse(body)
     if (!result.success) {
-      return NextResponse.json(
-        { error: 'Invalid email address' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
     }
 
-    const { email } = result.data;
-
-    // Find user by email
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      select: { id: true, name: true, email: true, emailVerified: true },
-    });
-
-    // Always return success to prevent email enumeration
-    if (!user) {
-      return NextResponse.json({
-        message: 'If an account with that email exists, we sent a verification link.',
-      });
-    }
-
-    // Check if already verified
-    if (user.emailVerified) {
-      return NextResponse.json({
-        message: 'Your email is already verified.',
-        alreadyVerified: true,
-      });
-    }
-
-    // Delete any existing tokens for this user
-    await prisma.verificationToken.deleteMany({
-      where: { identifier: user.email },
-    });
-
-    // Generate new token
-    const token = randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-    // Create verification token
-    await prisma.verificationToken.create({
-      data: {
-        identifier: user.email,
-        token,
-        expires,
-      },
-    });
-
-    // Send verification email
-    const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verify-email/${token}`;
-    await sendEmailVerificationEmail(user.email, user.name || '', verifyUrl);
-
-    return NextResponse.json({
-      message: 'Verification email sent! Please check your inbox.',
-    });
+    const response = await resendVerification(result.data.email)
+    return NextResponse.json(response)
   } catch (error) {
-    console.error('Resend verification error:', error);
-    return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
-      { status: 500 }
-    );
+    console.error('Resend verification error:', error)
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
 }

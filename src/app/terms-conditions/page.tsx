@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import PublicNavbar from '@/components/public-navbar'
-import PublicFooter from '@/components/public-footer'
+import PublicNavbar from '@/components/layout/public-navbar'
+import PublicFooter from '@/components/layout/public-footer'
 
 export const metadata = {
   title: 'Terms of Service - TimeTide',

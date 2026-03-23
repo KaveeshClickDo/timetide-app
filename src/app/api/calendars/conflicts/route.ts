@@ -4,10 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { requireAuth } from '@/server/auth/admin-auth';
 import { parseISO } from 'date-fns';
-import { authOptions } from '@/lib/auth';
-import { checkCalendarConflicts } from '@/lib/infrastructure/queue';
+import { checkCalendarConflicts } from '@/server/infrastructure/queue';
 import { z } from 'zod';
 
 const checkConflictsSchema = z.object({
@@ -22,10 +21,8 @@ const checkConflictsSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const body = await request.json();
     const result = checkConflictsSchema.safeParse(body);

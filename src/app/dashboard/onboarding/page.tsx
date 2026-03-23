@@ -30,7 +30,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import { TIMEZONES } from '@/lib/constants'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
-import { IntegrationConnectCard } from '@/components/integration-connect-card'
+import { IntegrationConnectCard } from '@/components/settings/integration-connect-card'
 
 const STEPS = [
   { id: 1, title: 'Timezone', icon: Globe },

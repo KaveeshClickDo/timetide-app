@@ -3,597 +3,67 @@
  * POST: Reschedule a booking to a new time
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { formatInTimeZone } from 'date-fns-tz';
-import { addMinutes } from 'date-fns';
-import prisma from '@/lib/prisma';
-import { Prisma } from '@/generated/prisma/client';
-import { authOptions } from '@/lib/auth';
-import { rescheduleBookingSchema } from '@/lib/validation/schemas';
-import { verifyCode } from '@/lib/email-verification';
-import { updateGoogleCalendarEvent } from '@/lib/integrations/calendar/google';
-import { updateOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
-import { updateAllCalendarEvents } from '@/lib/integrations/calendar/event-ids';
-import { BookingEmailData } from '@/lib/integrations/email/client';
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/server/auth/auth'
+import { rescheduleBookingSchema } from '@/server/validation/schemas'
 import {
-  queueBookingRescheduledEmails,
-  rescheduleBookingReminders,
-  triggerBookingRescheduledWebhook,
-} from '@/lib/infrastructure/queue';
-import { createNotification, buildBookingNotification } from '@/lib/notifications';
+  rescheduleBooking,
+  RescheduleBookingNotFoundError,
+  RescheduleUnauthorizedError,
+  RescheduleTimeInPastError,
+  RescheduleConflictError,
+} from '@/server/services/booking'
 
 interface RouteParams {
-  params: { id: string };
+  params: { id: string }
 }
 
 /**
  * POST /api/bookings/[id]/reschedule
- * Reschedule a booking to a new time
  */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
-    const session = await getServerSession(authOptions);
+    const { id } = params
+    const session = await getServerSession(authOptions)
 
-    // Parse and validate body
-    const body = await request.json();
-    const validated = rescheduleBookingSchema.safeParse(body);
+    const body = await request.json()
+    const validated = rescheduleBookingSchema.safeParse(body)
 
     if (!validated.success) {
       return NextResponse.json(
         { error: 'Invalid request', details: validated.error.flatten() },
         { status: 400 }
-      );
+      )
     }
 
-    const { newStartTime, reason, scope } = validated.data;
-    const newStart = new Date(newStartTime);
+    const result = await rescheduleBooking({
+      id,
+      newStartTime: validated.data.newStartTime,
+      reason: validated.data.reason,
+      scope: validated.data.scope,
+      sessionUserId: session?.user?.id,
+      emailVerification: body.emailVerification,
+    })
 
-    // Find the booking
-    const booking = await prisma.booking.findFirst({
-      where: {
-        OR: [{ id }, { uid: id }],
-        status: { in: ['PENDING', 'CONFIRMED'] },
-      },
-      include: {
-        eventType: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            description: true,
-            length: true,
-            schedulingType: true,
-            teamMemberAssignments: {
-              where: { isActive: true },
-              select: {
-                teamMember: {
-                  select: {
-                    userId: true,
-                    user: { select: { name: true, email: true, timezone: true } },
-                  },
-                },
-              },
-            },
-          },
-        },
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            timezone: true,
-          },
-        },
-      },
-    });
-
-    if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found or cannot be rescheduled' },
-        { status: 404 }
-      );
-    }
-
-    // Check authorization - host, assigned member, team members can reschedule; invitee via UID + email verification
-    const isHost = session?.user?.id === booking.hostId;
-    const isAssignedMember = session?.user?.id === booking.assignedUserId;
-    const isTeamMember = booking.eventType.teamMemberAssignments?.some(
-      (a: { teamMember: { userId: string } }) => a.teamMember.userId === session?.user?.id
-    );
-    const accessedByUid = id === booking.uid;
-
-    if (isHost || isAssignedMember || isTeamMember) {
-      // Authenticated host, assigned member, or team member — allowed
-    } else if (accessedByUid) {
-      // Invitee via UID — require email verification
-      const ev = body.emailVerification;
-      if (!ev?.code || !ev?.signature || !ev?.expiresAt) {
-        return NextResponse.json(
-          { error: 'Email verification is required to reschedule this booking' },
-          { status: 403 }
-        );
-      }
-      const result = verifyCode(booking.inviteeEmail, ev.code, 'BOOKING_MANAGE', ev.signature, ev.expiresAt);
-      if (!result.valid) {
-        return NextResponse.json(
-          { error: result.error || 'Email verification failed' },
-          { status: 403 }
-        );
-      }
-    } else {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
-    // Validate new time is in the future
-    if (newStart <= new Date()) {
-      return NextResponse.json(
-        { error: 'New time must be in the future' },
-        { status: 400 }
-      );
-    }
-
-    // Calculate new end time based on event duration
-    const newEnd = addMinutes(newStart, booking.eventType.length);
-    const deltaMs = newStart.getTime() - booking.startTime.getTime();
-
-    // ── Bulk scope: reschedule this and all future occurrences ──
-    if (scope === 'this_and_future' && booking.recurringGroupId) {
-      // Find all future bookings in the series (including this one)
-      const futureBookings = await prisma.booking.findMany({
-        where: {
-          recurringGroupId: booking.recurringGroupId,
-          startTime: { gte: booking.startTime },
-          status: { in: ['PENDING', 'CONFIRMED'] },
-        },
-        orderBy: { startTime: 'asc' },
-      });
-
-      // Build list of user IDs to check for conflicts (team-aware)
-      let bulkConflictUserIds: string[];
-      if (booking.eventType.schedulingType === 'COLLECTIVE' && booking.eventType.teamMemberAssignments.length > 0) {
-        bulkConflictUserIds = booking.eventType.teamMemberAssignments.map((a: { teamMember: { userId: string } }) => a.teamMember.userId);
-      } else if (booking.eventType.schedulingType === 'MANAGED' && booking.assignedUserId) {
-        bulkConflictUserIds = [booking.assignedUserId];
-      } else {
-        bulkConflictUserIds = [booking.hostId];
-      }
-
-      // Atomic bulk reschedule: validate ALL conflicts and apply ALL updates in a single
-      // Serializable transaction. Prevents race conditions where another reschedule claims
-      // a slot between our conflict check and update.
-      const MAX_RESCHEDULE_RETRIES = 3;
-      let bulkConflictDate: Date | null = null;
-      let bulkConflictTz: string | null = null;
-
-      for (let attempt = 0; attempt < MAX_RESCHEDULE_RETRIES; attempt++) {
-        try {
-          await prisma.$transaction(
-            async (tx) => {
-              // Validate ALL shifted times for conflicts (all-or-nothing)
-              for (const fb of futureBookings) {
-                const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
-                const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
-
-                const conflict = await tx.booking.findFirst({
-                  where: {
-                    OR: [
-                      { hostId: { in: bulkConflictUserIds } },
-                      { assignedUserId: { in: bulkConflictUserIds } },
-                    ],
-                    id: { notIn: futureBookings.map(b => b.id) },
-                    status: { in: ['PENDING', 'CONFIRMED'] },
-                    startTime: { lt: shiftedEnd },
-                    endTime: { gt: shiftedStart },
-                  },
-                });
-
-                if (conflict) {
-                  bulkConflictDate = shiftedStart;
-                  bulkConflictTz = fb.timezone;
-                  throw new Error('BULK_RESCHEDULE_CONFLICT');
-                }
-              }
-
-              // Apply shifts to all future bookings (inside same transaction)
-              for (const fb of futureBookings) {
-                const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
-                const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
-
-                await tx.booking.update({
-                  where: { id: fb.id },
-                  data: {
-                    startTime: shiftedStart,
-                    endTime: shiftedEnd,
-                    rescheduleReason: reason || null,
-                    lastRescheduledAt: new Date(),
-                  },
-                });
-              }
-            },
-            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
-          );
-          break; // Transaction succeeded
-        } catch (txError) {
-          if (txError instanceof Error && txError.message === 'BULK_RESCHEDULE_CONFLICT') {
-            return NextResponse.json(
-              {
-                error: `Conflict on ${formatInTimeZone(bulkConflictDate!, bulkConflictTz!, 'EEEE, MMMM d')}. Cannot reschedule all future occurrences.`,
-                conflictDate: bulkConflictDate,
-              },
-              { status: 409 }
-            );
-          }
-          const isSerializationFailure =
-            txError instanceof Error &&
-            'code' in txError &&
-            (txError as { code: string }).code === 'P2034';
-          if (isSerializationFailure && attempt < MAX_RESCHEDULE_RETRIES - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
-            continue;
-          }
-          throw txError;
-        }
-      }
-
-      // Calendar updates and reminders (external side effects, outside transaction)
-      for (const fb of futureBookings) {
-        const shiftedStart = new Date(fb.startTime.getTime() + deltaMs);
-        const shiftedEnd = addMinutes(shiftedStart, booking.eventType.length);
-
-        // Update calendar events on all calendars
-        await updateAllCalendarEvents(
-          booking.hostId,
-          fb.calendarEventId,
-          fb.calendarEventIds,
-          { startTime: shiftedStart, endTime: shiftedEnd }
-        );
-
-        // Update collective members' calendar events
-        const fbAttendees = await prisma.bookingAttendee.findMany({
-          where: { bookingId: fb.id, userId: { not: null } },
-        });
-        for (const att of fbAttendees) {
-          if (att.userId && att.calendarEventIds) {
-            updateAllCalendarEvents(att.userId, null, att.calendarEventIds, {
-              startTime: shiftedStart,
-              endTime: shiftedEnd,
-            }).catch(console.error);
-          }
-        }
-
-        // Reschedule reminders
-        rescheduleBookingReminders(fb.id, fb.uid, shiftedStart).catch(console.error);
-      }
-
-      // Build teamMembers for email
-      const bulkTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
-        && booking.eventType.teamMemberAssignments.length > 0
-        ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
-            name: a.teamMember.user.name ?? 'Team Member',
-            email: a.teamMember.user.email!,
-          }))
-        : undefined;
-
-      // Send one summary email for the first occurrence
-      const bulkRescheduleHostTz = booking.host.timezone || booking.timezone;
-      const emailData: BookingEmailData = {
-        hostName: booking.host.name ?? 'Host',
-        hostEmail: booking.host.email!,
-        inviteeName: booking.inviteeName,
-        inviteeEmail: booking.inviteeEmail,
-        eventTitle: booking.eventType.title,
-        eventDescription: booking.eventType.description ?? undefined,
-        startTime: `${futureBookings.length} sessions rescheduled`,
-        endTime: '',
-        timezone: booking.timezone,
-        hostStartTime: `${futureBookings.length} sessions rescheduled`,
-        hostEndTime: '',
-        hostTimezone: bulkRescheduleHostTz,
-        bookingUid: booking.uid,
-        teamMembers: bulkTeamMembers,
-      };
-
-      queueBookingRescheduledEmails(
-        emailData,
-        {
-          start: formatInTimeZone(booking.startTime, booking.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-          end: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
-        },
-        {
-          start: formatInTimeZone(booking.startTime, booking.host.timezone || booking.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-          end: formatInTimeZone(booking.endTime, booking.host.timezone || booking.timezone, 'h:mm a'),
-        },
-        isHost,
-        reason || undefined
-      ).catch(console.error);
-
-      // Webhook
-      triggerBookingRescheduledWebhook(
-        booking.hostId,
-        {
-          id: booking.id,
-          uid: booking.uid,
-          status: booking.status,
-          startTime: newStart,
-          endTime: newEnd,
-          timezone: booking.timezone,
-          location: booking.location,
-          meetingUrl: booking.meetingUrl,
-          inviteeName: booking.inviteeName,
-          inviteeEmail: booking.inviteeEmail,
-          inviteePhone: booking.inviteePhone,
-          inviteeNotes: booking.inviteeNotes,
-          responses: booking.responses as Record<string, unknown> | null,
-          eventType: {
-            id: booking.eventType.id,
-            title: booking.eventType.title,
-            slug: booking.eventType.slug,
-            length: booking.eventType.length,
-          },
-          host: {
-            id: booking.host.id,
-            name: booking.host.name,
-            email: booking.host.email!,
-          },
-        },
-        booking.startTime,
-        booking.endTime
-      ).catch(console.error);
-
-      if (!isHost) {
-        const reschedNotif = buildBookingNotification('BOOKING_RESCHEDULED', {
-          inviteeName: booking.inviteeName,
-          eventTitle: booking.eventType.title,
-          startTime: `${futureBookings.length} sessions rescheduled`,
-        });
-        createNotification({
-          userId: booking.hostId,
-          type: 'BOOKING_RESCHEDULED',
-          ...reschedNotif,
-          bookingId: booking.id,
-        }).catch(console.error);
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `${futureBookings.length} booking(s) rescheduled successfully`,
-        updatedCount: futureBookings.length,
-      });
-    }
-
-    // ── Single scope (default): reschedule just this booking ──
-
-    // Build list of user IDs to check for conflicts (team-aware)
-    let conflictUserIds: string[];
-    if (booking.eventType.schedulingType === 'COLLECTIVE' && booking.eventType.teamMemberAssignments.length > 0) {
-      conflictUserIds = booking.eventType.teamMemberAssignments.map((a: { teamMember: { userId: string } }) => a.teamMember.userId);
-    } else if (booking.eventType.schedulingType === 'MANAGED' && booking.assignedUserId) {
-      conflictUserIds = [booking.assignedUserId];
-    } else {
-      conflictUserIds = [booking.hostId];
-    }
-
-    // Store old times for email before updating (invitee's timezone)
-    const oldStartFormatted = formatInTimeZone(
-      booking.startTime,
-      booking.timezone,
-      'EEEE, MMMM d, yyyy h:mm a'
-    );
-    const oldEndFormatted = formatInTimeZone(
-      booking.endTime,
-      booking.timezone,
-      'h:mm a'
-    );
-
-    // Store old times in host's timezone for host email
-    const hostTimezone = booking.host.timezone || booking.timezone;
-    const hostOldStartFormatted = formatInTimeZone(
-      booking.startTime,
-      hostTimezone,
-      'EEEE, MMMM d, yyyy h:mm a'
-    );
-    const hostOldEndFormatted = formatInTimeZone(
-      booking.endTime,
-      hostTimezone,
-      'h:mm a'
-    );
-
-    // Atomic reschedule: conflict check + update in a single Serializable transaction.
-    // Prevents race condition where two reschedules both pass conflict check then both update.
-    const MAX_RESCHEDULE_RETRIES = 3;
-    let updatedBooking: Awaited<ReturnType<typeof prisma.booking.update>> | undefined;
-
-    for (let attempt = 0; attempt < MAX_RESCHEDULE_RETRIES; attempt++) {
-      try {
-        updatedBooking = await prisma.$transaction(
-          async (tx) => {
-            // Check for conflicting bookings at the new time (exclude this booking)
-            const conflict = await tx.booking.findFirst({
-              where: {
-                OR: [
-                  { hostId: { in: conflictUserIds } },
-                  { assignedUserId: { in: conflictUserIds } },
-                ],
-                id: { not: booking.id },
-                status: { in: ['PENDING', 'CONFIRMED'] },
-                startTime: { lt: newEnd },
-                endTime: { gt: newStart },
-              },
-            });
-
-            if (conflict) {
-              throw new Error('RESCHEDULE_CONFLICT');
-            }
-
-            // Update the booking
-            return tx.booking.update({
-              where: { id: booking.id },
-              data: {
-                startTime: newStart,
-                endTime: newEnd,
-                rescheduleReason: reason || null,
-                lastRescheduledAt: new Date(),
-              },
-            });
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
-        );
-        break; // Transaction succeeded
-      } catch (txError) {
-        if (txError instanceof Error && txError.message === 'RESCHEDULE_CONFLICT') {
-          return NextResponse.json(
-            { error: 'This time slot conflicts with another booking' },
-            { status: 409 }
-          );
-        }
-        const isSerializationFailure =
-          txError instanceof Error &&
-          'code' in txError &&
-          (txError as { code: string }).code === 'P2034';
-        if (isSerializationFailure && attempt < MAX_RESCHEDULE_RETRIES - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
-          continue;
-        }
-        throw txError;
-      }
-    }
-
-    if (!updatedBooking) {
-      throw new Error('Reschedule transaction failed unexpectedly');
-    }
-
-    // Update calendar events on all calendars
-    await updateAllCalendarEvents(
-      booking.hostId,
-      booking.calendarEventId,
-      booking.calendarEventIds,
-      { startTime: newStart, endTime: newEnd }
-    );
-
-    // Update collective members' calendar events
-    const rescheduleAttendees = await prisma.bookingAttendee.findMany({
-      where: { bookingId: booking.id, userId: { not: null } },
-    });
-    for (const att of rescheduleAttendees) {
-      if (att.userId && att.calendarEventIds) {
-        updateAllCalendarEvents(att.userId, null, att.calendarEventIds, {
-          startTime: newStart,
-          endTime: newEnd,
-        }).catch(console.error);
-      }
-    }
-
-    // Build teamMembers for email
-    const teamMembersForEmail = booking.eventType.schedulingType === 'COLLECTIVE'
-      && booking.eventType.teamMemberAssignments.length > 0
-      ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
-          name: a.teamMember.user.name ?? 'Team Member',
-          email: a.teamMember.user.email!,
-        }))
-      : undefined;
-
-    // Prepare email data with new times
-    const rescheduleHostTz = booking.host.timezone || booking.timezone;
-    const emailData: BookingEmailData = {
-      hostName: booking.host.name ?? 'Host',
-      hostEmail: booking.host.email!,
-      inviteeName: booking.inviteeName,
-      inviteeEmail: booking.inviteeEmail,
-      eventTitle: booking.eventType.title,
-      eventDescription: booking.eventType.description ?? undefined,
-      startTime: formatInTimeZone(
-        newStart,
-        booking.timezone,
-        'EEEE, MMMM d, yyyy h:mm a'
-      ),
-      endTime: formatInTimeZone(newEnd, booking.timezone, 'h:mm a'),
-      timezone: booking.timezone,
-      hostStartTime: formatInTimeZone(newStart, rescheduleHostTz, 'EEEE, MMMM d, yyyy h:mm a'),
-      hostEndTime: formatInTimeZone(newEnd, rescheduleHostTz, 'h:mm a'),
-      hostTimezone: rescheduleHostTz,
-      location: booking.location ?? undefined,
-      meetingUrl: booking.meetingUrl ?? undefined,
-      bookingUid: booking.uid,
-      teamMembers: teamMembersForEmail,
-    };
-
-    // Queue reschedule emails
-    queueBookingRescheduledEmails(
-      emailData,
-      { start: oldStartFormatted, end: oldEndFormatted },
-      { start: hostOldStartFormatted, end: hostOldEndFormatted },
-      isHost,
-      reason || undefined
-    ).catch(console.error);
-
-    // Reschedule reminders
-    rescheduleBookingReminders(booking.id, booking.uid, newStart).catch(console.error);
-
-    // Trigger webhook for booking.rescheduled
-    triggerBookingRescheduledWebhook(
-      booking.hostId,
-      {
-        id: booking.id,
-        uid: booking.uid,
-        status: booking.status,
-        startTime: newStart,
-        endTime: newEnd,
-        timezone: booking.timezone,
-        location: booking.location,
-        meetingUrl: booking.meetingUrl,
-        inviteeName: booking.inviteeName,
-        inviteeEmail: booking.inviteeEmail,
-        inviteePhone: booking.inviteePhone,
-        inviteeNotes: booking.inviteeNotes,
-        responses: booking.responses as Record<string, unknown> | null,
-        eventType: {
-          id: booking.eventType.id,
-          title: booking.eventType.title,
-          slug: booking.eventType.slug,
-          length: booking.eventType.length,
-        },
-        host: {
-          id: booking.host.id,
-          name: booking.host.name,
-          email: booking.host.email!,
-        },
-      },
-      booking.startTime,
-      booking.endTime
-    ).catch(console.error);
-
-    // Only notify host if the invitee rescheduled (not the host themselves)
-    if (!isHost) {
-      const reschedNotif = buildBookingNotification('BOOKING_RESCHEDULED', {
-        inviteeName: booking.inviteeName,
-        eventTitle: booking.eventType.title,
-        startTime: formatInTimeZone(newStart, booking.timezone, 'MMM d, h:mm a'),
-      });
-      createNotification({
-        userId: booking.hostId,
-        type: 'BOOKING_RESCHEDULED',
-        ...reschedNotif,
-        bookingId: booking.id,
-      }).catch(console.error);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Booking rescheduled successfully',
-      booking: {
-        id: updatedBooking.id,
-        uid: updatedBooking.uid,
-        startTime: updatedBooking.startTime,
-        endTime: updatedBooking.endTime,
-      },
-    });
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
-    console.error('POST reschedule booking error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    if (error instanceof RescheduleBookingNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof RescheduleUnauthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    if (error instanceof RescheduleTimeInPastError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    if (error instanceof RescheduleConflictError) {
+      return NextResponse.json(
+        { error: error.message, conflictDate: error.conflictDate },
+        { status: 409 }
+      )
+    }
+    console.error('POST reschedule booking error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

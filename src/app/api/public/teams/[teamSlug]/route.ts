@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import prisma from '@/server/db/prisma';
 import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing';
 
 interface RouteParams {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
+import { requireAuth } from '@/server/auth/admin-auth'
+import prisma from '@/server/db/prisma'
 import sharp from 'sharp'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']

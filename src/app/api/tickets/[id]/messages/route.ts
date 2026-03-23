@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
-import { ticketReplySchema } from '@/lib/validation/schemas'
+import { requireAuth } from '@/server/auth/admin-auth'
+import prisma from '@/server/db/prisma'
+import { ticketReplySchema } from '@/server/validation/schemas'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions)
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { error, session } = await requireAuth()
+  if (error) return error
 
   try {
     const { id } = await params

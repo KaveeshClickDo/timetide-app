@@ -12,11 +12,11 @@ import {
   ArrowRight,
   CheckCircle2,
 } from 'lucide-react'
-import { authOptions } from '@/lib/auth'
+import { authOptions } from '@/server/auth/auth'
 import { PRICING_TIERS } from '@/lib/pricing'
 import { cn } from '@/lib/utils'
-import PublicNavbar from '@/components/public-navbar'
-import PublicFooter from '@/components/public-footer'
+import PublicNavbar from '@/components/layout/public-navbar'
+import PublicFooter from '@/components/layout/public-footer'
 
 const jsonLd = {
   '@context': 'https://schema.org',

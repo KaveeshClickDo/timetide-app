@@ -38,8 +38,8 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
-import { AddToCalendar } from '@/components/add-to-calendar'
-import EmailVerification, { type VerificationProof } from '@/components/email-verification'
+import { AddToCalendar } from '@/components/booking/add-to-calendar'
+import EmailVerification, { type VerificationProof } from '@/components/booking/email-verification'
 import type { BookingDetails } from '@/types/booking'
 
 const statusConfig = {

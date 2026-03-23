@@ -5,14 +5,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { requireAuth } from '@/server/auth/admin-auth';
+import prisma from '@/server/db/prisma';
 import {
   triggerUserCalendarSync,
   triggerCalendarSync,
   checkCalendarConflicts,
-} from '@/lib/infrastructure/queue';
+} from '@/server/infrastructure/queue';
 
 /**
  * GET /api/calendars/sync
@@ -20,10 +19,8 @@ import {
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const calendars = await prisma.calendar.findMany({
       where: { userId: session.user.id },
@@ -103,10 +100,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const body = await request.json().catch(() => ({}));
     const { calendarId, forceFullSync } = body as {

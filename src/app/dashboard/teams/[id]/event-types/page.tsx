@@ -37,7 +37,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { getInitials } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
-import { EmbedCodeGenerator } from '@/components/embed-code-generator';
+import { EmbedCodeGenerator } from '@/components/booking/embed-code-generator';
 import type { TeamMemberWithRole } from '@/types/team';
 import type { TeamEventType, EventTypeAssignment } from '@/types/event-type';
 

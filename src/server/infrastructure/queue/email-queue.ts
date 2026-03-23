@@ -1,0 +1,669 @@
+/**
+ * Email Queue
+ *
+ * BullMQ-based email queue with automatic retries.
+ * Ensures emails are delivered reliably even if the first attempt fails.
+ */
+
+import { Queue, Worker, Job } from 'bullmq';
+import { redis, isRedisAvailable } from './redis';
+import {
+  sendEmail,
+  generateBookingConfirmedEmail,
+  generateBookingCancelledEmail,
+  generateBookingPendingEmail,
+  generateBookingConfirmedByHostEmail,
+  generateBookingRejectedEmail,
+  generateReminderEmail,
+  generateBookingRescheduledEmail,
+  generateRecurringBookingConfirmedEmail,
+  generateBulkConfirmedByHostEmail,
+  generateTeamMemberAddedEmail,
+  generateTeamInvitationEmail,
+  generatePlanExpiringEmail,
+  generateGracePeriodStartedEmail,
+  generateGracePeriodEndingEmail,
+  generatePlanLockedEmail,
+  generateAdminDowngradeEmail,
+  generateAdminDowngradeGraceEmail,
+  generateSubscriptionCancelledEmail,
+  generateUserDowngradeScheduledEmail,
+  generateDowngradeCancelledEmail,
+  generatePlanActivatedEmail,
+  generatePlanReactivatedEmail,
+  generatePaymentSuccessEmail,
+  generatePaymentFailedEmail,
+  generatePaymentRefundedEmail,
+} from '@/server/integrations/email/client';
+import type { EmailOptions, BookingEmailData, RecurringBookingEmailData, TeamEmailData } from '@/types/email';
+import type { EmailJobType, EmailJobData } from '@/types/queue';
+
+export type { EmailJobType, EmailJobData } from '@/types/queue';
+
+// ============================================================================
+// Queue Configuration
+// ============================================================================
+
+const QUEUE_NAME = 'email-queue';
+
+const defaultJobOptions = {
+  attempts: 3,
+  backoff: {
+    type: 'exponential' as const,
+    delay: 1000, // Start with 1 second, then 2s, 4s
+  },
+  removeOnComplete: {
+    age: 24 * 60 * 60, // Keep completed jobs for 24 hours
+    count: 1000, // Keep last 1000 completed jobs
+  },
+  removeOnFail: {
+    age: 7 * 24 * 60 * 60, // Keep failed jobs for 7 days
+  },
+};
+
+// ============================================================================
+// Queue Instance
+// ============================================================================
+
+let emailQueue: Queue<EmailJobData> | null = null;
+let emailWorker: Worker<EmailJobData> | null = null;
+
+/**
+ * Get or create the email queue instance
+ */
+export async function getEmailQueue(): Promise<Queue<EmailJobData> | null> {
+  if (emailQueue) return emailQueue;
+
+  const available = await isRedisAvailable();
+  if (!available) {
+    console.warn('Redis not available, email queue disabled');
+    return null;
+  }
+
+  emailQueue = new Queue<EmailJobData>(QUEUE_NAME, {
+    connection: redis,
+    defaultJobOptions,
+  });
+
+  return emailQueue;
+}
+
+/**
+ * Initialize the email worker (call this in a worker process or during server startup)
+ */
+export async function initEmailWorker(): Promise<void> {
+  if (emailWorker) return;
+
+  const available = await isRedisAvailable();
+  if (!available) {
+    console.warn('Redis not available, email worker not started');
+    return;
+  }
+
+  emailWorker = new Worker<EmailJobData>(
+    QUEUE_NAME,
+    async (job: Job<EmailJobData>) => {
+      await processEmailJob(job);
+    },
+    {
+      connection: redis,
+      concurrency: 5, // Process up to 5 emails concurrently
+    }
+  );
+
+  emailWorker.on('completed', (job) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Email job ${job.id} completed: ${job.data.type} to ${job.data.to}`);
+    }
+  });
+
+  emailWorker.on('failed', (job, err) => {
+    console.error(`Email job ${job?.id} failed:`, err.message);
+  });
+
+  console.log('Email worker initialized');
+}
+
+// ============================================================================
+// Job Processing
+// ============================================================================
+
+/**
+ * Process an email job
+ */
+async function processEmailJob(job: Job<EmailJobData>): Promise<void> {
+  const { type, to, subject, bookingData, isHost, reason, hoursUntil, customHtml, replyTo } = job.data;
+
+  let html: string;
+
+  switch (type) {
+    case 'booking_confirmed':
+      if (!bookingData) throw new Error('Missing bookingData for booking_confirmed');
+      html = generateBookingConfirmedEmail(bookingData, isHost ?? false);
+      break;
+
+    case 'booking_cancelled':
+      if (!bookingData) throw new Error('Missing bookingData for booking_cancelled');
+      html = generateBookingCancelledEmail(bookingData, isHost ?? false, reason);
+      break;
+
+    case 'booking_pending':
+      if (!bookingData) throw new Error('Missing bookingData for booking_pending');
+      html = generateBookingPendingEmail(bookingData, isHost ?? false);
+      break;
+
+    case 'booking_confirmed_by_host':
+      if (!bookingData) throw new Error('Missing bookingData for booking_confirmed_by_host');
+      html = generateBookingConfirmedByHostEmail(bookingData);
+      break;
+
+    case 'booking_rejected':
+      if (!bookingData) throw new Error('Missing bookingData for booking_rejected');
+      html = generateBookingRejectedEmail(bookingData, reason);
+      break;
+
+    case 'booking_reminder':
+      if (!bookingData) throw new Error('Missing bookingData for booking_reminder');
+      html = generateReminderEmail(bookingData, hoursUntil ?? 24);
+      break;
+
+    case 'booking_rescheduled':
+      if (!bookingData) throw new Error('Missing bookingData for booking_rescheduled');
+      if (!job.data.oldTime) throw new Error('Missing oldTime for booking_rescheduled');
+      html = generateBookingRescheduledEmail(bookingData, job.data.oldTime, isHost ?? false);
+      break;
+
+    case 'recurring_booking_confirmed':
+      if (!job.data.recurringBookingData) throw new Error('Missing recurringBookingData for recurring_booking_confirmed');
+      html = generateRecurringBookingConfirmedEmail(job.data.recurringBookingData, isHost ?? false);
+      break;
+
+    case 'bulk_confirmed_by_host':
+      if (!job.data.recurringBookingData) throw new Error('Missing recurringBookingData for bulk_confirmed_by_host');
+      html = generateBulkConfirmedByHostEmail(job.data.recurringBookingData);
+      break;
+
+    case 'team_member_added':
+      if (!job.data.teamData) throw new Error('Missing teamData for team_member_added');
+      html = generateTeamMemberAddedEmail(job.data.teamData);
+      break;
+
+    case 'team_invitation':
+      if (!job.data.teamData) throw new Error('Missing teamData for team_invitation');
+      html = generateTeamInvitationEmail(job.data.teamData as TeamEmailData & { expiresIn: string; acceptUrl: string });
+      break;
+
+    case 'plan_expiring_warning':
+      if (!job.data.planData) throw new Error('Missing planData for plan_expiring_warning');
+      html = generatePlanExpiringEmail(job.data.planData);
+      break;
+
+    case 'grace_period_started':
+      if (!job.data.planData) throw new Error('Missing planData for grace_period_started');
+      html = generateGracePeriodStartedEmail(job.data.planData);
+      break;
+
+    case 'grace_period_ending':
+      if (!job.data.planData) throw new Error('Missing planData for grace_period_ending');
+      html = generateGracePeriodEndingEmail(job.data.planData);
+      break;
+
+    case 'plan_locked':
+      if (!job.data.planData) throw new Error('Missing planData for plan_locked');
+      html = generatePlanLockedEmail(job.data.planData);
+      break;
+
+    case 'admin_downgrade_notice':
+      if (!job.data.planData) throw new Error('Missing planData for admin_downgrade_notice');
+      html = generateAdminDowngradeEmail(job.data.planData);
+      break;
+
+    case 'admin_downgrade_grace_notice':
+      if (!job.data.planData) throw new Error('Missing planData for admin_downgrade_grace_notice');
+      html = generateAdminDowngradeGraceEmail(job.data.planData);
+      break;
+
+    case 'subscription_cancelled':
+      if (!job.data.planData) throw new Error('Missing planData for subscription_cancelled');
+      html = generateSubscriptionCancelledEmail(job.data.planData);
+      break;
+
+    case 'user_downgrade_scheduled':
+      if (!job.data.planData) throw new Error('Missing planData for user_downgrade_scheduled');
+      html = generateUserDowngradeScheduledEmail(job.data.planData);
+      break;
+
+    case 'downgrade_cancelled':
+      if (!job.data.planData) throw new Error('Missing planData for downgrade_cancelled');
+      html = generateDowngradeCancelledEmail(job.data.planData);
+      break;
+
+    case 'plan_activated':
+      if (!job.data.planData) throw new Error('Missing planData for plan_activated');
+      html = generatePlanActivatedEmail(job.data.planData);
+      break;
+
+    case 'plan_reactivated':
+      if (!job.data.planData) throw new Error('Missing planData for plan_reactivated');
+      html = generatePlanReactivatedEmail(job.data.planData);
+      break;
+
+    case 'payment_success':
+      if (!job.data.paymentData) throw new Error('Missing paymentData for payment_success');
+      html = generatePaymentSuccessEmail(job.data.paymentData);
+      break;
+
+    case 'payment_failed':
+      if (!job.data.paymentData) throw new Error('Missing paymentData for payment_failed');
+      html = generatePaymentFailedEmail(job.data.paymentData);
+      break;
+
+    case 'payment_refunded':
+      if (!job.data.paymentData) throw new Error('Missing paymentData for payment_refunded');
+      html = generatePaymentRefundedEmail(job.data.paymentData);
+      break;
+
+    case 'custom':
+      if (!customHtml) throw new Error('Missing customHtml for custom email');
+      html = customHtml;
+      break;
+
+    default:
+      throw new Error(`Unknown email type: ${type}`);
+  }
+
+  const emailOptions: EmailOptions = {
+    to,
+    subject,
+    html,
+    replyTo,
+  };
+
+  const success = await sendEmail(emailOptions);
+
+  if (!success) {
+    throw new Error(`Failed to send email to ${to}`);
+  }
+}
+
+// ============================================================================
+// Queue Email Functions (with fallback to direct send)
+// ============================================================================
+
+/**
+ * Queue an email for sending
+ * Falls back to direct sending if Redis is unavailable
+ */
+export async function queueEmail(data: EmailJobData): Promise<void> {
+  const queue = await getEmailQueue();
+
+  if (queue) {
+    await queue.add(`${data.type}-${Date.now()}`, data);
+  } else {
+    // Fallback to direct sending
+    await processEmailJobDirect(data);
+  }
+}
+
+/**
+ * Direct email processing (fallback when queue unavailable)
+ */
+async function processEmailJobDirect(data: EmailJobData): Promise<void> {
+  try {
+    console.log(`[email] Direct send fallback (no Redis): ${data.type} to ${data.to}`);
+    const job = { data } as Job<EmailJobData>;
+    await processEmailJob(job);
+  } catch (error) {
+    console.error(`[email] Direct send failed for ${data.type} to ${data.to}:`, error);
+    // Don't throw - this is fire-and-forget in fallback mode
+  }
+}
+
+// ============================================================================
+// Convenience Functions
+// ============================================================================
+
+/**
+ * Queue booking confirmation emails (to both host and invitee)
+ * For collective team events with teamMembers, sends to all team members
+ */
+export async function queueBookingConfirmationEmails(data: BookingEmailData): Promise<void> {
+  // Queue email to invitee
+  const inviteeHostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
+  await queueEmail({
+    type: 'booking_confirmed',
+    to: data.inviteeEmail,
+    subject: `Confirmed: ${data.eventTitle} with ${inviteeHostLabel}`,
+    bookingData: data,
+    isHost: false,
+    replyTo: data.hostEmail,
+  });
+
+  // Queue email to each team member (for collective events)
+  if (data.teamMembers && data.teamMembers.length > 0) {
+    for (const member of data.teamMembers) {
+      await queueEmail({
+        type: 'booking_confirmed',
+        to: member.email,
+        subject: `New Booking: ${data.eventTitle} with ${data.inviteeName}`,
+        bookingData: data,
+        isHost: true,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  } else {
+    // Queue email to host (single host)
+    await queueEmail({
+      type: 'booking_confirmed',
+      to: data.hostEmail,
+      subject: `New Booking: ${data.eventTitle} with ${data.inviteeName}`,
+      bookingData: data,
+      isHost: true,
+      replyTo: data.inviteeEmail,
+    });
+  }
+}
+
+/**
+ * Queue booking cancellation emails
+ */
+export async function queueBookingCancellationEmails(
+  data: BookingEmailData,
+  reason?: string,
+  cancelledByHost: boolean = false
+): Promise<void> {
+  if (cancelledByHost) {
+    // Host cancelled → notify invitee
+    const hostLabel = data.teamMembers && data.teamMembers.length > 0
+      ? data.teamMembers.map(m => m.name).join(', ')
+      : data.hostName;
+    await queueEmail({
+      type: 'booking_cancelled',
+      to: data.inviteeEmail,
+      subject: `Cancelled: ${data.eventTitle} - ${hostLabel} cancelled`,
+      bookingData: data,
+      isHost: false,
+      reason,
+    });
+  } else if (data.teamMembers && data.teamMembers.length > 0) {
+    // Invitee cancelled → notify all team members
+    for (const member of data.teamMembers) {
+      await queueEmail({
+        type: 'booking_cancelled',
+        to: member.email,
+        subject: `Cancelled: ${data.eventTitle} - ${data.inviteeName} cancelled`,
+        bookingData: data,
+        isHost: true,
+        reason,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  } else {
+    // Invitee cancelled → notify host
+    await queueEmail({
+      type: 'booking_cancelled',
+      to: data.hostEmail,
+      subject: `Cancelled: ${data.eventTitle} - ${data.inviteeName} cancelled`,
+      bookingData: data,
+      isHost: true,
+      reason,
+    });
+  }
+}
+
+/**
+ * Queue booking pending emails (for events requiring confirmation)
+ */
+export async function queueBookingPendingEmails(data: BookingEmailData): Promise<void> {
+  // Queue email to invitee
+  const inviteeHostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
+  await queueEmail({
+    type: 'booking_pending',
+    to: data.inviteeEmail,
+    subject: `Pending: ${data.eventTitle} with ${inviteeHostLabel} - Awaiting Confirmation`,
+    bookingData: data,
+    isHost: false,
+    replyTo: data.hostEmail,
+  });
+
+  // Queue email to each team member (for collective events)
+  if (data.teamMembers && data.teamMembers.length > 0) {
+    for (const member of data.teamMembers) {
+      await queueEmail({
+        type: 'booking_pending',
+        to: member.email,
+        subject: `Action Required: New booking request from ${data.inviteeName}`,
+        bookingData: data,
+        isHost: true,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  } else {
+    // Single host
+    await queueEmail({
+      type: 'booking_pending',
+      to: data.hostEmail,
+      subject: `Action Required: New booking request from ${data.inviteeName}`,
+      bookingData: data,
+      isHost: true,
+      replyTo: data.inviteeEmail,
+    });
+  }
+}
+
+/**
+ * Queue booking confirmed by host email (to invitee)
+ */
+export async function queueBookingConfirmedByHostEmail(data: BookingEmailData): Promise<void> {
+  const hostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
+  await queueEmail({
+    type: 'booking_confirmed_by_host',
+    to: data.inviteeEmail,
+    subject: `Confirmed: ${data.eventTitle} with ${hostLabel}`,
+    bookingData: data,
+    replyTo: data.hostEmail,
+  });
+}
+
+/**
+ * Queue bulk confirmed by host email (to invitee) — all occurrences confirmed at once
+ */
+export async function queueBulkConfirmedByHostEmail(data: RecurringBookingEmailData): Promise<void> {
+  await queueEmail({
+    type: 'bulk_confirmed_by_host',
+    to: data.inviteeEmail,
+    subject: `Confirmed: All ${data.totalOccurrences} sessions of ${data.eventTitle} with ${data.hostName}`,
+    recurringBookingData: data,
+    replyTo: data.hostEmail,
+  });
+}
+
+/**
+ * Queue booking rejected email (to invitee)
+ */
+export async function queueBookingRejectedEmail(
+  data: BookingEmailData,
+  reason?: string
+): Promise<void> {
+  const hostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
+  await queueEmail({
+    type: 'booking_rejected',
+    to: data.inviteeEmail,
+    subject: `Declined: ${data.eventTitle} with ${hostLabel}`,
+    bookingData: data,
+    reason,
+    replyTo: data.hostEmail,
+  });
+}
+
+/**
+ * Queue reminder email
+ */
+export async function queueReminderEmail(
+  data: BookingEmailData,
+  hoursUntil: number,
+  toOverride?: string
+): Promise<void> {
+  const to = toOverride || data.inviteeEmail;
+  await queueEmail({
+    type: 'booking_reminder',
+    to,
+    subject: `Reminder: ${data.eventTitle} with ${to === data.hostEmail ? data.inviteeName : data.hostName} in ${hoursUntil === 1 ? '1 hour' : `${hoursUntil} hours`}`,
+    bookingData: data,
+    hoursUntil,
+    replyTo: to === data.hostEmail ? data.inviteeEmail : data.hostEmail,
+  });
+}
+
+/**
+ * Queue booking rescheduled emails (to both host and invitee)
+ */
+export async function queueBookingRescheduledEmails(
+  data: BookingEmailData,
+  oldTime: { start: string; end: string },
+  hostOldTime: { start: string; end: string },
+  rescheduledByHost: boolean = false,
+  reason?: string
+): Promise<void> {
+  // Always notify the invitee
+  const hostLabel = data.teamMembers && data.teamMembers.length > 0
+    ? data.teamMembers.map(m => m.name).join(', ')
+    : data.hostName;
+  await queueEmail({
+    type: 'booking_rescheduled',
+    to: data.inviteeEmail,
+    subject: `Rescheduled: ${data.eventTitle} with ${hostLabel}`,
+    bookingData: data,
+    isHost: false,
+    oldTime,
+    reason,
+    replyTo: data.hostEmail,
+  });
+
+  // Notify host(s) if invitee rescheduled
+  if (!rescheduledByHost) {
+    if (data.teamMembers && data.teamMembers.length > 0) {
+      for (const member of data.teamMembers) {
+        await queueEmail({
+          type: 'booking_rescheduled',
+          to: member.email,
+          subject: `Rescheduled: ${data.eventTitle} - ${data.inviteeName} changed time`,
+          bookingData: data,
+          isHost: true,
+          oldTime: hostOldTime,
+          reason,
+          replyTo: data.inviteeEmail,
+        });
+      }
+    } else {
+      await queueEmail({
+        type: 'booking_rescheduled',
+        to: data.hostEmail,
+        subject: `Rescheduled: ${data.eventTitle} - ${data.inviteeName} changed time`,
+        bookingData: data,
+        isHost: true,
+        oldTime: hostOldTime,
+        reason,
+        replyTo: data.inviteeEmail,
+      });
+    }
+  }
+}
+
+/**
+ * Queue recurring booking confirmation emails (to both host and invitee)
+ */
+export async function queueRecurringBookingConfirmationEmails(
+  data: RecurringBookingEmailData
+): Promise<void> {
+  // Queue email to invitee
+  await queueEmail({
+    type: 'recurring_booking_confirmed',
+    to: data.inviteeEmail,
+    subject: `Confirmed: ${data.totalOccurrences} ${data.frequencyLabel || 'weekly'} ${data.eventTitle} with ${data.hostName}`,
+    recurringBookingData: data,
+    isHost: false,
+    replyTo: data.hostEmail,
+  });
+
+  // Queue email to host
+  await queueEmail({
+    type: 'recurring_booking_confirmed',
+    to: data.hostEmail,
+    subject: `New Recurring Booking: ${data.eventTitle} with ${data.inviteeName} (${data.totalOccurrences} sessions)`,
+    recurringBookingData: data,
+    isHost: true,
+    replyTo: data.inviteeEmail,
+  });
+}
+
+/**
+ * Queue team member added email
+ */
+export async function queueTeamMemberAddedEmail(
+  email: string,
+  data: TeamEmailData
+): Promise<void> {
+  await queueEmail({
+    type: 'team_member_added',
+    to: email,
+    subject: `You've been added to ${data.teamName} on TimeTide`,
+    teamData: data,
+  });
+}
+
+/**
+ * Queue team invitation email
+ */
+export async function queueTeamInvitationEmail(
+  email: string,
+  data: TeamEmailData & { expiresIn: string; acceptUrl: string }
+): Promise<void> {
+  await queueEmail({
+    type: 'team_invitation',
+    to: email,
+    subject: `You're invited to join ${data.teamName} on TimeTide`,
+    teamData: data,
+  });
+}
+
+// ============================================================================
+// Payment Email Helpers
+// ============================================================================
+
+import type { PaymentEmailData } from '@/types/queue';
+
+export async function queuePaymentSuccessEmail(data: PaymentEmailData): Promise<void> {
+  await queueEmail({
+    type: 'payment_success',
+    to: data.userEmail,
+    subject: `Payment receipt — ${data.planName} plan (${data.invoiceNumber})`,
+    paymentData: data,
+  });
+}
+
+export async function queuePaymentFailedEmail(data: PaymentEmailData): Promise<void> {
+  await queueEmail({
+    type: 'payment_failed',
+    to: data.userEmail,
+    subject: `Payment failed — Action required for your ${data.planName} plan`,
+    paymentData: data,
+  });
+}
+
+export async function queuePaymentRefundedEmail(data: PaymentEmailData): Promise<void> {
+  await queueEmail({
+    type: 'payment_refunded',
+    to: data.userEmail,
+    subject: `Refund processed — ${data.planName} plan`,
+    paymentData: data,
+  });
+}

@@ -1,67 +1,35 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { addTeamMemberSchema } from '@/lib/validation/schemas'
-import { createNotification, buildTeamNotification } from '@/lib/notifications'
-import { queueTeamMemberAddedEmail } from '@/lib/infrastructure/queue/email-queue'
-import { logTeamAction } from '@/lib/team-audit'
-import { checkFeatureAccess, getTeamOwnerPlan, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
+import { requireAuth } from '@/server/auth/admin-auth'
+import { addTeamMemberSchema } from '@/server/validation/schemas'
+import {
+  listTeamMembers,
+  addTeamMember,
+  MemberNotAuthorizedError,
+  MemberUserNotFoundError,
+  MemberAlreadyExistsError,
+  MemberOnlyOwnerCanAddOwnerError,
+  MemberFeatureDeniedError,
+  MemberSubscriptionLockedError,
+} from '@/server/services/team'
 
 interface RouteParams {
   params: { id: string }
 }
 
 // GET /api/teams/[id]/members - List team members
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    // Check if user is a member of the team
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId: params.id,
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Not a member of this team' }, { status: 403 })
-    }
-
-    const members = await prisma.teamMember.findMany({
-      where: { teamId: params.id },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-          },
-        },
-        _count: {
-          select: {
-            assignments: true,
-          },
-        },
-      },
-      orderBy: [
-        { role: 'asc' }, // OWNER first, then ADMIN, then MEMBER
-        { priority: 'asc' },
-        { createdAt: 'asc' },
-      ],
-    })
-
+    const members = await listTeamMembers(params.id, session.user.id)
     return NextResponse.json({ members })
   } catch (error) {
+    if (error instanceof MemberNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Error listing team members:', error)
-    return NextResponse.json(
-      { error: 'Failed to list team members' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to list team members' }, { status: 500 })
   }
 }
 
@@ -71,145 +39,39 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    // Check if user is admin/owner
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId: params.id,
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!membership || membership.role === 'MEMBER') {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
-    // Enforce teams feature gate (check team owner's plan, not the requesting user's)
-    const { plan: ownerPlan, subscriptionStatus: ownerSubStatus } = await getTeamOwnerPlan(params.id)
-    const lockedDenied = checkSubscriptionNotLocked(ownerSubStatus)
-    if (lockedDenied) return lockedDenied
-    const featureDenied = checkFeatureAccess(ownerPlan, 'teams')
-    if (featureDenied) return featureDenied
-
     const body = await request.json()
     const result = addTeamMemberSchema.safeParse(body)
-
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.errors[0].message },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: result.error.errors[0].message }, { status: 400 })
     }
 
-    const { email, role } = result.data
-
-    // Find user by email
-    const userToAdd = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-    })
-
-    if (!userToAdd) {
-      return NextResponse.json(
-        { error: 'No user found with this email' },
-        { status: 404 }
-      )
-    }
-
-    // Check if already a member
-    const existingMembership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId: params.id,
-          userId: userToAdd.id,
-        },
-      },
-    })
-
-    if (existingMembership) {
-      return NextResponse.json(
-        { error: 'User is already a member of this team' },
-        { status: 400 }
-      )
-    }
-
-    // Only owner can add another owner
-    if (role === 'OWNER' && membership.role !== 'OWNER') {
-      return NextResponse.json(
-        { error: 'Only owners can add other owners' },
-        { status: 403 }
-      )
-    }
-
-    const newMember = await prisma.teamMember.create({
-      data: {
-        teamId: params.id,
-        userId: userToAdd.id,
-        role: role || 'MEMBER',
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-          },
-        },
-      },
-    })
-
-    logTeamAction({
+    const member = await addTeamMember({
       teamId: params.id,
-      userId: session.user.id,
-      action: 'member.added',
-      targetType: 'TeamMember',
-      targetId: newMember.id,
-      changes: { email: userToAdd.email, role: role || 'MEMBER' },
-    }).catch(() => {})
+      sessionUserId: session.user.id,
+      sessionUserName: session.user.name,
+      sessionUserEmail: session.user.email,
+      email: result.data.email,
+      role: result.data.role,
+    })
 
-    // Send notification and email (fire-and-forget)
-    try {
-      const team = await prisma.team.findUnique({
-        where: { id: params.id },
-        select: { name: true, slug: true },
-      })
-      if (team) {
-        const actorName = session.user.name || session.user.email || 'Someone'
-        const roleName = (role || 'MEMBER').charAt(0) + (role || 'MEMBER').slice(1).toLowerCase()
-
-        // In-app notification
-        const notif = buildTeamNotification('TEAM_MEMBER_ADDED', {
-          teamName: team.name,
-          actorName,
-          role: roleName,
-        })
-        await createNotification({
-          userId: userToAdd.id,
-          type: 'TEAM_MEMBER_ADDED',
-          title: notif.title,
-          message: notif.message,
-        })
-
-        // Email
-        await queueTeamMemberAddedEmail(userToAdd.email!, {
-          memberName: userToAdd.name || 'there',
-          teamName: team.name,
-          actorName,
-          role: roleName,
-          teamUrl: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/teams/${params.id}`,
-        })
-      }
-    } catch (err) {
-      console.error('Failed to send team member notification:', err)
-    }
-
-    return NextResponse.json({ member: newMember }, { status: 201 })
+    return NextResponse.json({ member }, { status: 201 })
   } catch (error) {
+    if (error instanceof MemberNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof MemberSubscriptionLockedError || error instanceof MemberFeatureDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof MemberUserNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof MemberAlreadyExistsError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    if (error instanceof MemberOnlyOwnerCanAddOwnerError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Error adding team member:', error)
-    return NextResponse.json(
-      { error: 'Failed to add team member' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to add team member' }, { status: 500 })
   }
 }

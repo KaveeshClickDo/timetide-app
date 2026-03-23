@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
+import { requireAuth } from '@/server/auth/admin-auth';
+import prisma from '@/server/db/prisma';
 
 // PATCH /api/notifications/[id] - Mark notification as read
 export async function PATCH(
@@ -9,10 +8,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const { id } = await params;
 

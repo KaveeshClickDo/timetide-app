@@ -44,7 +44,7 @@ import {
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
-import { ProBadge } from '@/components/pro-badge'
+import { ProBadge } from '@/components/billing/pro-badge'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
 import type { Question, QuestionInput } from '@/types/event-type'
 

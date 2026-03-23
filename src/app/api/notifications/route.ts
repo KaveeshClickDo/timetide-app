@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
-import { DEFAULT_PAGE_SIZE, MAX_LIST_LIMIT } from '@/lib/api-constants';
+import { requireAuth } from '@/server/auth/admin-auth';
+import prisma from '@/server/db/prisma';
+import { DEFAULT_PAGE_SIZE, MAX_LIST_LIMIT } from '@/server/api-constants';
 
 // GET /api/notifications - List user's notifications (paginated)
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const searchParams = request.nextUrl.searchParams;
     const cursor = searchParams.get('cursor');

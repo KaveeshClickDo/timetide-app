@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { planConfigToTier } from '@/lib/pricing'
-import { getAllPlans } from '@/lib/pricing-server'
+import { getAllPlans } from '@/server/billing/pricing-server'
 
 /** GET - Public endpoint: return all active plans for display */
 export async function GET() {

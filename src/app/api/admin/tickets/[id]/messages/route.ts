@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { requireAdmin } from '@/lib/admin-auth'
-import { logAdminAction } from '@/lib/admin-audit'
-import { ticketReplySchema } from '@/lib/validation/schemas'
+import prisma from '@/server/db/prisma'
+import { requireAdmin } from '@/server/auth/admin-auth'
+import { logAdminAction } from '@/server/admin/admin-audit'
+import { ticketReplySchema } from '@/server/validation/schemas'
 
 export async function POST(
   req: NextRequest,

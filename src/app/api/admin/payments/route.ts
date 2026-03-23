@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { requireAdmin } from '@/lib/admin-auth'
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/lib/api-constants'
+import prisma from '@/server/db/prisma'
+import { requireAdmin } from '@/server/auth/admin-auth'
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/server/api-constants'
 
 /** GET - Paginated payment history with filters */
 export async function GET(req: NextRequest) {

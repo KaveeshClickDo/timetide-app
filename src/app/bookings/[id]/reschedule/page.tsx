@@ -35,7 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { cn, formatDuration, getInitials } from '@/lib/utils'
-import EmailVerification, { type VerificationProof } from '@/components/email-verification'
+import EmailVerification, { type VerificationProof } from '@/components/booking/email-verification'
 import type { TimeSlot } from '@/types/booking'
 
 const locationIcons = {

@@ -6,12 +6,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { requireAuth } from '@/server/auth/admin-auth';
+import prisma from '@/server/db/prisma';
 import crypto from 'crypto';
-import { checkNumericLimit, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
-import { updateWebhookSchema } from '@/lib/validation/schemas';
+import { checkNumericLimit, checkSubscriptionNotLocked } from '@/server/billing/plan-enforcement';
+import { updateWebhookSchema } from '@/server/validation/schemas';
 import type { PlanTier } from '@/lib/pricing';
 
 /**
@@ -23,10 +22,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const { id } = await params;
 
@@ -108,10 +105,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const { id } = await params;
 
@@ -237,10 +232,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const { id } = await params;
 

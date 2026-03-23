@@ -3,20 +3,27 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowLeft, Mail, CheckCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Mail, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
+const providerLabels: Record<string, string> = {
+  google: 'Google',
+  github: 'GitHub',
+};
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [oauthProviders, setOauthProviders] = useState<string[] | null>(null);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setOauthProviders(null);
     setIsLoading(true);
 
     try {
@@ -32,13 +39,62 @@ export default function ForgotPasswordPage() {
         throw new Error(data.error || 'Something went wrong');
       }
 
-      setIsSubmitted(true);
+      if (data.oauthOnly) {
+        setOauthProviders(data.providers || []);
+      } else {
+        setIsSubmitted(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (oauthProviders) {
+    const providerNames = oauthProviders
+      .map((p) => providerLabels[p] || p)
+      .join(', ');
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-ocean-50 via-white to-tide-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertCircle className="h-8 w-8 text-amber-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              No password to reset
+            </h1>
+            <p className="text-gray-600 mb-6">
+              The account for <strong>{email}</strong> was created
+              using <strong>{providerNames}</strong>. No password is needed.
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              Please sign in using your {providerNames} account instead.
+            </p>
+            <div className="space-y-3">
+              <Link href="/auth/signin">
+                <Button className="w-full bg-gradient-to-r from-ocean-500 to-ocean-600 hover:from-ocean-600 hover:to-ocean-700">
+                  Sign in with {providerNames}
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => {
+                  setOauthProviders(null);
+                  setEmail('');
+                }}
+              >
+                Try another email
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isSubmitted) {
     return (

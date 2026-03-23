@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { sendEmail } from '@/lib/integrations/email/client'
-import { verifyCode } from '@/lib/email-verification'
-import { checkContactRateLimit } from '@/lib/infrastructure/queue'
+import { sendEmail } from '@/server/integrations/email/client'
+import { verifyCode } from '@/server/auth/email-verification'
+import { checkContactRateLimit } from '@/server/infrastructure/queue'
 
 function escapeHtml(str: string): string {
   return str

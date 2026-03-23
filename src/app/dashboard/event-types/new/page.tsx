@@ -31,7 +31,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
-import { ProBadge } from '@/components/pro-badge'
+import { ProBadge } from '@/components/billing/pro-badge'
 import { useIntegrationStatus } from '@/hooks/use-integration-status'
 import type { QuestionInput } from '@/types/event-type'
 

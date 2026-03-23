@@ -6,36 +6,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createVerification, type VerificationType } from '@/lib/email-verification';
-import { sendVerificationCodeEmail } from '@/lib/integrations/email/client';
+import { createVerification, type VerificationType } from '@/server/auth/email-verification';
+import { sendVerificationCodeEmail } from '@/server/integrations/email/client';
+import { checkRateLimit } from '@/server/infrastructure/queue/rate-limiter';
 
 const schema = z.object({
   email: z.string().email(),
   type: z.enum(['BOOKING_CREATE', 'BOOKING_MANAGE']),
 });
-
-// Simple in-memory rate limit: max 3 sends per email per 10 minutes
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = 3;
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-
-function checkRateLimit(email: string): boolean {
-  const key = email.toLowerCase();
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return false;
-  }
-
-  entry.count++;
-  return true;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,8 +29,9 @@ export async function POST(request: NextRequest) {
 
     const { email, type } = validated.data;
 
-    // Rate limit
-    if (!checkRateLimit(email)) {
+    // Rate limit: 3 sends per email per 10 minutes
+    const rl = await checkRateLimit(email.toLowerCase(), { limit: 3, windowSeconds: 600, prefix: 'verify_send' });
+    if (!rl.allowed) {
       return NextResponse.json(
         { error: 'Too many verification requests. Please try again later.' },
         { status: 429 }

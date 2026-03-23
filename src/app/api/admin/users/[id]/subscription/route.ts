@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/admin-auth'
-import { getSubscriptionSummary } from '@/lib/subscription-lifecycle'
+import { requireAdmin } from '@/server/auth/admin-auth'
+import { getSubscriptionSummary } from '@/server/billing/subscription-lifecycle'
 
 export async function GET(
   req: NextRequest,

@@ -32,9 +32,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useToast } from '@/components/ui/use-toast'
 import { cn, formatDuration } from '@/lib/utils'
-import { EmbedCodeGenerator } from '@/components/embed-code-generator'
+import { EmbedCodeGenerator } from '@/components/booking/embed-code-generator'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
-import { UpgradeModal } from '@/components/upgrade-modal'
+import { UpgradeModal } from '@/components/billing/upgrade-modal'
 import type { EventTypeListItem } from '@/types/event-type'
 
 const locationLabels: Record<string, { label: string; icon: typeof Video }> = {

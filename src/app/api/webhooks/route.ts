@@ -5,12 +5,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
-import { createWebhookSchema } from '@/lib/validation/schemas';
+import { requireAuth } from '@/server/auth/admin-auth';
+import prisma from '@/server/db/prisma';
+import { createWebhookSchema } from '@/server/validation/schemas';
 import crypto from 'crypto';
-import { checkNumericLimit, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
+import { checkNumericLimit, checkSubscriptionNotLocked } from '@/server/billing/plan-enforcement';
 import type { PlanTier } from '@/lib/pricing';
 
 /**
@@ -19,10 +18,8 @@ import type { PlanTier } from '@/lib/pricing';
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const webhooks = await prisma.webhook.findMany({
       where: { userId: session.user.id },
@@ -95,10 +92,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const body = await request.json();
     const result = createWebhookSchema.safeParse(body);

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { acceptTeamInvitationSchema } from '@/lib/validation/schemas'
-import { createNotification, buildTeamNotification } from '@/lib/notifications'
-import { logTeamAction } from '@/lib/team-audit'
+import { requireAuth } from '@/server/auth/admin-auth'
+import prisma from '@/server/db/prisma'
+import { acceptTeamInvitationSchema } from '@/server/validation/schemas'
+import { createNotification, buildTeamNotification } from '@/server/notifications'
+import { logTeamAction } from '@/server/teams/team-audit'
 
 // POST /api/invitations/accept - Accept a team invitation
 export async function POST(request: Request) {

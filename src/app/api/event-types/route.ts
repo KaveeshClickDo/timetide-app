@@ -1,45 +1,29 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { createEventTypeSchema } from '@/lib/validation/schemas'
-import { nanoid } from 'nanoid'
-import { checkNumericLimit, checkEventTypeFeatures, checkSubscriptionNotLocked } from '@/lib/plan-enforcement'
-import type { PlanTier } from '@/lib/pricing'
+import { requireAuth } from '@/server/auth/admin-auth'
+import { createEventTypeSchema } from '@/server/validation/schemas'
+import {
+  listEventTypes,
+  createEventType,
+  EventTypeSubscriptionLockedError,
+  EventTypeLimitReachedError,
+  EventTypeFeatureDeniedError,
+} from '@/server/services/event-type'
 
-// GET /api/event-types - List all event types for current user
+// GET /api/event-types
 export async function GET() {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    const eventTypes = await prisma.eventType.findMany({
-      where: {
-        userId: session.user.id,
-        teamId: null, // Exclude team event types from personal list
-      },
-      include: {
-        _count: {
-          select: {
-            bookings: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    })
-
+    const eventTypes = await listEventTypes(session.user.id)
     return NextResponse.json({ eventTypes })
   } catch (error) {
     console.error('Error fetching event types:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch event types' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch event types' }, { status: 500 })
   }
 }
 
-// POST /api/event-types - Create new event type
+// POST /api/event-types
 export async function POST(request: Request) {
   try {
     const { error, session } = await requireAuth()
@@ -47,93 +31,27 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const result = createEventTypeSchema.safeParse(body)
-
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.errors[0].message },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: result.error.errors[0].message }, { status: 400 })
     }
 
-    // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
-    const dbUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { plan: true, subscriptionStatus: true },
-    })
-    const plan = (dbUser?.plan as PlanTier) || 'FREE'
-
-    // Block LOCKED users from creating resources
-    const lockedDenied = checkSubscriptionNotLocked(dbUser?.subscriptionStatus)
-    if (lockedDenied) return lockedDenied
-
-    // Enforce event type limit
-    const currentCount = await prisma.eventType.count({
-      where: { userId: session.user.id },
-    })
-    const limitDenied = checkNumericLimit(plan, 'maxEventTypes', currentCount)
-    if (limitDenied) return limitDenied
-
-    // Enforce pro feature gates
-    const featureDenied = checkEventTypeFeatures(plan, result.data as Record<string, unknown>)
-    if (featureDenied) return featureDenied
-
-    const { title, description, slug: inputSlug, length, locationType, questions, ...rest } = result.data
-
-    // Generate unique slug (ignore provided slug, base on title)
-    const baseSlug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-    let slug = baseSlug
-    let counter = 1
-
-    while (
-      await prisma.eventType.findFirst({
-        where: { userId: session.user.id, slug },
-      })
-    ) {
-      slug = `${baseSlug}-${counter}`
-      counter++
-    }
-
-    // Get user's default availability schedule
-    const defaultSchedule = await prisma.availabilitySchedule.findFirst({
-      where: {
-        userId: session.user.id,
-        isDefault: true,
-      },
-    })
-
-    const eventType = await prisma.eventType.create({
-      data: {
-        userId: session.user.id,
-        title,
-        slug,
-        description: description || null,
-        length,
-        locationType,
-        scheduleId: defaultSchedule?.id,
-        isActive: true,
-        questions: questions
-          ? { create: questions.map((q: any, idx: number) => ({
-              order: q.order ?? idx,
-              label: q.label,
-              type: q.type,
-              required: q.required ?? false,
-              placeholder: q.placeholder ?? null,
-              options: q.options ?? undefined,
-            })) }
-          : undefined,
-        ...rest,
-      },
+    const eventType = await createEventType({
+      userId: session.user.id,
+      data: result.data as any,
     })
 
     return NextResponse.json({ eventType }, { status: 201 })
   } catch (error) {
+    if (error instanceof EventTypeSubscriptionLockedError) {
+      return NextResponse.json({ error: error.message, code: 'SUBSCRIPTION_LOCKED' }, { status: 403 })
+    }
+    if (error instanceof EventTypeLimitReachedError) {
+      return NextResponse.json({ error: error.message, code: 'PLAN_LIMIT', limit: error.limit }, { status: 403 })
+    }
+    if (error instanceof EventTypeFeatureDeniedError) {
+      return NextResponse.json({ error: error.message, code: 'PLAN_LIMIT' }, { status: 403 })
+    }
     console.error('Error creating event type:', error)
-    return NextResponse.json(
-      { error: 'Failed to create event type' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create event type' }, { status: 500 })
   }
 }

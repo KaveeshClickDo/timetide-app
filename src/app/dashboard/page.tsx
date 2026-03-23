@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { cn, getInitials, formatTime, formatDuration } from '@/lib/utils'
-import { UpgradeBanner } from '@/components/upgrade-banner'
+import { UpgradeBanner } from '@/components/billing/upgrade-banner'
 import type { BookingListItem } from '@/types/booking'
 
 const statusConfig = {

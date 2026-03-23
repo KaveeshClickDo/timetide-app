@@ -1,242 +1,77 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { checkEventTypeFeatures } from '@/lib/plan-enforcement'
-import { PLAN_LIMITS, type PlanTier } from '@/lib/pricing'
+import { requireAuth } from '@/server/auth/admin-auth'
+import {
+  getEventType,
+  updateEventType,
+  deleteEventType,
+  EventTypeNotFoundError,
+  EventTypeFeatureDeniedError,
+  EventTypeActiveLimitError,
+} from '@/server/services/event-type'
 
 interface RouteParams {
   params: { id: string }
 }
 
-// GET /api/event-types/[id] - Get single event type
+// GET /api/event-types/[id]
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    const eventType = await prisma.eventType.findFirst({
-      where: {
-        id: params.id,
-        userId: session.user.id,
-      },
-      include: {
-        questions: {
-          orderBy: { order: 'asc' },
-        },
-        schedule: {
-          include: {
-            slots: true,
-            overrides: true,
-          },
-        },
-        _count: {
-          select: { bookings: true },
-        },
-      },
-    })
-
-    if (!eventType) {
-      return NextResponse.json({ error: 'Event type not found' }, { status: 404 })
-    }
-
+    const eventType = await getEventType(params.id, session.user.id)
     return NextResponse.json({ eventType })
   } catch (error) {
+    if (error instanceof EventTypeNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
     console.error('Error fetching event type:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch event type' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch event type' }, { status: 500 })
   }
 }
 
-// PATCH /api/event-types/[id] - Update event type
+// PATCH /api/event-types/[id]
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
     const body = await request.json()
-
-    // Verify ownership
-    const existing = await prisma.eventType.findFirst({
-      where: {
-        id: params.id,
-        userId: session.user.id,
-      },
+    const eventType = await updateEventType({
+      eventTypeId: params.id,
+      userId: session.user.id,
+      data: body,
     })
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Event type not found' }, { status: 404 })
-    }
-
-    // Read plan and subscription status from DB (not session) to prevent stale JWT bypass
-    const dbUser = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { plan: true, subscriptionStatus: true },
-    })
-    const plan = (dbUser?.plan as PlanTier) || 'FREE'
-
-    // Allow LOCKED users to edit basic fields and toggle active/inactive
-    // so the lock-and-swap system works after downgrade. Pro features are
-    // still blocked by checkEventTypeFeatures based on the plan.
-    const featureDenied = checkEventTypeFeatures(plan, body as Record<string, unknown>)
-    if (featureDenied) return featureDenied
-
-    // Enforce active-event limit for plan users
-    if (body.isActive === true && !existing.isActive) {
-      const maxEvents = PLAN_LIMITS[plan].maxEventTypes
-      if (maxEvents !== Infinity) {
-        const activeEvents = await prisma.eventType.findMany({
-          where: { userId: session.user.id, isActive: true, id: { not: params.id } },
-          orderBy: { updatedAt: 'asc' },
-          select: { id: true },
-        })
-        if (activeEvents.length >= maxEvents) {
-          // If activating a locked-by-downgrade event, auto-swap: deactivate the oldest active event
-          if (existing.lockedByDowngrade) {
-            const toDeactivate = activeEvents.slice(0, activeEvents.length - maxEvents + 1)
-            await prisma.eventType.updateMany({
-              where: { id: { in: toDeactivate.map((e) => e.id) } },
-              data: { isActive: false },
-            })
-          } else {
-            return NextResponse.json(
-              {
-                error: `Your plan allows ${maxEvents} active event type${maxEvents !== 1 ? 's' : ''}. Deactivate your current active event type first, or upgrade your plan.`,
-                code: 'PLAN_LIMIT',
-              },
-              { status: 403 },
-            )
-          }
-        }
-      }
-    }
-
-    // Handle slug update
-    let newSlug = existing.slug
-    if (body.title && body.title !== existing.title) {
-      const baseSlug = body.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '')
-      newSlug = baseSlug
-      let counter = 1
-
-      while (
-        await prisma.eventType.findFirst({
-          where: {
-            userId: session.user.id,
-            slug: newSlug,
-            NOT: { id: params.id },
-          },
-        })
-      ) {
-        newSlug = `${baseSlug}-${counter}`
-        counter++
-      }
-    }
-
-    const { questions } = body
-
-    // Whitelist allowed fields to prevent mass assignment
-    const allowedFields = [
-      'title', 'description', 'length', 'locationType', 'locationValue',
-      'isActive', 'requiresConfirmation', 'allowsRecurring', 'recurringMaxWeeks', 'recurringFrequency', 'recurringInterval',
-      'minimumNotice', 'bufferTimeBefore', 'bufferTimeAfter', 'maxBookingsPerDay',
-      'scheduleId', 'color', 'periodType', 'periodDays', 'periodStartDate',
-      'periodEndDate', 'seatsPerSlot', 'slotInterval', 'hideNotes', 'successRedirectUrl',
-    ] as const
-    const updateData: Record<string, unknown> = {}
-    for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field]
-      }
-    }
-
-    // When activating a downgrade-locked event, clear the lock flag (user chose this one to keep)
-    if (body.isActive === true && existing.lockedByDowngrade) {
-      updateData.lockedByDowngrade = false
-    }
-
-    const eventType = await prisma.eventType.update({
-      where: { id: params.id },
-      data: {
-        ...updateData,
-        slug: newSlug,
-      },
-    })
-
-    // Handle questions update if provided
-    if (questions !== undefined) {
-      // Delete existing questions
-      await prisma.eventTypeQuestion.deleteMany({
-        where: { eventTypeId: params.id },
-      })
-
-      // Create new questions
-      if (questions.length > 0) {
-        await prisma.eventTypeQuestion.createMany({
-          data: questions.map((q: any, index: number) => ({
-            eventTypeId: params.id,
-            type: q.type,
-            label: q.label,
-            required: q.required ?? false,
-            placeholder: q.placeholder,
-            options: q.options,
-            order: index,
-          })),
-        })
-      }
-    }
 
     return NextResponse.json({ eventType })
   } catch (error) {
+    if (error instanceof EventTypeNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof EventTypeFeatureDeniedError) {
+      return NextResponse.json({ error: error.message, code: 'PLAN_LIMIT' }, { status: 403 })
+    }
+    if (error instanceof EventTypeActiveLimitError) {
+      return NextResponse.json({ error: error.message, code: 'PLAN_LIMIT' }, { status: 403 })
+    }
     console.error('Error updating event type:', error)
-    return NextResponse.json(
-      { error: 'Failed to update event type' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update event type' }, { status: 500 })
   }
 }
 
-// DELETE /api/event-types/[id] - Delete event type
+// DELETE /api/event-types/[id]
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    // Verify ownership
-    const existing = await prisma.eventType.findFirst({
-      where: {
-        id: params.id,
-        userId: session.user.id,
-      },
-    })
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Event type not found' }, { status: 404 })
-    }
-
-    // Delete associated records first
-    await prisma.eventTypeQuestion.deleteMany({
-      where: { eventTypeId: params.id },
-    })
-
-    await prisma.eventTypeAssignment.deleteMany({
-      where: { eventTypeId: params.id },
-    })
-
-    // Delete the event type - bookings will cascade delete automatically
-    await prisma.eventType.delete({
-      where: { id: params.id },
-    })
-
+    await deleteEventType(params.id, session.user.id)
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof EventTypeNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
     console.error('Error deleting event type:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete event type' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete event type' }, { status: 500 })
   }
 }

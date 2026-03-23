@@ -4,25 +4,29 @@
  * POST: Create a team event type
  */
 
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
-import { z } from 'zod';
-import { checkFeatureAccess, checkEventTypeFeatures, getTeamOwnerPlan, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
+import { NextResponse } from 'next/server'
+import { requireAuth } from '@/server/auth/admin-auth'
+import { z } from 'zod'
 import {
   slugSchema,
   locationTypeSchema,
   schedulingTypeSchema,
   periodTypeSchema,
   eventTypeQuestionSchema,
-} from '@/lib/validation/schemas';
+} from '@/server/validation/schemas'
+import {
+  listTeamEventTypes,
+  createTeamEventType,
+  TeamEventTypeNotAuthorizedError,
+  TeamEventTypeFeatureDeniedError,
+  TeamEventTypeSubscriptionLockedError,
+  TeamEventTypeSlugTakenError,
+} from '@/server/services/team'
 
 interface RouteParams {
-  params: { id: string };
+  params: { id: string }
 }
 
-// Validation schema for creating team event type
 const createTeamEventTypeSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200),
   slug: slugSchema,
@@ -45,226 +49,69 @@ const createTeamEventTypeSchema = z.object({
   successRedirectUrl: z.string().url().optional(),
   schedulingType: schedulingTypeSchema,
   questions: z.array(eventTypeQuestionSchema).optional(),
-  memberIds: z.array(z.string()).optional(), // Team members to assign
-  meetingOrganizerUserId: z.string().optional(), // Whose account generates meeting links
+  memberIds: z.array(z.string()).optional(),
+  meetingOrganizerUserId: z.string().optional(),
   allowsRecurring: z.boolean().default(false),
   recurringMaxWeeks: z.number().int().min(2).max(24).optional(),
   recurringFrequency: z.string().optional(),
   recurringInterval: z.number().int().min(1).max(90).optional(),
-});
+})
 
-/**
- * Helper to check team access and get current user's role
- */
-async function checkTeamAccess(teamId: string, userId: string) {
-  const membership = await prisma.teamMember.findUnique({
-    where: {
-      teamId_userId: {
-        teamId,
-        userId,
-      },
-    },
-  });
-
-  return membership;
-}
-
-// GET /api/teams/[id]/event-types - List team event types
-export async function GET(request: Request, { params }: RouteParams) {
+// GET /api/teams/[id]/event-types
+export async function GET(_request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
-    // Check if user is a team member
-    const membership = await checkTeamAccess(params.id, session.user.id);
-    if (!membership) {
-      return NextResponse.json({ error: 'Not a member of this team' }, { status: 403 });
-    }
-
-    const eventTypes = await prisma.eventType.findMany({
-      where: { teamId: params.id },
-      include: {
-        questions: {
-          orderBy: { order: 'asc' },
-        },
-        teamMemberAssignments: {
-          include: {
-            teamMember: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    image: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        _count: {
-          select: {
-            bookings: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return NextResponse.json({ eventTypes });
+    const eventTypes = await listTeamEventTypes(params.id, session.user.id)
+    return NextResponse.json({ eventTypes })
   } catch (error) {
-    console.error('Error listing team event types:', error);
-    return NextResponse.json(
-      { error: 'Failed to list team event types' },
-      { status: 500 }
-    );
+    if (error instanceof TeamEventTypeNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    console.error('Error listing team event types:', error)
+    return NextResponse.json({ error: 'Failed to list team event types' }, { status: 500 })
   }
 }
 
-// POST /api/teams/[id]/event-types - Create team event type
+// POST /api/teams/[id]/event-types
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
-    // Check if user is admin/owner
-    const membership = await checkTeamAccess(params.id, session.user.id);
-    if (!membership || membership.role === 'MEMBER') {
-      return NextResponse.json(
-        { error: 'Not authorized to create team event types' },
-        { status: 403 }
-      );
-    }
-
-    // Enforce teams feature gate based on team owner's plan (owner is paying)
-    const { plan: ownerPlan, subscriptionStatus: ownerSubStatus } = await getTeamOwnerPlan(params.id);
-
-    // Block if team owner's subscription is LOCKED
-    const lockedDenied = checkSubscriptionNotLocked(ownerSubStatus);
-    if (lockedDenied) return lockedDenied;
-
-    const teamsDenied = checkFeatureAccess(ownerPlan, 'teams');
-    if (teamsDenied) return teamsDenied;
-
-    const body = await request.json();
-    const result = createTeamEventTypeSchema.safeParse(body);
-
+    const body = await request.json()
+    const result = createTeamEventTypeSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
         { error: 'Invalid input', details: result.error.flatten() },
         { status: 400 }
-      );
+      )
     }
 
-    // Enforce pro feature gates on event type fields based on owner's plan
-    const eventFeatureDenied = checkEventTypeFeatures(ownerPlan, result.data as Record<string, unknown>);
-    if (eventFeatureDenied) return eventFeatureDenied;
+    const { questions, memberIds, meetingOrganizerUserId, ...rest } = result.data
 
-    const { questions, memberIds, meetingOrganizerUserId, ...eventTypeData } = result.data;
+    const eventType = await createTeamEventType({
+      teamId: params.id,
+      sessionUserId: session.user.id,
+      data: rest,
+      questions,
+      memberIds,
+      meetingOrganizerUserId,
+    })
 
-    // Check slug uniqueness within team
-    const existingSlug = await prisma.eventType.findFirst({
-      where: {
-        teamId: params.id,
-        slug: eventTypeData.slug,
-      },
-    });
-
-    if (existingSlug) {
-      return NextResponse.json(
-        { error: 'An event type with this slug already exists in this team' },
-        { status: 400 }
-      );
-    }
-
-    // Create event type with questions in a transaction
-    const eventType = await prisma.$transaction(async (tx) => {
-      // Create the event type
-      const created = await tx.eventType.create({
-        data: {
-          ...eventTypeData,
-          userId: session.user.id, // Creator
-          teamId: params.id,
-          meetingOrganizerUserId: meetingOrganizerUserId || undefined,
-          periodStartDate: eventTypeData.periodStartDate
-            ? new Date(eventTypeData.periodStartDate)
-            : undefined,
-          periodEndDate: eventTypeData.periodEndDate
-            ? new Date(eventTypeData.periodEndDate)
-            : undefined,
-          questions: questions?.length
-            ? {
-                create: questions.map((q, index) => ({
-                  ...q,
-                  order: index,
-                  options: q.options ? q.options : undefined,
-                })),
-              }
-            : undefined,
-        },
-        include: {
-          questions: true,
-        },
-      });
-
-      // Assign team members if provided
-      if (memberIds && memberIds.length > 0) {
-        // Verify all members belong to the team
-        const validMembers = await tx.teamMember.findMany({
-          where: {
-            id: { in: memberIds },
-            teamId: params.id,
-          },
-        });
-
-        if (validMembers.length > 0) {
-          await tx.eventTypeAssignment.createMany({
-            data: validMembers.map((member) => ({
-              eventTypeId: created.id,
-              teamMemberId: member.id,
-            })),
-          });
-        }
-      }
-
-      // Fetch complete event type with assignments
-      return tx.eventType.findUnique({
-        where: { id: created.id },
-        include: {
-          questions: {
-            orderBy: { order: 'asc' },
-          },
-          teamMemberAssignments: {
-            include: {
-              teamMember: {
-                include: {
-                  user: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true,
-                      image: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-    });
-
-    return NextResponse.json({ eventType }, { status: 201 });
+    return NextResponse.json({ eventType }, { status: 201 })
   } catch (error) {
-    console.error('Error creating team event type:', error);
-    return NextResponse.json(
-      { error: 'Failed to create team event type' },
-      { status: 500 }
-    );
+    if (error instanceof TeamEventTypeNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamEventTypeSubscriptionLockedError || error instanceof TeamEventTypeFeatureDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamEventTypeSlugTakenError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    console.error('Error creating team event type:', error)
+    return NextResponse.json({ error: 'Failed to create team event type' }, { status: 500 })
   }
 }

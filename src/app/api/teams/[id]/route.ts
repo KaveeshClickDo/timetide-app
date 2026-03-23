@@ -1,99 +1,32 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { logTeamAction } from '@/lib/team-audit'
-import { PLAN_LIMITS } from '@/lib/pricing'
+import { requireAuth } from '@/server/auth/admin-auth'
+import {
+  getTeamDetails,
+  updateTeam,
+  deleteTeam,
+  TeamNotFoundError,
+  TeamNotAuthorizedError,
+  TeamSlugTakenError,
+} from '@/server/services/team'
 
 interface RouteParams {
   params: { id: string }
 }
 
-// Helper to check if user is admin/owner of team
-async function checkTeamAccess(teamId: string, userId: string, requireAdmin = false) {
-  const membership = await prisma.teamMember.findUnique({
-    where: {
-      teamId_userId: {
-        teamId,
-        userId,
-      },
-    },
-  })
-
-  if (!membership) return null
-
-  if (requireAdmin && membership.role === 'MEMBER') {
-    return null
-  }
-
-  return membership
-}
-
 // GET /api/teams/[id] - Get team details
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    const membership = await checkTeamAccess(params.id, session.user.id)
-    if (!membership) {
+    const result = await getTeamDetails(params.id, session.user.id)
+    return NextResponse.json(result)
+  } catch (error) {
+    if (error instanceof TeamNotFoundError) {
       return NextResponse.json({ error: 'Team not found' }, { status: 404 })
     }
-
-    const team = await prisma.team.findUnique({
-      where: { id: params.id },
-      include: {
-        members: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                image: true,
-                username: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'asc',
-          },
-        },
-        eventTypes: {
-          include: {
-            _count: {
-              select: { bookings: true },
-            },
-          },
-        },
-      },
-    })
-
-    // Check if team owner has an active plan that supports teams
-    const ownerMembership = await prisma.teamMember.findFirst({
-      where: { teamId: params.id, role: 'OWNER' },
-      select: {
-        user: {
-          select: { plan: true, subscriptionStatus: true },
-        },
-      },
-    })
-    const ownerPlan = ownerMembership?.user?.plan ?? 'FREE'
-    const ownerStatus = ownerMembership?.user?.subscriptionStatus ?? 'NONE'
-    const ownerPlanActive =
-      !!PLAN_LIMITS[ownerPlan as keyof typeof PLAN_LIMITS]?.teams &&
-      (ownerStatus === 'ACTIVE' || ownerStatus === 'DOWNGRADING')
-
-    return NextResponse.json({
-      team,
-      currentUserRole: membership.role,
-      ownerPlanActive,
-    })
-  } catch (error) {
     console.error('Error fetching team:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch team' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch team' }, { status: 500 })
   }
 }
 
@@ -103,89 +36,41 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    const membership = await checkTeamAccess(params.id, session.user.id, true)
-    if (!membership) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
     const body = await request.json()
-    const { name, slug, logo } = body
-
-    // Check slug uniqueness if changing
-    if (slug) {
-      const existing = await prisma.team.findFirst({
-        where: {
-          slug,
-          NOT: { id: params.id },
-        },
-      })
-      if (existing) {
-        return NextResponse.json(
-          { error: 'This slug is already taken' },
-          { status: 400 }
-        )
-      }
-    }
-
-    const team = await prisma.team.update({
-      where: { id: params.id },
-      data: {
-        ...(name && { name }),
-        ...(slug && { slug }),
-        ...(logo !== undefined && { logo }),
-      },
-    })
-
-    logTeamAction({
+    const team = await updateTeam({
       teamId: params.id,
-      userId: session.user.id,
-      action: 'team.updated',
-      targetType: 'Team',
-      targetId: params.id,
-      changes: { name, slug, logo },
-    }).catch(() => {})
+      sessionUserId: session.user.id,
+      name: body.name,
+      slug: body.slug,
+      logo: body.logo,
+    })
 
     return NextResponse.json({ team })
   } catch (error) {
+    if (error instanceof TeamNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamSlugTakenError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('Error updating team:', error)
-    return NextResponse.json(
-      { error: 'Failed to update team' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update team' }, { status: 500 })
   }
 }
 
 // DELETE /api/teams/[id] - Delete team
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    // Only owner can delete team
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId: params.id,
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!membership || membership.role !== 'OWNER') {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
-    // Delete team (cascades to members and event type assignments)
-    await prisma.team.delete({
-      where: { id: params.id },
-    })
-
+    await deleteTeam(params.id, session.user.id)
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof TeamNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Error deleting team:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete team' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete team' }, { status: 500 })
   }
 }

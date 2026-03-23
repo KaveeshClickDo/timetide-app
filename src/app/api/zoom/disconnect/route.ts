@@ -4,16 +4,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { disconnectZoomAccount } from '@/lib/integrations/zoom';
+import { requireAuth } from '@/server/auth/admin-auth';
+import { disconnectZoomAccount } from '@/server/integrations/zoom';
 
 export async function POST(request: NextRequest) {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { error, session } = await requireAuth();
+  if (error) return error;
 
   try {
     await disconnectZoomAccount(session.user.id);

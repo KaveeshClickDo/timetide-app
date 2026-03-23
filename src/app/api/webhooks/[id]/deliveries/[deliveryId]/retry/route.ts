@@ -4,10 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
-import { retryWebhookDelivery } from '@/lib/infrastructure/queue';
+import { requireAuth } from '@/server/auth/admin-auth';
+import prisma from '@/server/db/prisma';
+import { retryWebhookDelivery } from '@/server/infrastructure/queue';
 
 /**
  * POST /api/webhooks/[id]/deliveries/[deliveryId]/retry
@@ -18,10 +17,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string; deliveryId: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error) return error;
 
     const { id, deliveryId } = await params;
 

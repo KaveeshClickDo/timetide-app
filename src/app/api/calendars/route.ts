@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { getGoogleAuthUrl, connectGoogleCalendar } from '@/lib/integrations/calendar/google'
-import { getOutlookAuthUrl, connectOutlookCalendar } from '@/lib/integrations/calendar/outlook'
+import { requireAuth } from '@/server/auth/admin-auth'
+import prisma from '@/server/db/prisma'
+import { getGoogleAuthUrl, connectGoogleCalendar } from '@/server/integrations/calendar/google'
+import { getOutlookAuthUrl, connectOutlookCalendar } from '@/server/integrations/calendar/outlook'
 
 // GET /api/calendars - List connected calendars
 export async function GET() {

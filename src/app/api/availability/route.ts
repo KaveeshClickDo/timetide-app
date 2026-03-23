@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { availabilitySlotSchema } from '@/lib/validation/schemas'
+import { requireAuth } from '@/server/auth/admin-auth'
+import prisma from '@/server/db/prisma'
+import { availabilitySlotSchema } from '@/server/validation/schemas'
 import { z } from 'zod'
 
 // Route-specific schema: timezone is derived server-side from user record, not from body

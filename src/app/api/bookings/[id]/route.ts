@@ -1,716 +1,114 @@
 /**
  * /api/bookings/[id]
  * GET: Get booking details
+ * PATCH: Confirm, reject, skip, or unskip a booking
  * DELETE: Cancel booking
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { formatInTimeZone } from 'date-fns-tz';
-import prisma from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
-import { cancelBookingSchema, confirmRejectBookingSchema } from '@/lib/validation/schemas';
-import { verifyCode } from '@/lib/email-verification';
-import { deleteGoogleCalendarEvent, createGoogleCalendarEvent, type CreateCalendarEventResult } from '@/lib/integrations/calendar/google';
-import { deleteOutlookCalendarEvent, createOutlookCalendarEvent } from '@/lib/integrations/calendar/outlook';
-import { deleteAllCalendarEvents, parseCalendarEventIds, buildCalendarEventIdsUpdate } from '@/lib/integrations/calendar/event-ids';
-import { createZoomMeeting, hasZoomConnected } from '@/lib/integrations/zoom';
-import { BookingEmailData, RecurringBookingEmailData } from '@/lib/integrations/email/client';
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/server/auth/auth'
+import { cancelBookingSchema, confirmRejectBookingSchema } from '@/server/validation/schemas'
 import {
-  queueBookingCancellationEmails,
-  queueBookingConfirmedByHostEmail,
-  queueBookingRejectedEmail,
-  queueBulkConfirmedByHostEmail,
-  scheduleBookingReminders,
-  cancelBookingReminders,
-  triggerBookingConfirmedWebhook,
-  triggerBookingRejectedWebhook,
-  triggerBookingCancelledWebhook,
-} from '@/lib/infrastructure/queue';
-import { createNotification, buildBookingNotification } from '@/lib/notifications';
-import { FREQUENCY_LABELS, type RecurringFrequency } from '@/lib/scheduling/recurring/utils';
+  getBookingDetails,
+  BookingNotFoundError,
+  BookingUnauthorizedError,
+  skipOrUnskipBooking,
+  confirmOrRejectBooking,
+  BookingNotPendingError,
+  SkipNotRecurringError,
+  BookingAccessDeniedError,
+  cancelBooking,
+  CancelBookingNotFoundError,
+  CancelBookingUnauthorizedError,
+} from '@/server/services/booking'
 
 interface RouteParams {
-  params: { id: string };
+  params: { id: string }
 }
 
 /**
  * GET /api/bookings/[id]
- * Get booking details - accessible by host or via booking UID
  */
-export async function GET(request: NextRequest, { params }: RouteParams) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
-    const session = await getServerSession(authOptions);
+    const { id } = params
+    const session = await getServerSession(authOptions)
 
-    // Try to find by ID or UID
-    const booking = await prisma.booking.findFirst({
-      where: {
-        OR: [{ id }, { uid: id }],
-      },
-      include: {
-        eventType: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            description: true,
-            length: true,
-            locationType: true,
-            locationValue: true,
-            schedulingType: true,
-            teamId: true,
-            team: {
-              select: { slug: true },
-            },
-            questions: true,
-          },
-        },
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-            timezone: true,
-          },
-        },
-      },
-    });
+    const booking = await getBookingDetails({
+      id,
+      sessionUserId: session?.user?.id,
+    })
 
-    // Also fetch assigned user if exists
-    let assignedUser = null;
-    if (booking?.assignedUserId) {
-      assignedUser = await prisma.user.findUnique({
-        where: { id: booking.assignedUserId },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          image: true,
-        },
-      });
-    }
-
-    if (!booking) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-    }
-
-    // Check authorization - host can always access, others need the UID
-    const isHost = session?.user?.id === booking.hostId;
-    const accessedByUid = id === booking.uid;
-
-    if (!isHost && !accessedByUid) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
-    // Fetch recurring siblings if this is a recurring booking
-    let recurringBookings = null;
-    if (booking.recurringGroupId) {
-      recurringBookings = await prisma.booking.findMany({
-        where: { recurringGroupId: booking.recurringGroupId },
-        select: {
-          id: true,
-          uid: true,
-          startTime: true,
-          endTime: true,
-          status: true,
-          recurringIndex: true,
-        },
-        orderBy: { startTime: 'asc' },
-      });
-    }
-
-    // Mask sensitive info for non-hosts
-    const response = {
-      ...booking,
-      assignedUser: isHost ? assignedUser : null,
-      host: isHost ? booking.host : {
-        name: booking.host.name,
-        image: booking.host.image,
-      },
-      eventType: booking.eventType,
-      recurringBookings,
-    };
-
-    return NextResponse.json({ booking: response });
+    return NextResponse.json({ booking })
   } catch (error) {
-    console.error('GET booking error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    if (error instanceof BookingNotFoundError) {
+      return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+    }
+    if (error instanceof BookingUnauthorizedError) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+    console.error('GET booking error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 /**
  * PATCH /api/bookings/[id]
- * Confirm or reject a pending booking (host only)
+ * Confirm, reject, skip, or unskip a booking
  */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
-    const session = await getServerSession(authOptions);
+    const { id } = params
+    const session = await getServerSession(authOptions)
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Parse and validate body
-    const body = await request.json();
-    const parsed = confirmRejectBookingSchema.safeParse(body);
+    const body = await request.json()
+    const parsed = confirmRejectBookingSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Invalid request', details: parsed.error.flatten() },
         { status: 400 }
-      );
+      )
     }
-    const { action, reason, scope } = parsed.data;
 
-    // ── Skip / Unskip: separate flow, different status requirements ──
+    const { action, reason, scope } = parsed.data
+
+    // Skip / Unskip flow
     if (action === 'skip' || action === 'unskip') {
-      const expectedStatus = action === 'skip'
-        ? { in: ['PENDING', 'CONFIRMED'] as ('PENDING' | 'CONFIRMED')[] }
-        : ('SKIPPED' as const);
-      const skipBooking = await prisma.booking.findFirst({
-        where: {
-          OR: [{ id }, { uid: id }],
-          status: expectedStatus,
-        },
-        include: {
-          eventType: { select: { title: true, slug: true, length: true, description: true, requiresConfirmation: true } },
-          host: { select: { id: true, name: true, email: true, username: true, timezone: true } },
-        },
-      });
-
-      if (!skipBooking) {
-        return NextResponse.json(
-          { error: action === 'skip' ? 'Booking not found or cannot be skipped' : 'Booking not found or is not skipped' },
-          { status: 404 }
-        );
-      }
-
-      if (session.user.id !== skipBooking.hostId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-      }
-
-      // Must be a recurring booking
-      if (!skipBooking.recurringGroupId) {
-        return NextResponse.json(
-          { error: 'Only recurring bookings can be skipped' },
-          { status: 400 }
-        );
-      }
-
-      const newStatus = action === 'skip'
-        ? 'SKIPPED'
-        : skipBooking.eventType.requiresConfirmation ? 'PENDING' : 'CONFIRMED';
-
-      await prisma.booking.update({
-        where: { id: skipBooking.id },
-        data: { status: newStatus },
-      });
-
-      if (action === 'skip') {
-        // Delete calendar events from all calendars
-        deleteAllCalendarEvents(
-          skipBooking.hostId,
-          skipBooking.calendarEventId,
-          skipBooking.calendarEventIds
-        );
-        // Cancel reminders
-        cancelBookingReminders(skipBooking.uid).catch(console.error);
-      } else {
-        // Unskip: reschedule reminders only if restored to CONFIRMED
-        if (newStatus === 'CONFIRMED') {
-          scheduleBookingReminders(skipBooking.id, skipBooking.uid, skipBooking.startTime).catch(console.error);
-        }
-      }
-
-      // Notification
-      const notifType = action === 'skip' ? 'BOOKING_CANCELLED' : 'BOOKING_CONFIRMED';
-      const notif = buildBookingNotification(notifType, {
-        inviteeName: skipBooking.inviteeName,
-        eventTitle: skipBooking.eventType.title,
-        startTime: formatInTimeZone(skipBooking.startTime, skipBooking.timezone, 'MMM d, h:mm a'),
-      });
-      createNotification({
-        userId: skipBooking.hostId,
-        type: notifType,
-        ...notif,
-        bookingId: skipBooking.id,
-      }).catch(console.error);
-
-      return NextResponse.json({
-        success: true,
-        message: action === 'skip' ? 'Occurrence skipped' : 'Occurrence restored',
-        status: newStatus,
-      });
+      const result = await skipOrUnskipBooking({
+        id,
+        action,
+        sessionUserId: session.user.id,
+      })
+      return NextResponse.json({ success: true, ...result })
     }
 
-    // Find the booking (for confirm/reject — must be PENDING)
-    const booking = await prisma.booking.findFirst({
-      where: {
-        OR: [{ id }, { uid: id }],
-        status: 'PENDING',
-      },
-      include: {
-        eventType: {
-          select: {
-            title: true,
-            slug: true,
-            length: true,
-            description: true,
-            locationType: true,
-            schedulingType: true,
-            meetingOrganizerUserId: true,
-            teamMemberAssignments: {
-              where: { isActive: true },
-              select: {
-                teamMember: {
-                  select: {
-                    userId: true,
-                    user: { select: { name: true, email: true } },
-                  },
-                },
-              },
-            },
-          },
-        },
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            username: true,
-            timezone: true,
-          },
-        },
-      },
-    });
+    // Confirm / Reject flow
+    const result = await confirmOrRejectBooking({
+      id,
+      action,
+      reason,
+      scope,
+      sessionUserId: session.user.id,
+    })
 
-    if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found or is not pending' },
-        { status: 404 }
-      );
-    }
-
-    // Only the host or team members can confirm/reject
-    const isTeamMemberPatch = booking.eventType.teamMemberAssignments?.some(
-      (a: { teamMember: { userId: string } }) => a.teamMember.userId === session.user.id
-    );
-    if (session.user.id !== booking.hostId && !isTeamMemberPatch) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
-    const newStatus = action === 'confirm' ? 'CONFIRMED' : 'REJECTED';
-
-    // ── Bulk scope: confirm/reject ALL pending in series ──
-    if (scope === 'all_pending' && booking.recurringGroupId) {
-      const pendingBookings = await prisma.booking.findMany({
-        where: {
-          recurringGroupId: booking.recurringGroupId,
-          status: 'PENDING',
-        },
-        orderBy: { startTime: 'asc' },
-        select: {
-          id: true, uid: true, startTime: true, endTime: true, timezone: true,
-          calendarEventId: true, calendarEventIds: true,
-          recurringFrequency: true, inviteeName: true, inviteeEmail: true,
-          hostId: true, eventTypeId: true, location: true, meetingUrl: true,
-          inviteePhone: true, inviteeNotes: true, responses: true,
-          recurringGroupId: true, status: true,
-        },
-      });
-
-      if (pendingBookings.length === 0) {
-        return NextResponse.json(
-          { error: 'No pending bookings found in this series' },
-          { status: 404 }
-        );
-      }
-
-      // Bulk update all pending bookings
-      await prisma.booking.updateMany({
-        where: {
-          recurringGroupId: booking.recurringGroupId,
-          status: 'PENDING',
-        },
-        data: {
-          status: newStatus,
-          ...(action === 'reject' && {
-            cancellationReason: reason,
-            cancelledAt: new Date(),
-          }),
-        },
-      });
-
-      if (action === 'confirm') {
-        // Schedule reminders for each confirmed occurrence
-        for (const pb of pendingBookings) {
-          scheduleBookingReminders(pb.id, pb.uid, pb.startTime).catch(console.error);
-        }
-
-        // Send one bulk confirmed email with all dates
-        const bulkHostTimezone = booking.host.timezone || booking.timezone;
-        const recurringEmailData: RecurringBookingEmailData = {
-          hostName: booking.host.name ?? 'Host',
-          hostEmail: booking.host.email!,
-          hostUsername: booking.host.username ?? undefined,
-          inviteeName: booking.inviteeName,
-          inviteeEmail: booking.inviteeEmail,
-          eventTitle: booking.eventType.title,
-          eventSlug: booking.eventType.slug,
-          eventDescription: booking.eventType.description ?? undefined,
-          startTime: formatInTimeZone(pendingBookings[0].startTime, pendingBookings[0].timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-          endTime: formatInTimeZone(pendingBookings[0].endTime, pendingBookings[0].timezone, 'h:mm a'),
-          timezone: booking.timezone,
-          hostStartTime: formatInTimeZone(pendingBookings[0].startTime, bulkHostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
-          hostEndTime: formatInTimeZone(pendingBookings[0].endTime, bulkHostTimezone, 'h:mm a'),
-          hostTimezone: bulkHostTimezone,
-          location: booking.location ?? undefined,
-          meetingUrl: booking.meetingUrl ?? undefined,
-          bookingUid: pendingBookings[0].uid,
-          recurringDates: pendingBookings.map(pb => ({
-            startTime: formatInTimeZone(pb.startTime, pb.timezone, 'EEEE, MMMM d, yyyy h:mm a'),
-            endTime: formatInTimeZone(pb.endTime, pb.timezone, 'h:mm a'),
-          })),
-          hostRecurringDates: pendingBookings.map(pb => ({
-            startTime: formatInTimeZone(pb.startTime, bulkHostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
-            endTime: formatInTimeZone(pb.endTime, bulkHostTimezone, 'h:mm a'),
-          })),
-          totalOccurrences: pendingBookings.length,
-          frequencyLabel: booking.recurringFrequency
-            ? FREQUENCY_LABELS[booking.recurringFrequency as RecurringFrequency]?.toLowerCase()
-            : undefined,
-        };
-        queueBulkConfirmedByHostEmail(recurringEmailData).catch(console.error);
-
-        // Webhook
-        triggerBookingConfirmedWebhook(booking.hostId, {
-          id: booking.id,
-          uid: booking.uid,
-          status: newStatus,
-          startTime: booking.startTime,
-          endTime: booking.endTime,
-          timezone: booking.timezone,
-          location: booking.location,
-          meetingUrl: booking.meetingUrl,
-          inviteeName: booking.inviteeName,
-          inviteeEmail: booking.inviteeEmail,
-          inviteePhone: booking.inviteePhone,
-          inviteeNotes: booking.inviteeNotes,
-          responses: booking.responses as Record<string, unknown> | null,
-          eventType: {
-            id: booking.eventTypeId,
-            title: booking.eventType.title,
-            slug: booking.eventType.slug,
-            length: booking.eventType.length,
-          },
-          host: {
-            id: booking.host.id,
-            name: booking.host.name,
-            email: booking.host.email!,
-          },
-        }).catch(console.error);
-      } else {
-        // Reject: delete calendar events from all calendars for all pending bookings
-        const bulkRejectCalendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
-        for (const pb of pendingBookings) {
-          deleteAllCalendarEvents(bulkRejectCalendarOwnerId, pb.calendarEventId, pb.calendarEventIds);
-        }
-        // Build teamMembers for rejected email
-        const bulkRejectTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
-          && booking.eventType.teamMemberAssignments.length > 0
-          ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
-              name: a.teamMember.user.name ?? 'Team Member',
-              email: a.teamMember.user.email!,
-            }))
-          : undefined;
-
-        queueBookingRejectedEmail({
-          hostName: booking.host.name ?? 'Host',
-          hostEmail: booking.host.email!,
-          hostUsername: booking.host.username ?? undefined,
-          inviteeName: booking.inviteeName,
-          inviteeEmail: booking.inviteeEmail,
-          eventTitle: booking.eventType.title,
-          eventSlug: booking.eventType.slug,
-          startTime: `${pendingBookings.length} sessions`,
-          endTime: '',
-          timezone: booking.timezone,
-          bookingUid: booking.uid,
-          teamMembers: bulkRejectTeamMembers,
-        }, reason).catch(console.error);
-
-        triggerBookingRejectedWebhook(booking.hostId, {
-          id: booking.id,
-          uid: booking.uid,
-          status: newStatus,
-          startTime: booking.startTime,
-          endTime: booking.endTime,
-          timezone: booking.timezone,
-          location: booking.location,
-          meetingUrl: booking.meetingUrl,
-          inviteeName: booking.inviteeName,
-          inviteeEmail: booking.inviteeEmail,
-          inviteePhone: booking.inviteePhone,
-          inviteeNotes: booking.inviteeNotes,
-          responses: booking.responses as Record<string, unknown> | null,
-          eventType: {
-            id: booking.eventTypeId,
-            title: booking.eventType.title,
-            slug: booking.eventType.slug,
-            length: booking.eventType.length,
-          },
-          host: {
-            id: booking.host.id,
-            name: booking.host.name,
-            email: booking.host.email!,
-          },
-        }, reason).catch(console.error);
-      }
-
-      // Notification
-      const bulkNotif = buildBookingNotification(
-        action === 'confirm' ? 'BOOKING_CONFIRMED' : 'BOOKING_REJECTED',
-        {
-          inviteeName: booking.inviteeName,
-          eventTitle: booking.eventType.title,
-          startTime: `${pendingBookings.length} sessions ${action === 'confirm' ? 'confirmed' : 'rejected'}`,
-        }
-      );
-      createNotification({
-        userId: booking.hostId,
-        type: action === 'confirm' ? 'BOOKING_CONFIRMED' : 'BOOKING_REJECTED',
-        ...bulkNotif,
-        bookingId: booking.id,
-      }).catch(console.error);
-
-      return NextResponse.json({
-        success: true,
-        message: `${pendingBookings.length} booking(s) ${action === 'confirm' ? 'confirmed' : 'rejected'} successfully`,
-        status: newStatus,
-        updatedCount: pendingBookings.length,
-      });
-    }
-
-    // ── Single scope (default): confirm/reject just this booking ──
-    await prisma.booking.update({
-      where: { id: booking.id },
-      data: {
-        status: newStatus,
-        ...(action === 'reject' && {
-          cancellationReason: reason,
-          cancelledAt: new Date(),
-        }),
-      },
-    });
-
-    // Build teamMembers for email
-    const patchTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
-      && booking.eventType.teamMemberAssignments.length > 0
-      ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
-          name: a.teamMember.user.name ?? 'Team Member',
-          email: a.teamMember.user.email!,
-        }))
-      : undefined;
-
-    // Prepare email data
-    const patchHostTimezone = booking.host.timezone || booking.timezone;
-    const emailData: BookingEmailData = {
-      hostName: booking.host.name ?? 'Host',
-      hostEmail: booking.host.email!,
-      hostUsername: booking.host.username ?? undefined,
-      inviteeName: booking.inviteeName,
-      inviteeEmail: booking.inviteeEmail,
-      eventTitle: booking.eventType.title,
-      eventSlug: booking.eventType.slug,
-      eventDescription: booking.eventType.description ?? undefined,
-      startTime: formatInTimeZone(
-        booking.startTime,
-        booking.timezone,
-        'EEEE, MMMM d, yyyy h:mm a'
-      ),
-      endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
-      timezone: booking.timezone,
-      hostStartTime: formatInTimeZone(booking.startTime, patchHostTimezone, 'EEEE, MMMM d, yyyy h:mm a'),
-      hostEndTime: formatInTimeZone(booking.endTime, patchHostTimezone, 'h:mm a'),
-      hostTimezone: patchHostTimezone,
-      location: booking.location ?? undefined,
-      meetingUrl: booking.meetingUrl ?? undefined,
-      bookingUid: booking.uid,
-      teamMembers: patchTeamMembers,
-    };
-
-    // Build webhook payload data
-    const webhookBookingData = {
-      id: booking.id,
-      uid: booking.uid,
-      status: newStatus,
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      timezone: booking.timezone,
-      location: booking.location,
-      meetingUrl: booking.meetingUrl,
-      inviteeName: booking.inviteeName,
-      inviteeEmail: booking.inviteeEmail,
-      inviteePhone: booking.inviteePhone,
-      inviteeNotes: booking.inviteeNotes,
-      responses: booking.responses as Record<string, unknown> | null,
-      eventType: {
-        id: booking.eventTypeId,
-        title: booking.eventType.title,
-        slug: booking.eventType.slug,
-        length: booking.eventType.length,
-      },
-      host: {
-        id: booking.host.id,
-        name: booking.host.name,
-        email: booking.host.email!,
-      },
-    };
-
-    // On confirm: generate meeting link now (was deferred during booking creation for pending bookings)
-    if (action === 'confirm' && !booking.meetingUrl) {
-      try {
-        const meetingAccountUserId = booking.eventType.meetingOrganizerUserId || booking.hostId;
-        const locationType = booking.eventType.locationType;
-        let generatedMeetingUrl: string | null = null;
-
-        if (locationType === 'ZOOM') {
-          const hasZoom = await hasZoomConnected(meetingAccountUserId);
-          if (hasZoom) {
-            const zoomMeeting = await createZoomMeeting({
-              userId: meetingAccountUserId,
-              topic: `${booking.eventType.title} with ${booking.inviteeName}`,
-              startTime: booking.startTime,
-              duration: booking.eventType.length,
-              timezone: booking.host.timezone || booking.timezone,
-              agenda: `Booked via TimeTide with ${booking.inviteeName} (${booking.inviteeEmail})`,
-            });
-            generatedMeetingUrl = zoomMeeting.joinUrl;
-          }
-        } else if (locationType === 'GOOGLE_MEET' || locationType === 'TEAMS') {
-          // Delete old calendar events (without conferenceData) and re-create with meeting link
-          const ids = parseCalendarEventIds(booking.calendarEventId, booking.calendarEventIds);
-          const calendars = await prisma.calendar.findMany({
-            where: { userId: meetingAccountUserId, isEnabled: true },
-          });
-
-          const targetProvider = locationType === 'GOOGLE_MEET' ? 'GOOGLE' : 'OUTLOOK';
-
-          // Sort so meeting-link calendar processes first
-          const sortedCals = [...calendars].sort((a, b) => {
-            if (a.provider === targetProvider) return -1;
-            if (b.provider === targetProvider) return 1;
-            return 0;
-          });
-
-          const newCalendarEventIds: Record<string, string> = {};
-
-          for (const cal of sortedCals) {
-            const oldEventId = ids[cal.provider as 'GOOGLE' | 'OUTLOOK'];
-
-            // Delete old event (if exists)
-            if (oldEventId) {
-              try {
-                if (cal.provider === 'GOOGLE') await deleteGoogleCalendarEvent(cal.id, oldEventId);
-                else if (cal.provider === 'OUTLOOK') await deleteOutlookCalendarEvent(cal.id, oldEventId);
-              } catch { /* ignore deletion errors */ }
-            }
-
-            // Re-create with conferenceData on the meeting-link calendar
-            const isMeetingLinkCal = cal.provider === targetProvider;
-            const meetingInfo = generatedMeetingUrl ? `\nMeeting: ${generatedMeetingUrl}` : '';
-            let result: CreateCalendarEventResult = { eventId: null, meetLink: null };
-
-            try {
-              if (cal.provider === 'GOOGLE') {
-                result = await createGoogleCalendarEvent({
-                  calendarId: cal.id,
-                  summary: `${booking.eventType.title} with ${booking.inviteeName}`,
-                  description: `Booked via TimeTide\n\nInvitee: ${booking.inviteeName} (${booking.inviteeEmail})${meetingInfo}`,
-                  startTime: booking.startTime,
-                  endTime: booking.endTime,
-                  attendees: [{ email: booking.inviteeEmail, name: booking.inviteeName }],
-                  location: generatedMeetingUrl || booking.location || undefined,
-                  conferenceData: isMeetingLinkCal,
-                });
-              } else if (cal.provider === 'OUTLOOK') {
-                result = await createOutlookCalendarEvent({
-                  calendarId: cal.id,
-                  summary: `${booking.eventType.title} with ${booking.inviteeName}`,
-                  description: `Booked via TimeTide\n\nInvitee: ${booking.inviteeName} (${booking.inviteeEmail})${meetingInfo}`,
-                  startTime: booking.startTime,
-                  endTime: booking.endTime,
-                  attendees: [{ email: booking.inviteeEmail, name: booking.inviteeName }],
-                  location: generatedMeetingUrl || booking.location || undefined,
-                  conferenceData: isMeetingLinkCal,
-                });
-              }
-            } catch (calError) {
-              console.error(`Failed to re-create ${cal.provider} calendar event on confirm:`, calError);
-              continue;
-            }
-
-            if (result.eventId) {
-              newCalendarEventIds[cal.provider] = result.eventId;
-            }
-            if (result.meetLink && !generatedMeetingUrl) {
-              generatedMeetingUrl = result.meetLink;
-            }
-          }
-
-          // Update calendar event IDs
-          if (Object.keys(newCalendarEventIds).length > 0) {
-            await prisma.booking.update({
-              where: { id: booking.id },
-              data: buildCalendarEventIdsUpdate(newCalendarEventIds as Record<'GOOGLE' | 'OUTLOOK', string>),
-            });
-          }
-        }
-
-        if (generatedMeetingUrl) {
-          await prisma.booking.update({
-            where: { id: booking.id },
-            data: { meetingUrl: generatedMeetingUrl },
-          });
-          emailData.meetingUrl = generatedMeetingUrl;
-        }
-      } catch (error) {
-        console.error('Failed to create meeting link on confirm:', error);
-      }
-    }
-
-    // Send appropriate email, schedule reminders, and trigger webhooks
-    if (action === 'confirm') {
-      queueBookingConfirmedByHostEmail(emailData).catch(console.error);
-      // Schedule reminders for newly confirmed booking
-      scheduleBookingReminders(booking.id, booking.uid, booking.startTime).catch(console.error);
-      // Trigger webhook
-      triggerBookingConfirmedWebhook(booking.hostId, webhookBookingData).catch(console.error);
-    } else {
-      // Delete calendar events from all calendars if rejecting
-      const rejectCalOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
-      await deleteAllCalendarEvents(rejectCalOwnerId, booking.calendarEventId, booking.calendarEventIds, { sync: true });
-      queueBookingRejectedEmail(emailData, reason).catch(console.error);
-      // Trigger webhook
-      triggerBookingRejectedWebhook(booking.hostId, webhookBookingData, reason).catch(console.error);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: `Booking ${action === 'confirm' ? 'confirmed' : 'rejected'} successfully`,
-      status: newStatus,
-    });
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
-    console.error('PATCH booking error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    if (error instanceof BookingNotPendingError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof SkipNotRecurringError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    if (error instanceof BookingAccessDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    console.error('PATCH booking error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -720,320 +118,44 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
-    const session = await getServerSession(authOptions);
+    const { id } = params
+    const session = await getServerSession(authOptions)
 
-    // Parse cancellation reason, cancelAllFuture, and email verification from body
-    let reason: string | undefined;
-    let cancelAllFuture = false;
-    let bodyData: any = {};
+    let reason: string | undefined
+    let cancelAllFuture = false
+    let bodyData: Record<string, unknown> = {}
     try {
-      bodyData = await request.json();
-      const validated = cancelBookingSchema.safeParse(bodyData);
+      bodyData = await request.json()
+      const validated = cancelBookingSchema.safeParse(bodyData)
       if (validated.success) {
-        reason = validated.data.reason;
-        cancelAllFuture = validated.data.cancelAllFuture ?? false;
+        reason = validated.data.reason
+        cancelAllFuture = validated.data.cancelAllFuture ?? false
       }
     } catch {
-      // No body or invalid JSON - that's okay
+      // No body or invalid JSON
     }
 
-    // Find the booking
-    const booking = await prisma.booking.findFirst({
-      where: {
-        OR: [{ id }, { uid: id }],
-        status: { in: ['PENDING', 'CONFIRMED'] },
-      },
-      include: {
-        eventType: {
-          select: {
-            title: true,
-            slug: true,
-            length: true,
-            description: true,
-            locationType: true,
-            schedulingType: true,
-            meetingOrganizerUserId: true,
-            teamMemberAssignments: {
-              where: { isActive: true },
-              select: {
-                teamMember: {
-                  select: {
-                    userId: true,
-                    user: { select: { name: true, email: true } },
-                  },
-                },
-              },
-            },
-          },
-        },
-        host: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            username: true,
-            timezone: true,
-          },
-        },
-      },
-    });
+    const result = await cancelBooking({
+      id,
+      reason,
+      cancelAllFuture,
+      sessionUserId: session?.user?.id,
+      emailVerification: bodyData?.emailVerification as {
+        code: string
+        signature: string
+        expiresAt: number
+      } | undefined,
+    })
 
-    if (!booking) {
-      return NextResponse.json(
-        { error: 'Booking not found or already cancelled' },
-        { status: 404 }
-      );
-    }
-
-    // Check authorization - host, team members, or invitee via UID + email verification
-    const isHost = session?.user?.id === booking.hostId;
-    const isTeamMemberDelete = booking.eventType.teamMemberAssignments?.some(
-      (a: { teamMember: { userId: string } }) => a.teamMember.userId === session?.user?.id
-    );
-    const accessedByUid = id === booking.uid;
-
-    if (isHost || isTeamMemberDelete) {
-      // Authenticated host or team member — allowed
-    } else if (accessedByUid) {
-      // Invitee via UID — require email verification
-      const ev = bodyData?.emailVerification;
-      if (!ev?.code || !ev?.signature || !ev?.expiresAt) {
-        return NextResponse.json(
-          { error: 'Email verification is required to cancel this booking' },
-          { status: 403 }
-        );
-      }
-      const result = verifyCode(booking.inviteeEmail, ev.code, 'BOOKING_MANAGE', ev.signature, ev.expiresAt);
-      if (!result.valid) {
-        return NextResponse.json(
-          { error: result.error || 'Email verification failed' },
-          { status: 403 }
-        );
-      }
-    } else {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
-    // ========================================================================
-    // CANCEL ALL FUTURE — recurring series bulk cancel
-    // ========================================================================
-    if (cancelAllFuture && booking.recurringGroupId) {
-      const futureBookings = await prisma.booking.findMany({
-        where: {
-          recurringGroupId: booking.recurringGroupId,
-          startTime: { gte: booking.startTime },
-          status: { in: ['PENDING', 'CONFIRMED'] },
-        },
-        include: {
-          eventType: { select: { title: true, slug: true, length: true, description: true } },
-          host: { select: { id: true, name: true, email: true, username: true, timezone: true } },
-        },
-      });
-
-      // Cancel all in a batch
-      await prisma.booking.updateMany({
-        where: {
-          id: { in: futureBookings.map(b => b.id) },
-        },
-        data: {
-          status: 'CANCELLED',
-          cancellationReason: reason,
-          cancelledAt: new Date(),
-        },
-      });
-
-      // Delete calendar events from all calendars and cancel reminders
-      const bulkCalendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
-      for (const fb of futureBookings) {
-        deleteAllCalendarEvents(bulkCalendarOwnerId, fb.calendarEventId, fb.calendarEventIds);
-        cancelBookingReminders(fb.uid).catch(console.error);
-
-        // Delete calendar events from collective members' calendars
-        const fbAttendees = await prisma.bookingAttendee.findMany({
-          where: { bookingId: fb.id, userId: { not: null } },
-        });
-        for (const att of fbAttendees) {
-          if (att.userId && att.calendarEventIds) {
-            deleteAllCalendarEvents(att.userId, null, att.calendarEventIds).catch(console.error);
-          }
-        }
-      }
-
-      // Build teamMembers for email
-      const bulkCancelTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
-        && booking.eventType.teamMemberAssignments.length > 0
-        ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
-            name: a.teamMember.user.name ?? 'Team Member',
-            email: a.teamMember.user.email!,
-          }))
-        : undefined;
-
-      // Send one cancellation email for the series
-      const bulkCancelHostTz = booking.host.timezone || booking.timezone;
-      const emailData: BookingEmailData = {
-        hostName: booking.host.name ?? 'Host',
-        hostEmail: booking.host.email!,
-        hostUsername: booking.host.username ?? undefined,
-        inviteeName: booking.inviteeName,
-        inviteeEmail: booking.inviteeEmail,
-        eventTitle: booking.eventType.title,
-        eventSlug: booking.eventType.slug,
-        eventDescription: booking.eventType.description ?? undefined,
-        startTime: futureBookings.length === 1
-          ? formatInTimeZone(futureBookings[0].startTime, futureBookings[0].timezone, 'EEEE, MMMM d, yyyy h:mm a')
-          : `${futureBookings.length} sessions (${formatInTimeZone(futureBookings[0].startTime, futureBookings[0].timezone, 'MMM d')} - ${formatInTimeZone(futureBookings[futureBookings.length - 1].startTime, futureBookings[futureBookings.length - 1].timezone, 'MMM d, yyyy')})`,
-        endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
-        timezone: booking.timezone,
-        hostStartTime: futureBookings.length === 1
-          ? formatInTimeZone(futureBookings[0].startTime, bulkCancelHostTz, 'EEEE, MMMM d, yyyy h:mm a')
-          : `${futureBookings.length} sessions (${formatInTimeZone(futureBookings[0].startTime, bulkCancelHostTz, 'MMM d')} - ${formatInTimeZone(futureBookings[futureBookings.length - 1].startTime, bulkCancelHostTz, 'MMM d, yyyy')})`,
-        hostEndTime: formatInTimeZone(booking.endTime, bulkCancelHostTz, 'h:mm a'),
-        hostTimezone: bulkCancelHostTz,
-        bookingUid: booking.uid,
-        teamMembers: bulkCancelTeamMembers,
-      };
-      queueBookingCancellationEmails(emailData, reason, isHost).catch(console.error);
-
-      // Notification
-      if (!isHost) {
-        const cancelNotif = buildBookingNotification('BOOKING_CANCELLED', {
-          inviteeName: booking.inviteeName,
-          eventTitle: booking.eventType.title,
-          startTime: `${futureBookings.length} sessions cancelled`,
-        });
-        createNotification({
-          userId: booking.hostId,
-          type: 'BOOKING_CANCELLED',
-          ...cancelNotif,
-          bookingId: booking.id,
-        }).catch(console.error);
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `Cancelled ${futureBookings.length} booking(s)`,
-        cancelledCount: futureBookings.length,
-      });
-    }
-
-    // ========================================================================
-    // CANCEL SINGLE BOOKING (existing flow)
-    // ========================================================================
-    await prisma.booking.update({
-      where: { id: booking.id },
-      data: {
-        status: 'CANCELLED',
-        cancellationReason: reason,
-        cancelledAt: new Date(),
-      },
-    });
-
-    // Delete calendar events from organizer's calendars
-    const calendarOwnerId = booking.eventType.meetingOrganizerUserId || booking.hostId;
-    await deleteAllCalendarEvents(calendarOwnerId, booking.calendarEventId, booking.calendarEventIds, { sync: true });
-
-    // Delete calendar events from collective members' calendars
-    const memberAttendees = await prisma.bookingAttendee.findMany({
-      where: { bookingId: booking.id, userId: { not: null } },
-    });
-    for (const att of memberAttendees) {
-      if (att.userId && att.calendarEventIds) {
-        deleteAllCalendarEvents(att.userId, null, att.calendarEventIds).catch(console.error);
-      }
-    }
-
-    // Build teamMembers for email
-    const cancelTeamMembers = booking.eventType.schedulingType === 'COLLECTIVE'
-      && booking.eventType.teamMemberAssignments.length > 0
-      ? booking.eventType.teamMemberAssignments.map((a: { teamMember: { user: { name: string | null; email: string | null } } }) => ({
-          name: a.teamMember.user.name ?? 'Team Member',
-          email: a.teamMember.user.email!,
-        }))
-      : undefined;
-
-    // Send cancellation emails
-    const cancelHostTz = booking.host.timezone || booking.timezone;
-    const emailData: BookingEmailData = {
-      hostName: booking.host.name ?? 'Host',
-      hostEmail: booking.host.email!,
-      hostUsername: booking.host.username ?? undefined,
-      inviteeName: booking.inviteeName,
-      inviteeEmail: booking.inviteeEmail,
-      eventTitle: booking.eventType.title,
-      eventSlug: booking.eventType.slug,
-      eventDescription: booking.eventType.description ?? undefined,
-      startTime: formatInTimeZone(
-        booking.startTime,
-        booking.timezone,
-        'EEEE, MMMM d, yyyy h:mm a'
-      ),
-      endTime: formatInTimeZone(booking.endTime, booking.timezone, 'h:mm a'),
-      timezone: booking.timezone,
-      hostStartTime: formatInTimeZone(booking.startTime, cancelHostTz, 'EEEE, MMMM d, yyyy h:mm a'),
-      hostEndTime: formatInTimeZone(booking.endTime, cancelHostTz, 'h:mm a'),
-      hostTimezone: cancelHostTz,
-      bookingUid: booking.uid,
-      teamMembers: cancelTeamMembers,
-    };
-
-    queueBookingCancellationEmails(emailData, reason, isHost).catch(console.error);
-    cancelBookingReminders(booking.uid).catch(console.error);
-
-    triggerBookingCancelledWebhook(
-      booking.hostId,
-      {
-        id: booking.id,
-        uid: booking.uid,
-        status: 'CANCELLED',
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        timezone: booking.timezone,
-        location: booking.location,
-        meetingUrl: booking.meetingUrl,
-        inviteeName: booking.inviteeName,
-        inviteeEmail: booking.inviteeEmail,
-        inviteePhone: booking.inviteePhone,
-        inviteeNotes: booking.inviteeNotes,
-        responses: booking.responses as Record<string, unknown> | null,
-        eventType: {
-          id: booking.eventTypeId,
-          title: booking.eventType.title,
-          slug: booking.eventType.slug,
-          length: booking.eventType.length,
-        },
-        host: {
-          id: booking.host.id,
-          name: booking.host.name,
-          email: booking.host.email!,
-        },
-      },
-      reason
-    ).catch(console.error);
-
-    if (!isHost) {
-      const cancelNotif = buildBookingNotification('BOOKING_CANCELLED', {
-        inviteeName: booking.inviteeName,
-        eventTitle: booking.eventType.title,
-        startTime: formatInTimeZone(booking.startTime, booking.timezone, 'MMM d, h:mm a'),
-      });
-      createNotification({
-        userId: booking.hostId,
-        type: 'BOOKING_CANCELLED',
-        ...cancelNotif,
-        bookingId: booking.id,
-      }).catch(console.error);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Booking cancelled successfully',
-    });
+    return NextResponse.json({ success: true, ...result })
   } catch (error) {
-    console.error('DELETE booking error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    if (error instanceof CancelBookingNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof CancelBookingUnauthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    console.error('DELETE booking error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

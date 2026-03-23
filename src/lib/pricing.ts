@@ -3,7 +3,7 @@
  *
  * This file contains ONLY client-safe synchronous helpers.
  * For async DB-backed functions (getPlanConfig, getAllPlans, getPlanLimitsAsync),
- * import from '@/lib/pricing-server' instead (server-only).
+ * import from '@/server/billing/pricing-server' instead (server-only).
  *
  * For client-side usage, plan limits are included in the session JWT
  * (see auth.ts) so components can check access synchronously.
@@ -14,6 +14,12 @@
 // ============================================================================
 
 export type PlanTier = 'FREE' | 'PRO' | 'TEAM'
+
+/** Canonical tier ordering — import this instead of defining locally */
+export const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
+
+/** Paid plan tiers — import this instead of inline ['PRO', 'TEAM'] checks */
+export const PAID_PLANS: PlanTier[] = ['PRO', 'TEAM']
 
 export interface PlanLimits {
   maxEventTypes: number
@@ -136,8 +142,7 @@ export function getPlanBadgeStyles(plan: PlanTier): string {
 
 /** Convert PlanConfig to the legacy PricingTier shape for display components */
 export function planConfigToTier(config: PlanConfig): PricingTier {
-  const tierOrder: PlanTier[] = ['FREE', 'PRO', 'TEAM']
-  const index = tierOrder.indexOf(config.tier)
+  const index = TIER_ORDER.indexOf(config.tier)
   return {
     id: config.tier,
     name: config.name,
@@ -170,10 +175,9 @@ export function getPlanByTier(tier: PlanTier): PricingTier {
 }
 
 export function getUpgradeTier(currentTier: PlanTier): PricingTier | null {
-  const tierOrder: PlanTier[] = ['FREE', 'PRO', 'TEAM']
-  const currentIndex = tierOrder.indexOf(currentTier)
-  if (currentIndex < tierOrder.length - 1) {
-    return getPlanByTier(tierOrder[currentIndex + 1])
+  const currentIndex = TIER_ORDER.indexOf(currentTier)
+  if (currentIndex < TIER_ORDER.length - 1) {
+    return getPlanByTier(TIER_ORDER[currentIndex + 1])
   }
   return null
 }

@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useFeatureGate } from '@/hooks/use-feature-gate'
-import { FeatureGatePage } from '@/components/feature-gate-page'
+import { FeatureGatePage } from '@/components/billing/feature-gate-page'
 import StatsOverview from '@/components/analytics/stats-overview'
 import {
   BookingsOverTimeChart,

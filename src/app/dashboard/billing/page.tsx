@@ -6,9 +6,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Suspense, useState, useEffect, useRef } from 'react'
 import { LinkIcon, Webhook } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { PricingCard } from '@/components/pricing-card'
+import { PricingCard } from '@/components/billing/pricing-card'
 import {
   PRICING_TIERS,
+  TIER_ORDER,
   getPlanByTier,
   getPlanLimits,
   type PlanTier,
@@ -39,8 +40,6 @@ function BillingContent() {
   const subscriptionStatus = session?.user?.subscriptionStatus
   const planExpiresAt = session?.user?.planExpiresAt
   const gracePeriodEndsAt = session?.user?.gracePeriodEndsAt
-
-  const TIER_ORDER: PlanTier[] = ['FREE', 'PRO', 'TEAM']
 
   const [loadingPlan, setLoadingPlan] = useState<PlanTier | null>(null)
   const [cancelLoading, setCancelLoading] = useState(false)

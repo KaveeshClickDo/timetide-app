@@ -33,7 +33,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { cn, getInitials } from '@/lib/utils'
-import { ImpersonationBanner } from '@/components/impersonation-banner'
+import { ImpersonationBanner } from '@/components/admin/impersonation-banner'
 
 const navigation = [
   { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },

@@ -1,66 +1,38 @@
 import { NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/admin-auth'
-import prisma from '@/lib/prisma'
-import { DEFAULT_PAGE_SIZE, MAX_LIST_LIMIT } from '@/lib/api-constants'
+import { requireAuth } from '@/server/auth/admin-auth'
+import { DEFAULT_PAGE_SIZE } from '@/server/api-constants'
+import {
+  listTeamAuditLog,
+  AuditLogNotAuthorizedError,
+} from '@/server/services/team'
 
 interface RouteParams {
   params: { id: string }
 }
 
-// GET /api/teams/[id]/audit-log - Get team audit log
+// GET /api/teams/[id]/audit-log
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { error, session } = await requireAuth()
     if (error) return error
 
-    // Check if user is admin/owner
-    const membership = await prisma.teamMember.findUnique({
-      where: {
-        teamId_userId: {
-          teamId: params.id,
-          userId: session.user.id,
-        },
-      },
-    })
-
-    if (!membership || membership.role === 'MEMBER') {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
-    }
-
     const { searchParams } = new URL(request.url)
     const cursor = searchParams.get('cursor')
-    const limit = Math.min(parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE)), MAX_LIST_LIMIT)
+    const limit = parseInt(searchParams.get('limit') || String(DEFAULT_PAGE_SIZE))
 
-    const logs = await prisma.teamAuditLog.findMany({
-      where: { teamId: params.id },
-      orderBy: { createdAt: 'desc' },
-      take: limit + 1,
-      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+    const result = await listTeamAuditLog({
+      teamId: params.id,
+      sessionUserId: session.user.id,
+      cursor,
+      limit,
     })
 
-    // Resolve user names for display
-    const userIds = Array.from(new Set(logs.map((log) => log.userId)))
-    const users = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, name: true, email: true, image: true },
-    })
-    const userMap = new Map(users.map((u) => [u.id, u]))
-
-    const hasMore = logs.length > limit
-    const items = hasMore ? logs.slice(0, limit) : logs
-
-    return NextResponse.json({
-      logs: items.map((log) => ({
-        ...log,
-        user: userMap.get(log.userId) || { id: log.userId, name: 'Unknown', email: '', image: null },
-      })),
-      nextCursor: hasMore ? items[items.length - 1].id : null,
-    })
+    return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof AuditLogNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error('Error fetching audit log:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch audit log' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch audit log' }, { status: 500 })
   }
 }

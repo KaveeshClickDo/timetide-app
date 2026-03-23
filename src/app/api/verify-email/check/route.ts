@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { verifyCode, type VerificationType } from '@/lib/email-verification';
+import { verifyCode, type VerificationType } from '@/server/auth/email-verification';
+import { checkRateLimit } from '@/server/infrastructure/queue/rate-limiter';
 
 const schema = z.object({
   email: z.string().email(),
@@ -15,29 +16,6 @@ const schema = z.object({
   signature: z.string(),
   expiresAt: z.number(),
 });
-
-// Rate limit: max 5 verify attempts per email per 10 minutes
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_MAX = 5;
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-
-function checkRateLimit(email: string): boolean {
-  const key = email.toLowerCase();
-  const now = Date.now();
-  const entry = rateLimitMap.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-
-  if (entry.count >= RATE_LIMIT_MAX) {
-    return false;
-  }
-
-  entry.count++;
-  return true;
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,8 +31,9 @@ export async function POST(request: NextRequest) {
 
     const { email, code, type, signature, expiresAt } = validated.data;
 
-    // Rate limit
-    if (!checkRateLimit(email)) {
+    // Rate limit: 5 attempts per email per 10 minutes
+    const rl = await checkRateLimit(email.toLowerCase(), { limit: 5, windowSeconds: 600, prefix: 'verify_check' });
+    if (!rl.allowed) {
       return NextResponse.json(
         { error: 'Too many verification attempts. Please request a new code.' },
         { status: 429 }

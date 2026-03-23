@@ -1,90 +1,33 @@
-/**
- * /api/auth/forgot-password
- * POST: Request password reset email
- */
-
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { sendPasswordResetEmail } from '@/lib/integrations/email/client';
-import { randomBytes } from 'crypto';
-import { z } from 'zod';
-import { checkAuthRateLimit } from '@/lib/infrastructure/queue/rate-limiter';
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { checkAuthRateLimit } from '@/server/infrastructure/queue/rate-limiter'
+import { forgotPassword } from '@/server/services/auth'
 
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
-});
+})
 
 export async function POST(request: Request) {
   try {
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    const { allowed, resetAt } = await checkAuthRateLimit(`forgot:${ip}`);
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+    const { allowed, resetAt } = await checkAuthRateLimit(`forgot:${ip}`)
     if (!allowed) {
       return NextResponse.json(
         { error: 'Too many attempts. Please try again later.' },
         { status: 429, headers: { 'Retry-After': String(Math.ceil((resetAt - Date.now()) / 1000)) } }
-      );
+      )
     }
-    const body = await request.json();
-    const result = forgotPasswordSchema.safeParse(body);
 
+    const body = await request.json()
+    const result = forgotPasswordSchema.safeParse(body)
     if (!result.success) {
-      return NextResponse.json(
-        { error: 'Invalid email address' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
     }
 
-    const { email } = result.data;
-
-    // Find user by email with their linked accounts
-    const user = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        password: true,
-        accounts: {
-          select: { provider: true },
-        },
-      },
-    });
-
-    // Only send reset email if user exists and has a password (not OAuth-only).
-    // Always return the same generic response to prevent email enumeration.
-    if (user?.password) {
-      // Delete any existing tokens for this user
-      await prisma.verificationToken.deleteMany({
-        where: { identifier: user.email },
-      });
-
-      // Generate secure token
-      const token = randomBytes(32).toString('hex');
-      const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-      // Create verification token
-      await prisma.verificationToken.create({
-        data: {
-          identifier: user.email,
-          token,
-          expires,
-        },
-      });
-
-      // Send reset email
-      const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/reset-password/${token}`;
-      await sendPasswordResetEmail(user.email, user.name || '', resetUrl);
-    }
-
-    // User not found OR email sent - return generic success
-    return NextResponse.json({
-      message: 'If an account with that email exists, we sent a password reset link.',
-    });
+    const response = await forgotPassword(result.data.email)
+    return NextResponse.json(response)
   } catch (error) {
-    console.error('Forgot password error:', error);
-    return NextResponse.json(
-      { error: 'Something went wrong. Please try again.' },
-      { status: 500 }
-    );
+    console.error('Forgot password error:', error)
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 })
   }
 }

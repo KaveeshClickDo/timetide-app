@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/prisma'
-import { requireAdmin } from '@/lib/admin-auth'
-import { logAdminAction } from '@/lib/admin-audit'
-import { refundPayment } from '@/lib/stripe'
-import { queuePaymentRefundedEmail } from '@/lib/infrastructure/queue/email-queue'
+import prisma from '@/server/db/prisma'
+import { requireAdmin } from '@/server/auth/admin-auth'
+import { logAdminAction } from '@/server/admin/admin-audit'
+import { refundPayment } from '@/server/billing/stripe'
+import { queuePaymentRefundedEmail } from '@/server/infrastructure/queue/email-queue'
 
 /** POST - Issue a full or partial refund */
 export async function POST(

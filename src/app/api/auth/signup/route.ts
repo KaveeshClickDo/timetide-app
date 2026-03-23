@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server'
-import bcrypt from 'bcryptjs'
-import prisma from '@/lib/prisma'
-import { signUpSchema } from '@/lib/validation/schemas'
-import { nanoid } from 'nanoid'
-import { randomBytes } from 'crypto'
-import { sendEmailVerificationEmail } from '@/lib/integrations/email/client'
-import { checkAuthRateLimit } from '@/lib/infrastructure/queue/rate-limiter'
+import { signUpSchema } from '@/server/validation/schemas'
+import { checkAuthRateLimit } from '@/server/infrastructure/queue/rate-limiter'
+import { signup, AuthUserAlreadyExistsError } from '@/server/services/auth'
 
 export async function POST(request: Request) {
   try {
@@ -19,130 +15,18 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-
-    // Validate input
     const result = signUpSchema.safeParse(body)
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error.errors[0].message },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: result.error.errors[0].message }, { status: 400 })
     }
 
-    const { name, email, password } = result.data
-
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
-      include: { accounts: { select: { provider: true } } },
-    })
-
-    if (existingUser) {
-      // Return same shape as success to prevent email enumeration.
-      // Don't reveal whether the account exists or what provider it uses.
-      return NextResponse.json({
-        success: true,
-        message: 'Account created! Please check your email to verify your account.',
-      })
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12)
-
-    // Generate unique username from email
-    const emailPrefix = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '')
-    let username = emailPrefix
-    let counter = 1
-
-    while (await prisma.user.findUnique({ where: { username } })) {
-      username = `${emailPrefix}${counter}`
-      counter++
-    }
-
-    // Create user first
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        username,
-        timezone: 'UTC',
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        username: true,
-      },
-    })
-
-    // Create default availability schedule
-    const schedule = await prisma.availabilitySchedule.create({
-      data: {
-        userId: user.id,
-        name: 'Working Hours',
-        isDefault: true,
-        timezone: 'UTC',
-        slots: {
-          create: [
-            // Monday - Friday, 9 AM - 5 PM
-            { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' },
-            { dayOfWeek: 2, startTime: '09:00', endTime: '17:00' },
-            { dayOfWeek: 3, startTime: '09:00', endTime: '17:00' },
-            { dayOfWeek: 4, startTime: '09:00', endTime: '17:00' },
-            { dayOfWeek: 5, startTime: '09:00', endTime: '17:00' },
-          ],
-        },
-      },
-    })
-
-    // Create default 30-minute meeting event type linked to the schedule
-    await prisma.eventType.create({
-      data: {
-        userId: user.id,
-        title: '30 Minute Meeting',
-        slug: `30min-${nanoid(6)}`,
-        description: 'A quick 30-minute meeting',
-        length: 30,
-        locationType: 'GOOGLE_MEET',
-        isActive: true,
-        scheduleId: schedule.id,
-      },
-    })
-
-    // Create email verification token
-    const verificationToken = randomBytes(32).toString('hex')
-    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
-
-    await prisma.verificationToken.create({
-      data: {
-        identifier: user.email,
-        token: verificationToken,
-        expires: tokenExpires,
-      },
-    })
-
-    // Send verification email (async, don't block response)
-    const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/verify-email/${verificationToken}`
-    sendEmailVerificationEmail(user.email, user.name || '', verifyUrl).catch((err) => {
-      console.error('Failed to send verification email:', err)
-    })
-
-    return NextResponse.json({
-      success: true,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        username: user.username,
-      },
-      message: 'Account created! Please check your email to verify your account.',
-    })
+    const signupResult = await signup(result.data)
+    return NextResponse.json({ success: true, ...signupResult })
   } catch (error) {
+    if (error instanceof AuthUserAlreadyExistsError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
     console.error('Signup error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create account' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
   }
 }

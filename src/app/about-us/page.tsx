@@ -11,8 +11,8 @@ import {
   Building2,
   Mail,
 } from 'lucide-react'
-import PublicNavbar from '@/components/public-navbar'
-import PublicFooter from '@/components/public-footer'
+import PublicNavbar from '@/components/layout/public-navbar'
+import PublicFooter from '@/components/layout/public-footer'
 
 export const metadata = {
   title: 'About Us - TimeTide',

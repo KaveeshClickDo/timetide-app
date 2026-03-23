@@ -34,20 +34,27 @@ const nextConfig = {
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
     ]
     return [
-      // Embeddable booking pages — allow iframes from any origin
-      {
-        source: '/:username/:slug',
-        headers: securityHeaders,
-      },
-      {
-        source: '/team/:teamSlug/:eventSlug',
-        headers: securityHeaders,
-      },
       // Everything else — block iframes
       {
         source: '/(.*)',
         headers: [
           { key: 'X-Frame-Options', value: 'DENY' },
+          ...securityHeaders,
+        ],
+      },
+      // Embeddable booking pages — allow iframes from any origin.
+      // Listed AFTER the catch-all so these override X-Frame-Options: DENY.
+      {
+        source: '/:username/:slug',
+        headers: [
+          { key: 'X-Frame-Options', value: 'ALLOWALL' },
+          ...securityHeaders,
+        ],
+      },
+      {
+        source: '/team/:teamSlug/:eventSlug',
+        headers: [
+          { key: 'X-Frame-Options', value: 'ALLOWALL' },
           ...securityHeaders,
         ],
       },

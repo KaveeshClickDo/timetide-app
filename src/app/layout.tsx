@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google'
-import { Providers } from '@/components/providers'
+import { Providers } from '@/components/layout/providers'
 import { Toaster } from '@/components/ui/toaster'
-import { ServiceWorkerRegister } from '@/components/service-worker-register'
+import { ServiceWorkerRegister } from '@/components/layout/service-worker-register'
 import './globals.css'
 
 const inter = Inter({

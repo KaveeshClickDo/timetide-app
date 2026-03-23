@@ -45,7 +45,7 @@ import { useToast } from '@/components/ui/use-toast'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { cn, getInitials, formatDuration } from '@/lib/utils'
-import { AddToCalendar } from '@/components/add-to-calendar'
+import { AddToCalendar } from '@/components/booking/add-to-calendar'
 import type { BookingDetails } from '@/types/booking'
 import type { TeamMemberFlat } from '@/types/team'
 

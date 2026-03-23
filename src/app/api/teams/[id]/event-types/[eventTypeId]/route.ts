@@ -5,90 +5,30 @@
  * DELETE: Delete a team event type
  */
 
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
-import { z } from 'zod';
-import { checkFeatureAccess, checkEventTypeFeatures, getTeamOwnerPlan, checkSubscriptionNotLocked } from '@/lib/plan-enforcement';
+import { NextResponse } from 'next/server'
+import { requireAuth } from '@/server/auth/admin-auth'
+import { z } from 'zod'
 import {
   locationTypeSchema,
   schedulingTypeSchema,
   periodTypeSchema,
   eventTypeQuestionSchema,
-} from '@/lib/validation/schemas';
+} from '@/server/validation/schemas'
+import {
+  getTeamEventType,
+  updateTeamEventType,
+  deleteTeamEventType,
+  TeamEventTypeNotFoundError,
+  TeamEventTypeNotAuthorizedError,
+  TeamEventTypeFeatureDeniedError,
+  TeamEventTypeSubscriptionLockedError,
+  TeamEventTypeSlugTakenError,
+} from '@/server/services/team'
 
 interface RouteParams {
-  params: { id: string; eventTypeId: string };
+  params: { id: string; eventTypeId: string }
 }
 
-async function checkTeamAccess(teamId: string, userId: string) {
-  return prisma.teamMember.findUnique({
-    where: {
-      teamId_userId: { teamId, userId },
-    },
-  });
-}
-
-// GET /api/teams/[id]/event-types/[eventTypeId]
-export async function GET(request: Request, { params }: RouteParams) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const membership = await checkTeamAccess(params.id, session.user.id);
-    if (!membership) {
-      return NextResponse.json({ error: 'Not a member of this team' }, { status: 403 });
-    }
-
-    const eventType = await prisma.eventType.findFirst({
-      where: {
-        id: params.eventTypeId,
-        teamId: params.id,
-      },
-      include: {
-        questions: {
-          orderBy: { order: 'asc' },
-        },
-        teamMemberAssignments: {
-          include: {
-            teamMember: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    image: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-        _count: {
-          select: { bookings: true },
-        },
-      },
-    });
-
-    if (!eventType) {
-      return NextResponse.json({ error: 'Event type not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ eventType });
-  } catch (error) {
-    console.error('Error fetching team event type:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch team event type' },
-      { status: 500 }
-    );
-  }
-}
-
-// Validation schema for updating team event type
 const updateTeamEventTypeSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   slug: z.string().min(1).max(200).optional(),
@@ -117,249 +57,90 @@ const updateTeamEventTypeSchema = z.object({
   recurringMaxWeeks: z.number().int().min(2).max(24).optional(),
   recurringFrequency: z.string().optional(),
   recurringInterval: z.number().int().min(1).max(90).optional(),
-});
+})
+
+// GET /api/teams/[id]/event-types/[eventTypeId]
+export async function GET(_request: Request, { params }: RouteParams) {
+  try {
+    const { error, session } = await requireAuth()
+    if (error) return error
+
+    const eventType = await getTeamEventType(params.id, params.eventTypeId, session.user.id)
+    return NextResponse.json({ eventType })
+  } catch (error) {
+    if (error instanceof TeamEventTypeNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamEventTypeNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    console.error('Error fetching team event type:', error)
+    return NextResponse.json({ error: 'Failed to fetch team event type' }, { status: 500 })
+  }
+}
 
 // PATCH /api/teams/[id]/event-types/[eventTypeId]
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
-    // Check if user is admin/owner
-    const membership = await checkTeamAccess(params.id, session.user.id);
-    if (!membership || membership.role === 'MEMBER') {
-      return NextResponse.json(
-        { error: 'Not authorized to update team event types' },
-        { status: 403 }
-      );
-    }
-
-    // Enforce teams feature gate based on team owner's plan (owner is paying)
-    const { plan: ownerPlan, subscriptionStatus: ownerSubStatus } = await getTeamOwnerPlan(params.id);
-    const lockedDenied = checkSubscriptionNotLocked(ownerSubStatus);
-    if (lockedDenied) return lockedDenied;
-    const teamsDenied = checkFeatureAccess(ownerPlan, 'teams');
-    if (teamsDenied) return teamsDenied;
-
-    // Verify event type belongs to team
-    const existing = await prisma.eventType.findFirst({
-      where: {
-        id: params.eventTypeId,
-        teamId: params.id,
-      },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Event type not found' }, { status: 404 });
-    }
-
-    const body = await request.json();
-    const result = updateTeamEventTypeSchema.safeParse(body);
-
+    const body = await request.json()
+    const result = updateTeamEventTypeSchema.safeParse(body)
     if (!result.success) {
       return NextResponse.json(
         { error: 'Invalid input', details: result.error.flatten() },
         { status: 400 }
-      );
+      )
     }
 
-    // Enforce pro feature gates on event type fields based on owner's plan
-    const eventFeatureDenied = checkEventTypeFeatures(ownerPlan, result.data as Record<string, unknown>);
-    if (eventFeatureDenied) return eventFeatureDenied;
+    const { questions, memberIds, meetingOrganizerUserId, ...rest } = result.data
 
-    const { questions, memberIds, meetingOrganizerUserId, ...updateFields } = result.data;
+    const eventType = await updateTeamEventType({
+      teamId: params.id,
+      eventTypeId: params.eventTypeId,
+      sessionUserId: session.user.id,
+      data: rest,
+      questions,
+      memberIds,
+      meetingOrganizerUserId,
+    })
 
-    // Check slug uniqueness within team if slug is being changed
-    if (updateFields.slug && updateFields.slug !== existing.slug) {
-      const existingSlug = await prisma.eventType.findFirst({
-        where: {
-          teamId: params.id,
-          slug: updateFields.slug,
-          NOT: { id: params.eventTypeId },
-        },
-      });
-
-      if (existingSlug) {
-        return NextResponse.json(
-          { error: 'An event type with this slug already exists in this team' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Build update data
-    const updateData: Record<string, unknown> = {};
-    const allowedFields = [
-      'title', 'slug', 'description', 'length', 'locationType', 'locationValue',
-      'isActive', 'requiresConfirmation', 'schedulingType',
-      'minimumNotice', 'bufferTimeBefore', 'bufferTimeAfter', 'maxBookingsPerDay',
-      'periodType', 'periodDays', 'periodStartDate', 'periodEndDate',
-      'seatsPerSlot', 'hideNotes', 'slotInterval', 'successRedirectUrl',
-      'allowsRecurring', 'recurringMaxWeeks', 'recurringFrequency', 'recurringInterval',
-    ] as const;
-
-    for (const field of allowedFields) {
-      if ((updateFields as any)[field] !== undefined) {
-        updateData[field] = (updateFields as any)[field];
-      }
-    }
-
-    // Handle meetingOrganizerUserId separately (not in allowedFields loop)
-    if (meetingOrganizerUserId !== undefined) {
-      updateData.meetingOrganizerUserId = meetingOrganizerUserId;
-    }
-
-    // Convert date strings to Date objects
-    if (updateData.periodStartDate && typeof updateData.periodStartDate === 'string') {
-      updateData.periodStartDate = new Date(updateData.periodStartDate as string);
-    }
-    if (updateData.periodEndDate && typeof updateData.periodEndDate === 'string') {
-      updateData.periodEndDate = new Date(updateData.periodEndDate as string);
-    }
-
-    const eventType = await prisma.$transaction(async (tx) => {
-      // Update event type fields
-      await tx.eventType.update({
-        where: { id: params.eventTypeId },
-        data: updateData,
-      });
-
-      // Handle questions update if provided
-      if (questions !== undefined) {
-        await tx.eventTypeQuestion.deleteMany({
-          where: { eventTypeId: params.eventTypeId },
-        });
-
-        if (questions.length > 0) {
-          await tx.eventTypeQuestion.createMany({
-            data: questions.map((q, index) => ({
-              eventTypeId: params.eventTypeId,
-              type: q.type,
-              label: q.label,
-              required: q.required ?? false,
-              placeholder: q.placeholder,
-              options: q.options || undefined,
-              order: index,
-            })),
-          });
-        }
-      }
-
-      // Handle member assignments update if provided
-      if (memberIds !== undefined) {
-        // Remove all existing assignments
-        await tx.eventTypeAssignment.deleteMany({
-          where: { eventTypeId: params.eventTypeId },
-        });
-
-        // Assign new members
-        if (memberIds.length > 0) {
-          const validMembers = await tx.teamMember.findMany({
-            where: {
-              id: { in: memberIds },
-              teamId: params.id,
-            },
-          });
-
-          if (validMembers.length > 0) {
-            await tx.eventTypeAssignment.createMany({
-              data: validMembers.map((member) => ({
-                eventTypeId: params.eventTypeId,
-                teamMemberId: member.id,
-              })),
-            });
-          }
-        }
-      }
-
-      // Fetch complete updated event type
-      return tx.eventType.findUnique({
-        where: { id: params.eventTypeId },
-        include: {
-          questions: {
-            orderBy: { order: 'asc' },
-          },
-          teamMemberAssignments: {
-            include: {
-              teamMember: {
-                include: {
-                  user: {
-                    select: {
-                      id: true,
-                      name: true,
-                      email: true,
-                      image: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      });
-    });
-
-    return NextResponse.json({ eventType });
+    return NextResponse.json({ eventType })
   } catch (error) {
-    console.error('Error updating team event type:', error);
-    return NextResponse.json(
-      { error: 'Failed to update team event type' },
-      { status: 500 }
-    );
+    if (error instanceof TeamEventTypeNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamEventTypeSubscriptionLockedError || error instanceof TeamEventTypeFeatureDeniedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamEventTypeNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    if (error instanceof TeamEventTypeSlugTakenError) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+    console.error('Error updating team event type:', error)
+    return NextResponse.json({ error: 'Failed to update team event type' }, { status: 500 })
   }
 }
 
 // DELETE /api/teams/[id]/event-types/[eventTypeId]
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth()
+    if (error) return error
 
-    // Check if user is admin/owner
-    const membership = await checkTeamAccess(params.id, session.user.id);
-    if (!membership || membership.role === 'MEMBER') {
-      return NextResponse.json(
-        { error: 'Not authorized to delete team event types' },
-        { status: 403 }
-      );
-    }
-
-    // Verify event type belongs to team
-    const existing = await prisma.eventType.findFirst({
-      where: {
-        id: params.eventTypeId,
-        teamId: params.id,
-      },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Event type not found' }, { status: 404 });
-    }
-
-    // Delete associated records first
-    await prisma.eventTypeQuestion.deleteMany({
-      where: { eventTypeId: params.eventTypeId },
-    });
-
-    await prisma.eventTypeAssignment.deleteMany({
-      where: { eventTypeId: params.eventTypeId },
-    });
-
-    // Delete the event type
-    await prisma.eventType.delete({
-      where: { id: params.eventTypeId },
-    });
-
-    return NextResponse.json({ success: true });
+    await deleteTeamEventType(params.id, params.eventTypeId, session.user.id)
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting team event type:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete team event type' },
-      { status: 500 }
-    );
+    if (error instanceof TeamEventTypeNotAuthorizedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
+    if (error instanceof TeamEventTypeNotFoundError) {
+      return NextResponse.json({ error: error.message }, { status: 404 })
+    }
+    console.error('Error deleting team event type:', error)
+    return NextResponse.json({ error: 'Failed to delete team event type' }, { status: 500 })
   }
 }
